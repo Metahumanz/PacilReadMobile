@@ -37,6 +37,12 @@ public class SettingsStore {
     private static final String KEY_CHAPTER_TITLE_VISIBILITY = "chapter_title_visibility";
     private static final String KEY_BOOKSHELF_VIEW_MODE = "bookshelf_view_mode";
     private static final String KEY_GLASS_OPACITY_PERCENT = "glass_opacity_percent";
+    private static final String KEY_HUD_TOP_LEFT = "hud_top_left";
+    private static final String KEY_HUD_TOP_CENTER = "hud_top_center";
+    private static final String KEY_HUD_TOP_RIGHT = "hud_top_right";
+    private static final String KEY_HUD_BOTTOM_LEFT = "hud_bottom_left";
+    private static final String KEY_HUD_BOTTOM_CENTER = "hud_bottom_center";
+    private static final String KEY_HUD_BOTTOM_RIGHT = "hud_bottom_right";
 
     private final SharedPreferences preferences;
 
@@ -255,6 +261,54 @@ public class SettingsStore {
         preferences.edit().putInt(KEY_GLASS_OPACITY_PERCENT, clamp(value, 20, 100)).apply();
     }
 
+    public String getHudTopLeft() {
+        return normalizeHudSlot(preferences.getString(KEY_HUD_TOP_LEFT, "title"));
+    }
+
+    public void setHudTopLeft(String value) {
+        preferences.edit().putString(KEY_HUD_TOP_LEFT, normalizeHudSlot(value)).apply();
+    }
+
+    public String getHudTopCenter() {
+        return normalizeHudSlot(preferences.getString(KEY_HUD_TOP_CENTER, "none"));
+    }
+
+    public void setHudTopCenter(String value) {
+        preferences.edit().putString(KEY_HUD_TOP_CENTER, normalizeHudSlot(value)).apply();
+    }
+
+    public String getHudTopRight() {
+        return normalizeHudSlot(preferences.getString(KEY_HUD_TOP_RIGHT, "time"));
+    }
+
+    public void setHudTopRight(String value) {
+        preferences.edit().putString(KEY_HUD_TOP_RIGHT, normalizeHudSlot(value)).apply();
+    }
+
+    public String getHudBottomLeft() {
+        return normalizeHudSlot(preferences.getString(KEY_HUD_BOTTOM_LEFT, "chapter"));
+    }
+
+    public void setHudBottomLeft(String value) {
+        preferences.edit().putString(KEY_HUD_BOTTOM_LEFT, normalizeHudSlot(value)).apply();
+    }
+
+    public String getHudBottomCenter() {
+        return normalizeHudSlot(preferences.getString(KEY_HUD_BOTTOM_CENTER, "none"));
+    }
+
+    public void setHudBottomCenter(String value) {
+        preferences.edit().putString(KEY_HUD_BOTTOM_CENTER, normalizeHudSlot(value)).apply();
+    }
+
+    public String getHudBottomRight() {
+        return normalizeHudSlot(preferences.getString(KEY_HUD_BOTTOM_RIGHT, "progress"));
+    }
+
+    public void setHudBottomRight(String value) {
+        preferences.edit().putString(KEY_HUD_BOTTOM_RIGHT, normalizeHudSlot(value)).apply();
+    }
+
     public String getWebDavProgressBaseUrl() {
         String base = normalizeBaseUrl(getWebDavUrl());
         String dir = normalizeDirectory(getWebDavDir());
@@ -347,5 +401,16 @@ public class SettingsStore {
             return "scroll";
         }
         return "slide";
+    }
+
+    private static String normalizeHudSlot(String value) {
+        if ("title".equals(value)
+                || "chapter".equals(value)
+                || "progress".equals(value)
+                || "time".equals(value)
+                || "battery".equals(value)) {
+            return value;
+        }
+        return "none";
     }
 }

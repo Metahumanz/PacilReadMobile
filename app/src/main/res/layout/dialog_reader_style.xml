@@ -94,7 +94,7 @@
             android:id="@+id/style_seek_font"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:max="22" />
+            android:max="50" />
 
         <TextView
             android:id="@+id/style_text_font"
@@ -244,30 +244,7 @@
             android:layout_marginTop="10dp"
             android:orientation="vertical" />
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:gravity="end"
-            android:orientation="horizontal">
 
-            <Button
-                android:id="@+id/style_button_cancel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
-                android:background="@drawable/bg_outline_button"
-                android:text="关闭"
-                android:textColor="@color/primary" />
-
-            <Button
-                android:id="@+id/style_button_apply"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_primary_button"
-                android:text="应用"
-                android:textColor="@android:color/white" />
-        </LinearLayout>
     </LinearLayout>
 
 </ScrollView>

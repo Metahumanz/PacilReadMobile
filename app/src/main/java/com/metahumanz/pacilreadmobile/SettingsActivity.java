@@ -4,10 +4,10 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewGroup;
-import android.view.Window;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -39,7 +39,7 @@ public class SettingsActivity extends ThemedActivity {
     private WebDavClient webDavClient;
     private WebDavBackupManager backupManager;
     private BookImportService importService;
-    private AppDrawerController drawerController;
+
     private TextView statusText;
     private TextView fullBackupText;
     private TextView liteBackupText;
@@ -56,12 +56,13 @@ public class SettingsActivity extends ThemedActivity {
     private SeekBar glassOpacitySeekBar;
     private TextView glassOpacityText;
     private Button testButton;
-    private Button saveButton;
     private Button importBooksButton;
     private Button fullBackupButton;
     private Button fullRestoreButton;
     private Button liteBackupButton;
     private Button liteRestoreButton;
+    private boolean bindingSettingsValues = false;
+    private boolean settingsBusy = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -73,8 +74,7 @@ public class SettingsActivity extends ThemedActivity {
         webDavClient = new WebDavClient(settingsStore);
         backupManager = new WebDavBackupManager(this, databaseHelper, settingsStore, webDavClient);
         importService = new BookImportService(this);
-        drawerController = new AppDrawerController(this, findViewById(R.id.settings_root), this::handleDrawerDestination);
-        drawerController.setCurrentSection(AppDrawerController.SECTION_SETTINGS);
+
 
         autoOpenCheck = findViewById(R.id.check_auto_open);
         webDavEnabledCheck = findViewById(R.id.check_webdav_enabled);
@@ -96,11 +96,11 @@ public class SettingsActivity extends ThemedActivity {
         liteBackupButton = findViewById(R.id.button_lite_backup);
         liteRestoreButton = findViewById(R.id.button_lite_restore);
         testButton = findViewById(R.id.button_test_webdav);
-        saveButton = findViewById(R.id.button_save_settings);
 
         setupThemeSpinners();
         bindCurrentValues();
         setupGlassOpacityControl();
+        setupAutoSaveListeners();
         refreshBackupLabels();
 
         importBooksButton.setOnClickListener(v -> openPicker());
@@ -109,17 +109,10 @@ public class SettingsActivity extends ThemedActivity {
         liteBackupButton.setOnClickListener(v -> runWebDavAction("正在执行增量备份...", listener -> backupManager.incrementalBackup(listener)));
         fullRestoreButton.setOnClickListener(v -> confirmRestore("全量恢复会覆盖当前本地数据库和设置，确定继续吗？", listener -> backupManager.fullRestore(listener)));
         liteRestoreButton.setOnClickListener(v -> confirmRestore("增量恢复会合并云端基础数据并补全缺失资源，确定继续吗？", listener -> backupManager.incrementalRestore(listener)));
-        saveButton.setOnClickListener(v -> {
-            saveSettings();
-            showToast("设置已保存");
-        });
     }
 
     @Override
     public void onBackPressed() {
-        if (drawerController != null && drawerController.onBackPressed()) {
-            return;
-        }
         persistSettingsIfReady();
         super.onBackPressed();
     }
@@ -151,6 +144,7 @@ public class SettingsActivity extends ThemedActivity {
     }
 
     private void bindCurrentValues() {
+        bindingSettingsValues = true;
         autoOpenCheck.setChecked(settingsStore.isAutoOpenLastBook());
         webDavEnabledCheck.setChecked(settingsStore.isWebDavEnabled());
         urlInput.setText(settingsStore.getWebDavUrl());
@@ -162,17 +156,17 @@ public class SettingsActivity extends ThemedActivity {
         readerUiThemeSpinner.setSelection(indexOf(READER_THEME_KEYS, settingsStore.getReaderUiThemeMode(), 0));
         glassOpacitySeekBar.setProgress(settingsStore.getGlassOpacityPercent() - 20);
         updateGlassOpacityLabel(settingsStore.getGlassOpacityPercent());
-        statusText.setText(settingsStore.isWebDavEnabled() ? "已启用自动进度同步" : "当前未启用云同步");
-        updateDrawerStatus();
+        bindingSettingsValues = false;
+        refreshStatusSummary();
     }
 
     private void refreshBackupLabels() {
         fullBackupText.setText("全量备份：最近一次 " + backupManager.lastFullBackupLabel());
         liteBackupText.setText("增量备份：最近一次 " + backupManager.lastLiteBackupLabel());
-        updateDrawerStatus();
     }
 
     private void saveSettings() {
+        String previousAppThemeMode = settingsStore.getAppThemeMode();
         settingsStore.setAutoOpenLastBook(autoOpenCheck.isChecked());
         settingsStore.setWebDavEnabled(webDavEnabledCheck.isChecked());
         settingsStore.setWebDavUrl(urlInput.getText().toString());
@@ -183,7 +177,10 @@ public class SettingsActivity extends ThemedActivity {
         settingsStore.setAppThemeMode(APP_THEME_KEYS[appThemeSpinner.getSelectedItemPosition()]);
         settingsStore.setReaderUiThemeMode(READER_THEME_KEYS[readerUiThemeSpinner.getSelectedItemPosition()]);
         settingsStore.setGlassOpacityPercent(glassOpacitySeekBar.getProgress() + 20);
-        updateDrawerStatus();
+        refreshStatusSummary();
+        if (!previousAppThemeMode.equals(settingsStore.getAppThemeMode())) {
+            recreate();
+        }
     }
 
     private void setupThemeSpinners() {
@@ -202,6 +199,19 @@ public class SettingsActivity extends ThemedActivity {
         );
         readerThemeAdapter.setDropDownViewResource(R.layout.item_spinner_dropdown);
         readerUiThemeSpinner.setAdapter(readerThemeAdapter);
+
+        android.widget.AdapterView.OnItemSelectedListener autoSaveSpinnerListener = new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                handleSettingsChanged();
+            }
+
+            @Override
+            public void onNothingSelected(android.widget.AdapterView<?> parent) {
+            }
+        };
+        appThemeSpinner.setOnItemSelectedListener(autoSaveSpinnerListener);
+        readerUiThemeSpinner.setOnItemSelectedListener(autoSaveSpinnerListener);
     }
 
     private void setupGlassOpacityControl() {
@@ -210,6 +220,9 @@ public class SettingsActivity extends ThemedActivity {
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 int opacityPercent = progress + 20;
                 updateGlassOpacityLabel(opacityPercent);
+                if (fromUser) {
+                    handleSettingsChanged();
+                }
             }
 
             @Override
@@ -218,8 +231,47 @@ public class SettingsActivity extends ThemedActivity {
 
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
+                handleSettingsChanged();
             }
         });
+    }
+
+    private void setupAutoSaveListeners() {
+        TextWatcher autoSaveTextWatcher = new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                handleSettingsChanged();
+            }
+        };
+        urlInput.addTextChangedListener(autoSaveTextWatcher);
+        dirInput.addTextChangedListener(autoSaveTextWatcher);
+        userInput.addTextChangedListener(autoSaveTextWatcher);
+        passwordInput.addTextChangedListener(autoSaveTextWatcher);
+        mimoApiKeyInput.addTextChangedListener(autoSaveTextWatcher);
+        autoOpenCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsChanged());
+        webDavEnabledCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsChanged());
+    }
+
+    private void handleSettingsChanged() {
+        if (bindingSettingsValues || settingsBusy) {
+            return;
+        }
+        saveSettings();
+    }
+
+    private void refreshStatusSummary() {
+        if (statusText == null || settingsBusy) {
+            return;
+        }
+        statusText.setText(settingsStore.isWebDavEnabled() ? "已启用自动进度同步" : "当前未启用云同步");
     }
 
     private void openPicker() {
@@ -261,16 +313,19 @@ public class SettingsActivity extends ThemedActivity {
 
     private void testWebDav() {
         saveSettings();
+        setBusy(true);
         statusText.setText("正在探测并初始化目录...");
         executor.execute(() -> {
             try {
                 WebDavClient.Response response = webDavClient.probe();
                 runOnUiThread(() -> {
+                    setBusy(false);
                     statusText.setText("连接成功，HTTP " + response.code);
                     showToast("WebDAV 可用");
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
+                    setBusy(false);
                     statusText.setText("连接失败: " + error.getMessage());
                     showToast("WebDAV 探测失败");
                 });
@@ -298,7 +353,7 @@ public class SettingsActivity extends ThemedActivity {
                     setBusy(false);
                     bindCurrentValues();
                     refreshBackupLabels();
-                    statusText.setText("操作完成");
+                    statusText.setText("操作完成，设置已自动保存");
                     showToast("WebDAV 操作已完成");
                 });
             } catch (Exception error) {
@@ -312,52 +367,14 @@ public class SettingsActivity extends ThemedActivity {
     }
 
     private void setBusy(boolean busy) {
+        settingsBusy = busy;
         importBooksButton.setEnabled(!busy);
         testButton.setEnabled(!busy);
-        saveButton.setEnabled(!busy);
         fullBackupButton.setEnabled(!busy);
         fullRestoreButton.setEnabled(!busy);
         liteBackupButton.setEnabled(!busy);
         liteRestoreButton.setEnabled(!busy);
     }
-
-    private void updateDrawerStatus() {
-        if (drawerController == null) {
-            return;
-        }
-        String status = (settingsStore.isWebDavEnabled() ? "WebDAV 已启用" : "WebDAV 未启用")
-                + "\n"
-                + "应用 " + labelForTheme(APP_THEME_KEYS[appThemeSpinner == null ? 0 : appThemeSpinner.getSelectedItemPosition()])
-                + " · 阅读 " + labelForTheme(READER_THEME_KEYS[readerUiThemeSpinner == null ? 0 : readerUiThemeSpinner.getSelectedItemPosition()]);
-        drawerController.setStatusText(status);
-    }
-
-    private String labelForTheme(String value) {
-        if ("light".equals(value)) {
-            return "浅色";
-        }
-        if ("dark".equals(value)) {
-            return "深色";
-        }
-        if ("follow_app".equals(value)) {
-            return "跟随应用";
-        }
-        return "跟随系统";
-    }
-
-    private void handleDrawerDestination(int destination) {
-        if (destination == AppDrawerController.SECTION_SETTINGS) {
-            return;
-        }
-        persistSettingsIfReady();
-        Intent intent = MainActivity.createSectionIntent(
-                this,
-                destination == AppDrawerController.SECTION_PREVIEW ? MainActivity.START_SECTION_PREVIEW : MainActivity.START_SECTION_BOOKSHELF
-        );
-        startActivity(intent);
-        finish();
-    }
-
     private void persistSettingsIfReady() {
         if (settingsStore == null || autoOpenCheck == null) {
             return;

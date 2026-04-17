@@ -15,13 +15,16 @@ import android.text.TextWatcher;
 import android.util.TypedValue;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewConfiguration;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.GridView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
+import android.widget.SeekBar;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -29,6 +32,8 @@ import com.metahumanz.pacilread.importer.BookImportService;
 import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
+import com.metahumanz.pacilread.sync.WebDavBackupManager;
+import com.metahumanz.pacilread.sync.WebDavClient;
 import com.metahumanz.pacilread.theme.ThemedActivity;
 import com.metahumanz.pacilread.util.FileAssetHelper;
 
@@ -43,12 +48,15 @@ public class MainActivity extends ThemedActivity {
     public static final String EXTRA_START_SECTION = "start_section";
     public static final String START_SECTION_BOOKSHELF = "bookshelf";
     public static final String START_SECTION_PREVIEW = "preview";
+    public static final String START_SECTION_SETTINGS = "settings";
     private static final int REQUEST_PICK_BOOK = 1001;
     private static final int REQUEST_PICK_COVER = 1002;
     private static final int SECTION_BOOKSHELF = 0;
     private static final int SECTION_PREVIEW = 1;
     private static final int SECTION_SETTINGS = 2;
     private static final String VIEW_MODE_CARD = "card";
+    private static final String[] APP_THEME_KEYS = new String[]{"system", "light", "dark"};
+    private static final String[] READER_THEME_KEYS = new String[]{"follow_app", "system", "light", "dark"};
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final List<BookRecord> allBooks = new ArrayList<>();
@@ -57,88 +65,66 @@ public class MainActivity extends ThemedActivity {
     private SettingsStore settingsStore;
     private BookImportService importService;
     private AppDrawerController drawerController;
+    private WebDavClient webDavClient;
+    private WebDavBackupManager backupManager;
     private BookListAdapter listAdapter;
     private BookGridAdapter gridAdapter;
 
+    // Common views
     private View mainRoot;
-    private View drawerPanel;
-    private View drawerScrim;
-    private View sectionBookshelf;
-    private View sectionPreview;
-    private View sectionSettingsOverview;
     private LinearLayout emptyLayout;
     private LinearLayout loadingLayout;
     private EditText searchInput;
     private GridView gridBooks;
     private ListView listBooks;
     private TextView sectionTitle;
-    private TextView sectionSubtitle;
     private TextView loadingText;
     private TextView statsText;
     private TextView emptyTitle;
     private TextView emptyHint;
-    private TextView previewBookshelfMode;
-    private TextView previewTheme;
-    private TextView previewShelfStats;
-    private TextView overviewTheme;
-    private TextView overviewSync;
-    private TextView overviewReader;
-    private TextView drawerStatus;
     private Button headerActionButton;
     private Button buttonModeCard;
     private Button buttonModeList;
     private Button emptyActionButton;
 
-    private View navBookshelf;
-    private View navPreview;
-    private View navSettings;
-    private TextView navBookshelfTitle;
-    private TextView navBookshelfSubtitle;
-    private TextView navPreviewTitle;
-    private TextView navPreviewSubtitle;
-    private TextView navSettingsTitle;
-    private TextView navSettingsSubtitle;
+    // Section containers
+    private View sectionBookshelf;
+    private View sectionPreview;
+    private View sectionSettings;
 
-    private LinearLayout previewBooksCard;
-    private LinearLayout previewBooksList;
-    private TextView previewShelfAction;
-    private TextView previewCardInitialOne;
-    private TextView previewCardInitialTwo;
-    private TextView previewCardTitleOne;
-    private TextView previewCardTitleTwo;
-    private TextView previewListTitleOne;
-    private TextView previewListTitleTwo;
-    private TextView previewListTitleThree;
+    // Preview section views
+    private TextView previewTheme;
     private ImageView previewReaderBackground;
-    private View previewReaderScrim;
-    private LinearLayout previewReaderTop;
-    private LinearLayout previewReaderBottom;
-    private TextView previewReaderBack;
-    private TextView previewReaderTitle;
-    private TextView previewReaderSubtitle;
-    private TextView previewReaderProgress;
-    private TextView previewReaderChipOne;
-    private TextView previewReaderChipTwo;
-    private TextView previewReaderChipThree;
+
     private TextView previewReaderHeading;
     private TextView previewReaderBody;
-    private TextView previewReaderHudLeft;
-    private TextView previewReaderHudCenter;
-    private TextView previewReaderHudRight;
+
+    // Settings section views
+    private CheckBox autoOpenCheck;
+    private CheckBox webDavEnabledCheck;
+    private EditText urlInput;
+    private EditText dirInput;
+    private EditText userInput;
+    private EditText passwordInput;
+    private EditText mimoApiKeyInput;
+    private Spinner appThemeSpinner;
+    private Spinner readerUiThemeSpinner;
+    private SeekBar glassOpacitySeekBar;
+    private TextView glassOpacityText;
+    private TextView settingsStatusText;
+    private TextView fullBackupText;
+    private TextView liteBackupText;
+    private Button testButton;
+
+    private Button fullBackupButton;
+    private Button fullRestoreButton;
+    private Button liteBackupButton;
+    private Button liteRestoreButton;
 
     private long pendingCoverBookId = -1L;
     private int currentSection = SECTION_BOOKSHELF;
-
-    private boolean drawerOpen = false;
-    private boolean drawerGestureCandidate = false;
-    private boolean drawerDragging = false;
-    private float drawerDownX = 0f;
-    private float drawerDownY = 0f;
-    private float drawerBaseOffset = 0f;
-    private float drawerLastX = 0f;
-    private long drawerLastEventTime = 0L;
-    private float drawerVelocityX = 0f;
-    private int touchSlop;
+    private boolean bindingSettingsValues = false;
+    private boolean settingsBusy = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -148,12 +134,14 @@ public class MainActivity extends ThemedActivity {
         databaseHelper = ReaderDatabaseHelper.getInstance(this);
         settingsStore = new SettingsStore(this);
         importService = new BookImportService(this);
-        touchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
+        webDavClient = new WebDavClient(settingsStore);
+        backupManager = new WebDavBackupManager(this, databaseHelper, settingsStore, webDavClient);
 
         bindViews();
         setupAdapters();
         setupInteractions();
-        configureDrawerInitialState();
+        setupSettingsSection();
+        configureDrawer();
         showSection(resolveStartSection(getIntent()));
 
         if (savedInstanceState == null && settingsStore.isAutoOpenLastBook()) {
@@ -165,7 +153,9 @@ public class MainActivity extends ThemedActivity {
     protected void onResume() {
         super.onResume();
         refreshBooks();
-        refreshOverviewPanels();
+        if (currentSection == SECTION_SETTINGS) {
+            bindSettingsValues();
+        }
     }
 
     @Override
@@ -176,6 +166,14 @@ public class MainActivity extends ThemedActivity {
         if (drawerController != null) {
             drawerController.closeDrawer();
         }
+    }
+
+    @Override
+    protected void onPause() {
+        if (currentSection == SECTION_SETTINGS) {
+            persistSettings(true);
+        }
+        super.onPause();
     }
 
     @Override
@@ -199,6 +197,12 @@ public class MainActivity extends ThemedActivity {
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
         if (drawerController != null && drawerController.handleTouchEvent(event)) {
+            if (drawerController.consumePendingChildTouchCancel()) {
+                MotionEvent cancelEvent = MotionEvent.obtain(event);
+                cancelEvent.setAction(MotionEvent.ACTION_CANCEL);
+                super.dispatchTouchEvent(cancelEvent);
+                cancelEvent.recycle();
+            }
             return true;
         }
         return super.dispatchTouchEvent(event);
@@ -217,73 +221,59 @@ public class MainActivity extends ThemedActivity {
         }
     }
 
+    // ==================== View Binding ====================
+
     private void bindViews() {
         mainRoot = findViewById(R.id.main_root);
-        drawerPanel = findViewById(R.id.drawer_panel);
-        drawerScrim = findViewById(R.id.drawer_scrim);
         sectionBookshelf = findViewById(R.id.section_bookshelf);
         sectionPreview = findViewById(R.id.section_preview);
-        sectionSettingsOverview = findViewById(R.id.section_settings_overview);
+        sectionSettings = findViewById(R.id.section_settings);
         emptyLayout = findViewById(R.id.layout_empty);
         loadingLayout = findViewById(R.id.layout_loading);
         searchInput = findViewById(R.id.input_search);
         gridBooks = findViewById(R.id.grid_books);
         listBooks = findViewById(R.id.list_books);
         sectionTitle = findViewById(R.id.text_section_title);
-        sectionSubtitle = findViewById(R.id.text_section_subtitle);
         loadingText = findViewById(R.id.text_loading);
         statsText = findViewById(R.id.text_stats);
         emptyTitle = findViewById(R.id.text_empty_title);
         emptyHint = findViewById(R.id.text_empty_hint);
-        previewBookshelfMode = findViewById(R.id.text_preview_bookshelf_mode);
-        previewTheme = findViewById(R.id.text_preview_theme);
-        previewShelfStats = findViewById(R.id.text_preview_shelf_stats);
-        overviewTheme = findViewById(R.id.text_overview_theme);
-        overviewSync = findViewById(R.id.text_overview_sync);
-        overviewReader = findViewById(R.id.text_overview_reader);
-        drawerStatus = findViewById(R.id.text_drawer_status);
         headerActionButton = findViewById(R.id.button_header_action);
         buttonModeCard = findViewById(R.id.button_mode_card);
         buttonModeList = findViewById(R.id.button_mode_list);
         emptyActionButton = findViewById(R.id.button_empty_action);
 
-        navBookshelf = findViewById(R.id.nav_bookshelf);
-        navPreview = findViewById(R.id.nav_preview);
-        navSettings = findViewById(R.id.nav_settings);
-        navBookshelfTitle = findViewById(R.id.text_nav_bookshelf_title);
-        navBookshelfSubtitle = findViewById(R.id.text_nav_bookshelf_subtitle);
-        navPreviewTitle = findViewById(R.id.text_nav_preview_title);
-        navPreviewSubtitle = findViewById(R.id.text_nav_preview_subtitle);
-        navSettingsTitle = findViewById(R.id.text_nav_settings_title);
-        navSettingsSubtitle = findViewById(R.id.text_nav_settings_subtitle);
-
-        previewBooksCard = findViewById(R.id.layout_preview_books_card);
-        previewBooksList = findViewById(R.id.layout_preview_books_list);
-        previewShelfAction = findViewById(R.id.text_preview_shelf_action);
-        previewCardInitialOne = findViewById(R.id.text_preview_card_initial_1);
-        previewCardInitialTwo = findViewById(R.id.text_preview_card_initial_2);
-        previewCardTitleOne = findViewById(R.id.text_preview_card_title_1);
-        previewCardTitleTwo = findViewById(R.id.text_preview_card_title_2);
-        previewListTitleOne = findViewById(R.id.text_preview_list_title_1);
-        previewListTitleTwo = findViewById(R.id.text_preview_list_title_2);
-        previewListTitleThree = findViewById(R.id.text_preview_list_title_3);
+        // Preview section
+        previewTheme = findViewById(R.id.text_preview_theme);
         previewReaderBackground = findViewById(R.id.image_preview_reader_background);
-        previewReaderScrim = findViewById(R.id.view_preview_reader_scrim);
-        previewReaderTop = findViewById(R.id.layout_preview_reader_top);
-        previewReaderBottom = findViewById(R.id.layout_preview_reader_bottom);
-        previewReaderBack = findViewById(R.id.text_preview_reader_back);
-        previewReaderTitle = findViewById(R.id.text_preview_reader_title);
-        previewReaderSubtitle = findViewById(R.id.text_preview_reader_subtitle);
-        previewReaderProgress = findViewById(R.id.text_preview_reader_progress);
-        previewReaderChipOne = findViewById(R.id.text_preview_reader_chip_1);
-        previewReaderChipTwo = findViewById(R.id.text_preview_reader_chip_2);
-        previewReaderChipThree = findViewById(R.id.text_preview_reader_chip_3);
+
         previewReaderHeading = findViewById(R.id.text_preview_reader_heading);
         previewReaderBody = findViewById(R.id.text_preview_reader_body);
-        previewReaderHudLeft = findViewById(R.id.text_preview_reader_hud_left);
-        previewReaderHudCenter = findViewById(R.id.text_preview_reader_hud_center);
-        previewReaderHudRight = findViewById(R.id.text_preview_reader_hud_right);
+
+        // Settings section
+        autoOpenCheck = findViewById(R.id.check_auto_open);
+        webDavEnabledCheck = findViewById(R.id.check_webdav_enabled);
+        urlInput = findViewById(R.id.input_webdav_url);
+        dirInput = findViewById(R.id.input_webdav_dir);
+        userInput = findViewById(R.id.input_webdav_user);
+        passwordInput = findViewById(R.id.input_webdav_password);
+        mimoApiKeyInput = findViewById(R.id.input_mimo_api_key);
+        appThemeSpinner = findViewById(R.id.spinner_app_theme_mode);
+        readerUiThemeSpinner = findViewById(R.id.spinner_reader_ui_theme_mode);
+        glassOpacitySeekBar = findViewById(R.id.seek_glass_opacity);
+        glassOpacityText = findViewById(R.id.text_glass_opacity);
+        settingsStatusText = findViewById(R.id.text_status);
+        fullBackupText = findViewById(R.id.text_backup_full);
+        liteBackupText = findViewById(R.id.text_backup_lite);
+        testButton = findViewById(R.id.button_test_webdav);
+
+        fullBackupButton = findViewById(R.id.button_full_backup);
+        fullRestoreButton = findViewById(R.id.button_full_restore);
+        liteBackupButton = findViewById(R.id.button_lite_backup);
+        liteRestoreButton = findViewById(R.id.button_lite_restore);
     }
+
+    // ==================== Adapters ====================
 
     private void setupAdapters() {
         View footerView = getLayoutInflater().inflate(R.layout.item_book_footer, listBooks, false);
@@ -295,19 +285,16 @@ public class MainActivity extends ThemedActivity {
         gridBooks.setAdapter(gridAdapter);
     }
 
+    // ==================== Interactions ====================
+
     private void setupInteractions() {
         headerActionButton.setOnClickListener(v -> {
             if (currentSection == SECTION_BOOKSHELF) {
                 openPicker();
-            } else {
-                openSettings();
             }
         });
-        findViewById(R.id.button_preview_open_settings).setOnClickListener(v -> openSettings());
-        View overviewButton = findViewById(R.id.button_overview_open_settings);
-        if (overviewButton != null) {
-            overviewButton.setOnClickListener(v -> openSettings());
-        }
+
+        findViewById(R.id.button_preview_open_settings).setOnClickListener(v -> showSection(SECTION_SETTINGS));
 
         buttonModeCard.setOnClickListener(v -> setBookshelfMode(VIEW_MODE_CARD));
         buttonModeList.setOnClickListener(v -> setBookshelfMode("list"));
@@ -375,48 +362,324 @@ public class MainActivity extends ThemedActivity {
         });
     }
 
-    private void configureDrawerInitialState() {
+    // ==================== Settings Section ====================
+
+    private void setupSettingsSection() {
+        setupThemeSpinners();
+        setupGlassOpacityControl();
+
+        testButton.setOnClickListener(v -> testWebDav());
+        fullBackupButton.setOnClickListener(v -> runWebDavAction("正在执行全量备份...", listener -> backupManager.fullBackup(listener)));
+        liteBackupButton.setOnClickListener(v -> runWebDavAction("正在执行增量备份...", listener -> backupManager.incrementalBackup(listener)));
+        fullRestoreButton.setOnClickListener(v -> confirmRestore("全量恢复会覆盖当前本地数据库和设置，确定继续吗？", listener -> backupManager.fullRestore(listener)));
+        liteRestoreButton.setOnClickListener(v -> confirmRestore("增量恢复会合并云端基础数据并补全缺失资源，确定继续吗？", listener -> backupManager.incrementalRestore(listener)));
+
+        // Auto-save listeners
+        TextWatcher autoSaveTextWatcher = new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override public void afterTextChanged(Editable s) { handleSettingsInputChanged(true); }
+        };
+        urlInput.addTextChangedListener(autoSaveTextWatcher);
+        dirInput.addTextChangedListener(autoSaveTextWatcher);
+        userInput.addTextChangedListener(autoSaveTextWatcher);
+        passwordInput.addTextChangedListener(autoSaveTextWatcher);
+        mimoApiKeyInput.addTextChangedListener(autoSaveTextWatcher);
+
+        autoOpenCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsInputChanged(true));
+        webDavEnabledCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsInputChanged(true));
+    }
+
+    private void setupThemeSpinners() {
+        ArrayAdapter<String> appThemeAdapter = new ArrayAdapter<>(
+                this, R.layout.item_spinner_selected, new String[]{"跟随系统", "浅色", "深色"});
+        appThemeAdapter.setDropDownViewResource(R.layout.item_spinner_dropdown);
+        appThemeSpinner.setAdapter(appThemeAdapter);
+
+        ArrayAdapter<String> readerThemeAdapter = new ArrayAdapter<>(
+                this, R.layout.item_spinner_selected, new String[]{"跟随应用", "跟随系统", "浅色", "深色"});
+        readerThemeAdapter.setDropDownViewResource(R.layout.item_spinner_dropdown);
+        readerUiThemeSpinner.setAdapter(readerThemeAdapter);
+
+        android.widget.AdapterView.OnItemSelectedListener autoSaveSpinnerListener = new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) { handleSettingsInputChanged(true); }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+        };
+        appThemeSpinner.setOnItemSelectedListener(autoSaveSpinnerListener);
+        readerUiThemeSpinner.setOnItemSelectedListener(autoSaveSpinnerListener);
+    }
+
+    private void setupGlassOpacityControl() {
+        glassOpacitySeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                updateGlassOpacityLabel(progress + 20);
+                if (fromUser) {
+                    handleSettingsInputChanged(false);
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                handleSettingsInputChanged(false);
+            }
+        });
+    }
+
+    private void bindSettingsValues() {
+        bindingSettingsValues = true;
+        autoOpenCheck.setChecked(settingsStore.isAutoOpenLastBook());
+        webDavEnabledCheck.setChecked(settingsStore.isWebDavEnabled());
+        urlInput.setText(settingsStore.getWebDavUrl());
+        dirInput.setText(settingsStore.getWebDavDir());
+        userInput.setText(settingsStore.getWebDavUser());
+        passwordInput.setText(settingsStore.getWebDavPassword());
+        mimoApiKeyInput.setText(settingsStore.getTtsMimoApiKey());
+        appThemeSpinner.setSelection(indexOf(APP_THEME_KEYS, settingsStore.getAppThemeMode(), 0));
+        readerUiThemeSpinner.setSelection(indexOf(READER_THEME_KEYS, settingsStore.getReaderUiThemeMode(), 0));
+        glassOpacitySeekBar.setProgress(settingsStore.getGlassOpacityPercent() - 20);
+        updateGlassOpacityLabel(settingsStore.getGlassOpacityPercent());
+        bindingSettingsValues = false;
+        refreshSettingsStatusSummary();
+        updatePreviewPanels();
+        refreshBackupLabels();
+    }
+
+    private void handleSettingsInputChanged(boolean allowRecreate) {
+        if (bindingSettingsValues || settingsBusy) {
+            return;
+        }
+        persistSettings(allowRecreate);
+    }
+
+    private void persistSettings(boolean allowRecreate) {
+        if (settingsStore == null || autoOpenCheck == null) {
+            return;
+        }
+        String previousAppThemeMode = settingsStore.getAppThemeMode();
+        settingsStore.setAutoOpenLastBook(autoOpenCheck.isChecked());
+        settingsStore.setWebDavEnabled(webDavEnabledCheck.isChecked());
+        settingsStore.setWebDavUrl(urlInput.getText().toString());
+        settingsStore.setWebDavDir(dirInput.getText().toString());
+        settingsStore.setWebDavUser(userInput.getText().toString());
+        settingsStore.setWebDavPassword(passwordInput.getText().toString());
+        settingsStore.setTtsMimoApiKey(mimoApiKeyInput.getText().toString());
+        settingsStore.setAppThemeMode(APP_THEME_KEYS[appThemeSpinner.getSelectedItemPosition()]);
+        settingsStore.setReaderUiThemeMode(READER_THEME_KEYS[readerUiThemeSpinner.getSelectedItemPosition()]);
+        settingsStore.setGlassOpacityPercent(glassOpacitySeekBar.getProgress() + 20);
+        refreshSettingsStatusSummary();
+        updatePreviewPanels();
+        updateDrawerStatus();
+        if (allowRecreate && !previousAppThemeMode.equals(settingsStore.getAppThemeMode())) {
+            recreate();
+        }
+    }
+
+    private void refreshBackupLabels() {
+        fullBackupText.setText("全量备份：最近一次 " + backupManager.lastFullBackupLabel());
+        liteBackupText.setText("增量备份：最近一次 " + backupManager.lastLiteBackupLabel());
+    }
+
+    private void refreshSettingsStatusSummary() {
+        if (settingsStatusText == null || settingsBusy) {
+            return;
+        }
+        settingsStatusText.setText(settingsStore.isWebDavEnabled() ? "已启用自动进度同步" : "当前未启用云同步");
+    }
+
+    private void testWebDav() {
+        persistSettings(true);
+        setSettingsBusy(true);
+        settingsStatusText.setText("正在探测并初始化目录...");
+        executor.execute(() -> {
+            try {
+                WebDavClient.Response response = webDavClient.probe();
+                runOnUiThread(() -> {
+                    setSettingsBusy(false);
+                    settingsStatusText.setText("连接成功，HTTP " + response.code);
+                    showToast("WebDAV 可用");
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    setSettingsBusy(false);
+                    settingsStatusText.setText("连接失败: " + error.getMessage());
+                    showToast("WebDAV 探测失败");
+                });
+            }
+        });
+    }
+
+    private void confirmRestore(String message, BackgroundAction action) {
+        new AlertDialog.Builder(this)
+                .setTitle("确认恢复")
+                .setMessage(message)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("继续", (dialog, which) -> runWebDavAction("正在恢复数据...", action))
+                .show();
+    }
+
+    private void runWebDavAction(String startMessage, BackgroundAction action) {
+        persistSettings(true);
+        setSettingsBusy(true);
+        settingsStatusText.setText(startMessage);
+        executor.execute(() -> {
+            try {
+                action.run(status -> runOnUiThread(() -> settingsStatusText.setText(status)));
+                runOnUiThread(() -> {
+                    setSettingsBusy(false);
+                    bindSettingsValues();
+                    settingsStatusText.setText("操作完成，设置已自动保存");
+                    showToast("WebDAV 操作已完成");
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    setSettingsBusy(false);
+                    settingsStatusText.setText("操作失败: " + error.getMessage());
+                    showToast("操作失败");
+                });
+            }
+        });
+    }
+
+    private void setSettingsBusy(boolean busy) {
+        settingsBusy = busy;
+        testButton.setEnabled(!busy);
+        fullBackupButton.setEnabled(!busy);
+        fullRestoreButton.setEnabled(!busy);
+        liteBackupButton.setEnabled(!busy);
+        liteRestoreButton.setEnabled(!busy);
+    }
+
+    private void updateGlassOpacityLabel(int opacityPercent) {
+        glassOpacityText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "阅读菜单与弹窗当前不透明度 %d%%", opacityPercent));
+    }
+
+    private interface BackgroundAction {
+        void run(WebDavBackupManager.StatusListener listener) throws Exception;
+    }
+
+    // ==================== Drawer ====================
+
+    private void configureDrawer() {
         drawerController = new AppDrawerController(this, mainRoot, this::handleDrawerDestination);
         drawerController.bindMenuButton(R.id.button_open_drawer);
     }
 
+    private void handleDrawerDestination(int destination) {
+        if (destination == AppDrawerController.SECTION_PREVIEW) {
+            showSection(SECTION_PREVIEW);
+            return;
+        }
+        if (destination == AppDrawerController.SECTION_SETTINGS) {
+            showSection(SECTION_SETTINGS);
+            return;
+        }
+        showSection(SECTION_BOOKSHELF);
+    }
+
+    // ==================== Section Switching ====================
+
     private void showSection(int section) {
+        if (currentSection == SECTION_SETTINGS && section != SECTION_SETTINGS) {
+            persistSettings(true);
+        }
         currentSection = section;
         sectionBookshelf.setVisibility(section == SECTION_BOOKSHELF ? View.VISIBLE : View.GONE);
         sectionPreview.setVisibility(section == SECTION_PREVIEW ? View.VISIBLE : View.GONE);
-        sectionSettingsOverview.setVisibility(View.GONE);
-        if (section == SECTION_BOOKSHELF) {
-            sectionTitle.setText("书架");
-            sectionSubtitle.setText("管理本地书籍");
-            headerActionButton.setText("导入");
-        } else {
-            sectionTitle.setText("界面预览");
-            sectionSubtitle.setText("阅读菜单与排版预览");
-            headerActionButton.setText("设置");
-        }
-        updateNavigationState();
-        updateEmptyState(currentQuery());
-        refreshOverviewPanels();
-    }
+        sectionSettings.setVisibility(section == SECTION_SETTINGS ? View.VISIBLE : View.GONE);
 
-    private void updateNavigationState() {
+        switch (section) {
+            case SECTION_BOOKSHELF:
+                sectionTitle.setText("书架大厅");
+                headerActionButton.setText("+ 添加");
+                headerActionButton.setVisibility(View.VISIBLE);
+                break;
+            case SECTION_PREVIEW:
+                sectionTitle.setText("排版与预览");
+                headerActionButton.setVisibility(View.GONE);
+                updatePreviewPanels();
+                break;
+            case SECTION_SETTINGS:
+                sectionTitle.setText("偏好设置");
+                headerActionButton.setVisibility(View.GONE);
+                bindSettingsValues();
+                break;
+        }
         if (drawerController != null) {
-            drawerController.setCurrentSection(currentSection);
+            drawerController.setCurrentSection(section);
+        }
+        updateEmptyState(currentQuery());
+        updateDrawerStatus();
+    }
+
+    // ==================== Preview Section ====================
+
+    private void updatePreviewPanels() {
+        previewTheme.setText(
+                "界面: " + labelForReaderUiTheme(settingsStore.getReaderUiThemeMode())
+                        + " · 阅读预设: " + labelForReaderPreset(settingsStore.getReaderTheme())
+                        + " · 字号 " + Math.round(settingsStore.getFontSizeSp()) + "sp"
+                        + " · 行距 " + Math.round(settingsStore.getLineSpacingExtraSp()) + "sp"
+        );
+        updatePreviewReader();
+    }
+
+    private void updatePreviewReader() {
+        previewReaderHeading.setVisibility(settingsStore.isChapterTitleVisible() ? View.VISIBLE : View.GONE);
+        previewReaderBody.setText("更多精彩小说尽在知轩藏书下载：\nhttps://zxcs.zip/\n\n内容简介：一个普通山村穷小子，在机缘与谨慎并行的路上踏入修仙世界。");
+        previewReaderBody.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.max(12f, settingsStore.getFontSizeSp() - 4f));
+        previewReaderBody.setLineSpacing(settingsStore.getLineSpacingExtraSp() * getResources().getDisplayMetrics().scaledDensity / 4f, 1f);
+        applyReaderPreviewTheme();
+    }
+
+    private void applyReaderPreviewTheme() {
+        String backgroundPath = settingsStore.getReaderBackgroundPath();
+        boolean customBackgroundApplied = false;
+        if (backgroundPath != null && !backgroundPath.isBlank()) {
+            File file = new File(backgroundPath);
+            if (file.exists()) {
+                Bitmap bitmap = BitmapFactory.decodeFile(file.getAbsolutePath());
+                if (bitmap != null) {
+                    previewReaderBackground.setImageBitmap(bitmap);
+                    customBackgroundApplied = true;
+                }
+            }
+        }
+        if (!customBackgroundApplied) {
+            previewReaderBackground.setImageResource(readerBackgroundResource(settingsStore.getReaderTheme()));
+        }
+
+        if ("forest".equals(settingsStore.getReaderTheme())) {
+            previewReaderHeading.setTextColor(getColor(R.color.reader_forest_text));
+            previewReaderBody.setTextColor(getColor(R.color.reader_forest_text));
+        } else if ("night".equals(settingsStore.getReaderTheme())) {
+            previewReaderHeading.setTextColor(getColor(R.color.reader_night_text));
+            previewReaderBody.setTextColor(getColor(R.color.reader_night_text));
+        } else {
+            previewReaderHeading.setTextColor(getColor(R.color.reader_paper_text));
+            previewReaderBody.setTextColor(getColor(R.color.reader_paper_text));
         }
     }
 
-    private void styleDrawerItem(View container, TextView titleView, TextView subtitleView, boolean selected) {
-        container.setBackgroundResource(selected ? R.drawable.bg_sidebar_nav_active : R.drawable.bg_sidebar_nav_idle);
-        int titleColor = getColor(selected ? android.R.color.white : R.color.on_surface);
-        int subtitleColor = getColor(selected ? android.R.color.white : R.color.on_surface_muted);
-        titleView.setTextColor(titleColor);
-        subtitleView.setTextColor(subtitleColor);
+    private int readerBackgroundResource(String theme) {
+        if ("forest".equals(theme)) {
+            return R.drawable.theme_bg_forest;
+        }
+        if ("night".equals(theme)) {
+            return R.drawable.theme_bg_night;
+        }
+        return R.drawable.theme_bg_paper;
     }
+
+    // ==================== Bookshelf ====================
 
     private void setBookshelfMode(String mode) {
         settingsStore.setBookshelfViewMode(mode);
         applyBookshelfMode();
-        updatePreviewPanels();
         updateDrawerStatus();
     }
 
@@ -428,59 +691,11 @@ public class MainActivity extends ThemedActivity {
             gridBooks.setVisibility(usingCardMode ? View.VISIBLE : View.GONE);
             listBooks.setVisibility(usingCardMode ? View.GONE : View.VISIBLE);
         }
-        previewBooksCard.setVisibility(usingCardMode ? View.VISIBLE : View.GONE);
-        previewBooksList.setVisibility(usingCardMode ? View.GONE : View.VISIBLE);
     }
 
     private void styleSelectionButton(Button button, boolean selected) {
         button.setBackgroundResource(selected ? R.drawable.bg_primary_button : R.drawable.bg_outline_button);
         button.setTextColor(getColor(selected ? android.R.color.white : R.color.on_surface));
-    }
-
-    private void openSettings() {
-        startActivity(new Intent(this, SettingsActivity.class));
-    }
-
-    private void openPicker() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("*/*");
-        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
-                "text/plain",
-                "application/epub+zip",
-                "application/pdf",
-                "application/octet-stream"
-        });
-        startActivityForResult(intent, REQUEST_PICK_BOOK);
-    }
-
-    private void openCoverPicker(long bookId) {
-        pendingCoverBookId = bookId;
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("image/*");
-        startActivityForResult(intent, REQUEST_PICK_COVER);
-    }
-
-    private void importBook(Uri uri) {
-        showLoading("正在解析书籍...");
-        executor.execute(() -> {
-            try {
-                long bookId = databaseHelper.insertImportedBook(importService.importFromUri(uri));
-                runOnUiThread(() -> {
-                    hideLoading();
-                    refreshBooks();
-                    showSection(SECTION_BOOKSHELF);
-                    closeDrawer();
-                    openBook(bookId);
-                });
-            } catch (Exception error) {
-                runOnUiThread(() -> {
-                    hideLoading();
-                    showToast("导入失败: " + error.getMessage());
-                });
-            }
-        });
     }
 
     private void refreshBooks() {
@@ -490,7 +705,6 @@ public class MainActivity extends ThemedActivity {
                 allBooks.clear();
                 allBooks.addAll(books);
                 applyFilter(currentQuery());
-                refreshOverviewPanels();
             });
         });
     }
@@ -513,7 +727,6 @@ public class MainActivity extends ThemedActivity {
         gridAdapter.setItems(filtered);
         updateStats(filtered);
         updateEmptyState(query);
-        updatePreviewPanels();
     }
 
     private void updateEmptyState(String query) {
@@ -545,25 +758,13 @@ public class MainActivity extends ThemedActivity {
         return listAdapter.getCount() == 0;
     }
 
-    private void refreshOverviewPanels() {
-        previewTheme.setText(
-                "界面: " + labelForReaderUiTheme(settingsStore.getReaderUiThemeMode())
-                        + " · 阅读预设: " + labelForReaderPreset(settingsStore.getReaderTheme())
-                        + " · 字号 " + Math.round(settingsStore.getFontSizeSp()) + "sp"
-                        + " · 行距 " + Math.round(settingsStore.getLineSpacingExtraSp()) + "sp"
+    private void updateStats(List<BookRecord> filtered) {
+        String label = String.format(
+                Locale.SIMPLIFIED_CHINESE,
+                "共 %d 本书籍",
+                filtered.size()
         );
-        String bookshelfMode = isCardMode() ? "卡片书架" : "列表书架";
-        overviewTheme.setText(
-                "主题: " + labelForAppTheme(settingsStore.getAppThemeMode())
-                        + " · 书架: " + bookshelfMode
-        );
-        overviewSync.setText(settingsStore.isWebDavEnabled() ? "WebDAV 已启用" : "WebDAV 未启用");
-        overviewReader.setText(settingsStore.isAutoOpenLastBook()
-                ? "启动后自动打开最近阅读"
-                : "启动后停留在书架");
-        applyBookshelfMode();
-        updatePreviewPanels();
-        updateDrawerStatus();
+        statsText.setText(label);
     }
 
     private void updateDrawerStatus() {
@@ -571,7 +772,7 @@ public class MainActivity extends ThemedActivity {
                 Locale.SIMPLIFIED_CHINESE,
                 "已导入 %d 本书\n%s · %s",
                 allBooks.size(),
-                isCardMode() ? "卡片书架" : "列表书架",
+                isCardMode() ? "网格书架" : "列表书架",
                 labelForAppTheme(settingsStore.getAppThemeMode())
         );
         if (drawerController != null) {
@@ -579,246 +780,56 @@ public class MainActivity extends ThemedActivity {
         }
     }
 
-    private void updatePreviewPanels() {
-        boolean cardMode = isCardMode();
-        previewBookshelfMode.setText(cardMode ? "当前书架: 卡片模式" : "当前书架: 列表模式");
-        previewBooksCard.setVisibility(cardMode ? View.VISIBLE : View.GONE);
-        previewBooksList.setVisibility(cardMode ? View.GONE : View.VISIBLE);
-        previewShelfAction.setText(allBooks.isEmpty() ? "导入" : "添加");
-        previewShelfStats.setText(String.format(
-                Locale.SIMPLIFIED_CHINESE,
-                "共 %d 本 · %s",
-                allBooks.size(),
-                cardMode ? "封面平铺" : "紧凑列表"
-        ));
-        updatePreviewBooks();
-        updatePreviewReader();
+    // ==================== Book Actions ====================
+
+    private void openPicker() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+                "text/plain",
+                "application/epub+zip",
+                "application/pdf",
+                "application/octet-stream"
+        });
+        startActivityForResult(intent, REQUEST_PICK_BOOK);
     }
 
-    private void updatePreviewBooks() {
-        String firstTitle = previewTitleAt(0, allBooks.isEmpty() ? "添加第一本书" : "最近阅读");
-        String secondTitle = previewTitleAt(1, allBooks.size() > 1 ? "继续阅读" : "再添加一本");
-        String thirdTitle = previewTitleAt(2, "添加新书");
-
-        previewCardTitleOne.setText(firstTitle);
-        previewCardTitleTwo.setText(secondTitle);
-        previewCardInitialOne.setText(initialsFor(firstTitle));
-        previewCardInitialTwo.setText(initialsFor(secondTitle));
-        previewListTitleOne.setText(firstTitle);
-        previewListTitleTwo.setText(secondTitle);
-        previewListTitleThree.setText(thirdTitle);
+    private void openCoverPicker(long bookId) {
+        pendingCoverBookId = bookId;
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/*");
+        startActivityForResult(intent, REQUEST_PICK_COVER);
     }
 
-    private void updatePreviewReader() {
-        String selectedTitle = allBooks.isEmpty() ? "最近阅读" : titleOrDefault(allBooks.get(0).title, "最近阅读");
-        previewReaderTitle.setText(selectedTitle);
-        previewReaderSubtitle.setText(labelForReaderPreset(settingsStore.getReaderTheme())
-                + " · " + labelForReaderUiTheme(settingsStore.getReaderUiThemeMode()));
-        previewReaderProgress.setText("0%");
-        previewReaderHudCenter.setText("第 1/2 页");
-        previewReaderHeading.setVisibility(settingsStore.isChapterTitleVisible() ? View.VISIBLE : View.GONE);
-        previewReaderBody.setText("更多精彩小说尽在知轩藏书下载：\nhttps://zxcs.zip/\n\n内容简介：一个普通山村穷小子，在机缘与谨慎并行的路上踏入修仙世界。");
-        previewReaderBody.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.max(12f, settingsStore.getFontSizeSp() - 4f));
-        previewReaderBody.setLineSpacing(settingsStore.getLineSpacingExtraSp() * getResources().getDisplayMetrics().scaledDensity / 4f, 1f);
-        applyReaderPreviewTheme();
-    }
-
-    private void applyReaderPreviewTheme() {
-        String backgroundPath = settingsStore.getReaderBackgroundPath();
-        boolean customBackgroundApplied = false;
-        if (backgroundPath != null && !backgroundPath.isBlank()) {
-            File file = new File(backgroundPath);
-            if (file.exists()) {
-                Bitmap bitmap = BitmapFactory.decodeFile(file.getAbsolutePath());
-                if (bitmap != null) {
-                    previewReaderBackground.setImageBitmap(bitmap);
-                    customBackgroundApplied = true;
-                }
+    private void importBook(Uri uri) {
+        showLoading("正在解析书籍...");
+        executor.execute(() -> {
+            try {
+                long bookId = databaseHelper.insertImportedBook(importService.importFromUri(uri));
+                runOnUiThread(() -> {
+                    hideLoading();
+                    refreshBooks();
+                    showSection(SECTION_BOOKSHELF);
+                    if (drawerController != null) {
+                        drawerController.closeDrawer();
+                    }
+                    openBook(bookId);
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    hideLoading();
+                    showToast("导入失败: " + error.getMessage());
+                });
             }
-        }
-        if (!customBackgroundApplied) {
-            previewReaderBackground.setImageResource(readerBackgroundResource(settingsStore.getReaderTheme()));
-        }
-
-        boolean useDarkUi = shouldUseDarkReaderUi();
-        int panelBackground = useDarkUi ? R.drawable.bg_menu_panel : R.drawable.bg_card;
-        int actionBackground = useDarkUi ? R.drawable.bg_outline_button_light : R.drawable.bg_soft_button;
-        int hudBackground = useDarkUi ? R.drawable.bg_reader_hud_pill : R.drawable.bg_soft_button;
-        int foreground = getColor(useDarkUi ? android.R.color.white : R.color.on_surface);
-        int secondary = getColor(useDarkUi ? android.R.color.white : R.color.on_surface_muted);
-
-        previewReaderTop.setBackgroundResource(panelBackground);
-        previewReaderBottom.setBackgroundResource(panelBackground);
-        previewReaderBack.setBackgroundResource(actionBackground);
-        previewReaderChipOne.setBackgroundResource(actionBackground);
-        previewReaderChipTwo.setBackgroundResource(actionBackground);
-        previewReaderChipThree.setBackgroundResource(actionBackground);
-        previewReaderProgress.setBackgroundResource(hudBackground);
-        previewReaderHudLeft.setBackgroundResource(hudBackground);
-        previewReaderHudCenter.setBackgroundResource(hudBackground);
-        previewReaderHudRight.setBackgroundResource(hudBackground);
-
-        previewReaderBack.setTextColor(foreground);
-        previewReaderTitle.setTextColor(foreground);
-        previewReaderSubtitle.setTextColor(secondary);
-        previewReaderProgress.setTextColor(foreground);
-        previewReaderChipOne.setTextColor(foreground);
-        previewReaderChipTwo.setTextColor(foreground);
-        previewReaderChipThree.setTextColor(foreground);
-        previewReaderHudLeft.setTextColor(foreground);
-        previewReaderHudCenter.setTextColor(foreground);
-        previewReaderHudRight.setTextColor(foreground);
-
-        if ("forest".equals(settingsStore.getReaderTheme())) {
-            previewReaderScrim.setBackgroundColor(getColor(R.color.overlay_dark));
-            previewReaderHeading.setTextColor(getColor(R.color.reader_forest_text));
-            previewReaderBody.setTextColor(getColor(R.color.reader_forest_text));
-        } else if ("night".equals(settingsStore.getReaderTheme())) {
-            previewReaderScrim.setBackgroundColor(getColor(R.color.overlay_dark));
-            previewReaderHeading.setTextColor(getColor(R.color.reader_night_text));
-            previewReaderBody.setTextColor(getColor(R.color.reader_night_text));
-        } else {
-            previewReaderScrim.setBackgroundColor(getColor(R.color.overlay_light));
-            previewReaderHeading.setTextColor(getColor(R.color.reader_paper_text));
-            previewReaderBody.setTextColor(getColor(R.color.reader_paper_text));
-        }
-    }
-
-    private int readerBackgroundResource(String theme) {
-        if ("forest".equals(theme)) {
-            return R.drawable.theme_bg_forest;
-        }
-        if ("night".equals(theme)) {
-            return R.drawable.theme_bg_night;
-        }
-        return R.drawable.theme_bg_paper;
-    }
-
-    private boolean shouldUseDarkReaderUi() {
-        String mode = settingsStore.getReaderUiThemeMode();
-        if ("dark".equals(mode)) {
-            return true;
-        }
-        if ("light".equals(mode)) {
-            return false;
-        }
-        if ("system".equals(mode)) {
-            return isSystemDarkMode();
-        }
-        return isAppDarkMode();
-    }
-
-    private boolean isAppDarkMode() {
-        String appTheme = settingsStore.getAppThemeMode();
-        if ("dark".equals(appTheme)) {
-            return true;
-        }
-        if ("light".equals(appTheme)) {
-            return false;
-        }
-        return isSystemDarkMode();
-    }
-
-    private boolean isSystemDarkMode() {
-        int nightModeFlags = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
-        return nightModeFlags == Configuration.UI_MODE_NIGHT_YES;
-    }
-
-    private String labelForAppTheme(String value) {
-        if ("light".equals(value)) {
-            return "浅色";
-        }
-        if ("dark".equals(value)) {
-            return "深色";
-        }
-        return "跟随系统";
-    }
-
-    private String labelForReaderUiTheme(String value) {
-        if ("system".equals(value)) {
-            return "跟随系统";
-        }
-        if ("light".equals(value)) {
-            return "浅色";
-        }
-        if ("dark".equals(value)) {
-            return "深色";
-        }
-        return "跟随应用";
-    }
-
-    private String labelForReaderPreset(String value) {
-        if ("forest".equals(value)) {
-            return "护眼";
-        }
-        if ("night".equals(value)) {
-            return "夜航";
-        }
-        return "纸控";
-    }
-
-    private String previewTitleAt(int index, String fallback) {
-        if (index >= 0 && index < allBooks.size()) {
-            return titleOrDefault(allBooks.get(index).title, fallback);
-        }
-        return fallback;
-    }
-
-    private String titleOrDefault(String value, String fallback) {
-        if (value == null || value.isBlank()) {
-            return fallback;
-        }
-        return value.trim();
-    }
-
-    private String initialsFor(String title) {
-        String trimmed = titleOrDefault(title, "书");
-        return trimmed.substring(0, Math.min(1, trimmed.length())).toUpperCase(Locale.ROOT);
+        });
     }
 
     private void openBook(long bookId) {
         Intent intent = new Intent(this, ReaderActivity.class);
         intent.putExtra("book_id", bookId);
         startActivity(intent);
-    }
-
-    public static Intent createSectionIntent(Context context, String startSection) {
-        Intent intent = new Intent(context, MainActivity.class);
-        intent.putExtra(EXTRA_START_SECTION, startSection);
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        return intent;
-    }
-
-    private int resolveStartSection(Intent intent) {
-        if (intent == null) {
-            return SECTION_BOOKSHELF;
-        }
-        String startSection = intent.getStringExtra(EXTRA_START_SECTION);
-        if (START_SECTION_PREVIEW.equals(startSection)) {
-            return SECTION_PREVIEW;
-        }
-        return SECTION_BOOKSHELF;
-    }
-
-    private void handleDrawerDestination(int destination) {
-        if (destination == AppDrawerController.SECTION_PREVIEW) {
-            showSection(SECTION_PREVIEW);
-            return;
-        }
-        if (destination == AppDrawerController.SECTION_SETTINGS) {
-            openSettings();
-            return;
-        }
-        showSection(SECTION_BOOKSHELF);
-    }
-
-    private void maybeAutoOpenLastBook() {
-        executor.execute(() -> {
-            long bookId = databaseHelper.getMostRecentBookId();
-            if (bookId > 0) {
-                runOnUiThread(() -> openBook(bookId));
-            }
-        });
     }
 
     private void showBookActions(BookRecord book) {
@@ -905,179 +916,39 @@ public class MainActivity extends ThemedActivity {
                 .show();
     }
 
-    private void updateStats(List<BookRecord> filtered) {
-        int textCount = 0;
-        int epubCount = 0;
-        int pdfCount = 0;
-        for (BookRecord book : allBooks) {
-            if ("epub".equalsIgnoreCase(book.bookType)) {
-                epubCount++;
-            } else if ("pdf".equalsIgnoreCase(book.bookType)) {
-                pdfCount++;
-            } else {
-                textCount++;
+    // ==================== Navigation Helpers ====================
+
+    public static Intent createSectionIntent(Context context, String startSection) {
+        Intent intent = new Intent(context, MainActivity.class);
+        intent.putExtra(EXTRA_START_SECTION, startSection);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        return intent;
+    }
+
+    private int resolveStartSection(Intent intent) {
+        if (intent == null) {
+            return SECTION_BOOKSHELF;
+        }
+        String startSection = intent.getStringExtra(EXTRA_START_SECTION);
+        if (START_SECTION_PREVIEW.equals(startSection)) {
+            return SECTION_PREVIEW;
+        }
+        if (START_SECTION_SETTINGS.equals(startSection)) {
+            return SECTION_SETTINGS;
+        }
+        return SECTION_BOOKSHELF;
+    }
+
+    private void maybeAutoOpenLastBook() {
+        executor.execute(() -> {
+            long bookId = databaseHelper.getMostRecentBookId();
+            if (bookId > 0) {
+                runOnUiThread(() -> openBook(bookId));
             }
-        }
-        String label = String.format(
-                Locale.SIMPLIFIED_CHINESE,
-                "共 %d 本 · 当前 %d 本 · TXT %d · EPUB %d · PDF %d",
-                allBooks.size(),
-                filtered.size(),
-                textCount,
-                epubCount,
-                pdfCount
-        );
-        statsText.setText(label);
+        });
     }
 
-    private boolean handleDrawerGesture(MotionEvent event) {
-        if (drawerPanel.getWidth() == 0) {
-            return false;
-        }
-        float x = event.getX();
-        float y = event.getY();
-        switch (event.getActionMasked()) {
-            case MotionEvent.ACTION_DOWN:
-                drawerGestureCandidate = shouldStartDrawerGesture(x);
-                drawerDragging = false;
-                drawerVelocityX = 0f;
-                if (drawerGestureCandidate) {
-                    drawerDownX = x;
-                    drawerDownY = y;
-                    drawerLastX = x;
-                    drawerLastEventTime = event.getEventTime();
-                    drawerBaseOffset = drawerPanel.getTranslationX();
-                }
-                return false;
-            case MotionEvent.ACTION_MOVE:
-                if (!drawerGestureCandidate) {
-                    return false;
-                }
-                float deltaX = x - drawerDownX;
-                float deltaY = y - drawerDownY;
-                if (!drawerDragging) {
-                    if (Math.abs(deltaY) > touchSlop && Math.abs(deltaY) > Math.abs(deltaX)) {
-                        drawerGestureCandidate = false;
-                        return false;
-                    }
-                    if (Math.abs(deltaX) <= touchSlop || Math.abs(deltaX) <= Math.abs(deltaY)) {
-                        return false;
-                    }
-                    drawerDragging = true;
-                    prepareDrawerForGesture();
-                }
-                float targetOffset = clamp(drawerBaseOffset + deltaX, -drawerPanel.getWidth(), 0f);
-                setDrawerOffset(targetOffset);
-                long now = event.getEventTime();
-                long elapsed = Math.max(1L, now - drawerLastEventTime);
-                drawerVelocityX = (x - drawerLastX) / elapsed;
-                drawerLastX = x;
-                drawerLastEventTime = now;
-                return true;
-            case MotionEvent.ACTION_UP:
-            case MotionEvent.ACTION_CANCEL:
-                if (drawerDragging) {
-                    finishDrawerGesture();
-                    return true;
-                }
-                if (drawerGestureCandidate && isDrawerVisible() && x > drawerPanel.getWidth()) {
-                    closeDrawer();
-                    drawerGestureCandidate = false;
-                    return true;
-                }
-                drawerGestureCandidate = false;
-                return false;
-            default:
-                return false;
-        }
-    }
-
-    private boolean shouldStartDrawerGesture(float x) {
-        if (!isDrawerVisible()) {
-            return x <= dp(56);
-        }
-        float panelWidth = drawerPanel.getWidth();
-        return x <= panelWidth + dp(24);
-    }
-
-    private void finishDrawerGesture() {
-        float offset = drawerPanel.getTranslationX();
-        float openThreshold = -drawerPanel.getWidth() * 0.45f;
-        boolean shouldOpen = offset > openThreshold || drawerVelocityX > 0.8f;
-        if (drawerVelocityX < -0.8f) {
-            shouldOpen = false;
-        }
-        drawerGestureCandidate = false;
-        drawerDragging = false;
-        if (shouldOpen) {
-            openDrawer();
-        } else {
-            closeDrawer();
-        }
-    }
-
-    private void openDrawer() {
-        if (drawerPanel.getWidth() == 0) {
-            drawerPanel.post(this::openDrawer);
-            return;
-        }
-        drawerOpen = true;
-        animateDrawerTo(0f, 220L);
-    }
-
-    private void closeDrawer() {
-        if (drawerPanel.getWidth() == 0) {
-            return;
-        }
-        drawerOpen = false;
-        animateDrawerTo(-drawerPanel.getWidth(), 180L);
-    }
-
-    private void animateDrawerTo(float targetOffset, long durationMs) {
-        prepareDrawerForGesture();
-        drawerPanel.animate().cancel();
-        drawerScrim.animate().cancel();
-        float progress = 1f - (-targetOffset / drawerPanel.getWidth());
-        drawerPanel.animate()
-                .translationX(targetOffset)
-                .setDuration(durationMs)
-                .withEndAction(() -> {
-                    if (targetOffset <= -drawerPanel.getWidth()) {
-                        drawerPanel.setVisibility(View.INVISIBLE);
-                    }
-                })
-                .start();
-        drawerScrim.animate()
-                .alpha(progress)
-                .setDuration(durationMs)
-                .withEndAction(() -> {
-                    if (progress <= 0f) {
-                        drawerScrim.setVisibility(View.GONE);
-                    }
-                })
-                .start();
-    }
-
-    private void prepareDrawerForGesture() {
-        drawerPanel.setVisibility(View.VISIBLE);
-        drawerScrim.setVisibility(View.VISIBLE);
-        drawerPanel.animate().cancel();
-        drawerScrim.animate().cancel();
-    }
-
-    private void setDrawerOffset(float offset) {
-        float clamped = clamp(offset, -drawerPanel.getWidth(), 0f);
-        float progress = 1f - (-clamped / drawerPanel.getWidth());
-        drawerPanel.setVisibility(progress <= 0f ? View.INVISIBLE : View.VISIBLE);
-        drawerPanel.setTranslationX(clamped);
-        drawerScrim.setVisibility(progress <= 0f ? View.GONE : View.VISIBLE);
-        drawerScrim.setAlpha(progress);
-        drawerOpen = progress > 0.95f;
-    }
-
-    private boolean isDrawerVisible() {
-        return drawerPanel.getVisibility() == View.VISIBLE || drawerDragging;
-    }
+    // ==================== UI Helpers ====================
 
     private void showLoading(String message) {
         loadingText.setText(message);
@@ -1104,20 +975,45 @@ public class MainActivity extends ThemedActivity {
         return query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
     }
 
-    private float clamp(float value, float min, float max) {
-        return Math.max(min, Math.min(max, value));
-    }
-
-    private int dp(int value) {
-        return Math.round(getResources().getDisplayMetrics().density * value);
-    }
-
-    private void updateDrawerGestureExclusion() {
-        if (mainRoot == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            return;
+    private String labelForAppTheme(String value) {
+        if ("light".equals(value)) {
+            return "浅色";
         }
-        List<Rect> exclusionRects = new ArrayList<>();
-        exclusionRects.add(new Rect(0, 0, dp(40), mainRoot.getHeight()));
-        mainRoot.setSystemGestureExclusionRects(exclusionRects);
+        if ("dark".equals(value)) {
+            return "深色";
+        }
+        return "跟随系统";
+    }
+
+    private String labelForReaderUiTheme(String value) {
+        if ("system".equals(value)) {
+            return "跟随系统";
+        }
+        if ("light".equals(value)) {
+            return "浅色";
+        }
+        if ("dark".equals(value)) {
+            return "深色";
+        }
+        return "跟随应用";
+    }
+
+    private String labelForReaderPreset(String value) {
+        if ("forest".equals(value)) {
+            return "护眼";
+        }
+        if ("night".equals(value)) {
+            return "夜航";
+        }
+        return "纸控";
+    }
+
+    private int indexOf(String[] values, String target, int fallback) {
+        for (int i = 0; i < values.length; i++) {
+            if (values[i].equals(target)) {
+                return i;
+            }
+        }
+        return fallback;
     }
 }

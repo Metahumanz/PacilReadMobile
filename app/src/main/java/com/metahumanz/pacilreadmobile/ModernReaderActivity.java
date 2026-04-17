@@ -4,6 +4,7 @@ import android.app.AlertDialog;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -17,7 +18,9 @@ import android.os.Handler;
 import android.os.Looper;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
+import android.text.Editable;
 import android.text.TextPaint;
+import android.text.TextWatcher;
 import android.view.GestureDetector;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -86,10 +89,11 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     private SettingsStore settingsStore;
     private WebDavClient webDavClient;
     private MimoTtsClient mimoTtsClient;
-    private AppDrawerController drawerController;
+
 
     private View readerRoot;
-    private View hudContainer;
+    private View hudTopContainer;
+    private View hudBottomContainer;
     private View menuTopPanel;
     private View menuInfoPanel;
     private View menuBottomPanel;
@@ -97,11 +101,18 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     private View pageCurrent;
     private View pageIncoming;
     private View pageShadow;
-    private View readerBackgroundScrim;
+
     private android.widget.ImageView readerBackgroundImage;
-    private TextView hudLeft;
-    private TextView hudCenter;
-    private TextView hudRight;
+    private TextView hudTopLeft;
+    private TextView hudTopCenter;
+    private TextView hudTopRight;
+    private TextView hudBottomLeft;
+    private TextView hudBottomCenter;
+    private TextView hudBottomRight;
+
+    private android.content.BroadcastReceiver sysMetricsReceiver;
+    private int currentBatteryLevel = -1;
+
     private TextView readerTitle;
     private TextView readerProgress;
     private TextView chapterMeta;
@@ -184,9 +195,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         }
 
         bindViews();
-        drawerController = new AppDrawerController(this, readerRoot, this::handleDrawerDestination);
-        drawerController.setCurrentSection(AppDrawerController.SECTION_NONE);
-        drawerController.setStatusText("正在载入书籍...");
+
         configureReaderWindow();
         applyEdgeToEdgeInsets();
         setupGestures();
@@ -224,11 +233,12 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (sysMetricsReceiver != null) {
+            unregisterReceiver(sysMetricsReceiver);
+        }
+        mainHandler.removeCallbacksAndMessages(null);
         executor.shutdownNow();
         ttsExecutor.shutdownNow();
-        mainHandler.removeCallbacks(autoHideRunnable);
-        mainHandler.removeCallbacks(autoPageRunnable);
-        mainHandler.removeCallbacks(saveProgressRunnable);
         cancelInteractiveAnimator();
         if (mimoTtsClient != null) {
             mimoTtsClient.cancel();
@@ -241,7 +251,8 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
 
     @Override
     public void onBackPressed() {
-        if (drawerController != null && drawerController.onBackPressed()) {
+        if (controlsVisible) {
+            setControlsVisible(false);
             return;
         }
         persistProgress();
@@ -294,7 +305,6 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
 
     private void bindViews() {
         readerRoot = findViewById(R.id.reader_root);
-        hudContainer = findViewById(R.id.hud_container);
         menuTopPanel = findViewById(R.id.menu_top_panel);
         menuInfoPanel = findViewById(R.id.menu_info_panel);
         menuBottomPanel = findViewById(R.id.menu_bottom_panel);
@@ -303,10 +313,14 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         pageIncoming = findViewById(R.id.page_incoming);
         pageShadow = findViewById(R.id.view_page_shadow);
         readerBackgroundImage = findViewById(R.id.reader_background_image);
-        readerBackgroundScrim = findViewById(R.id.reader_background_scrim);
-        hudLeft = findViewById(R.id.text_hud_left);
-        hudCenter = findViewById(R.id.text_hud_center);
-        hudRight = findViewById(R.id.text_hud_right);
+        hudTopContainer = findViewById(R.id.hud_container_top);
+        hudBottomContainer = findViewById(R.id.hud_container_bottom);
+        hudTopLeft = findViewById(R.id.text_hud_top_left);
+        hudTopCenter = findViewById(R.id.text_hud_top_center);
+        hudTopRight = findViewById(R.id.text_hud_top_right);
+        hudBottomLeft = findViewById(R.id.text_hud_bottom_left);
+        hudBottomCenter = findViewById(R.id.text_hud_bottom_center);
+        hudBottomRight = findViewById(R.id.text_hud_bottom_right);
         readerTitle = findViewById(R.id.text_reader_title);
         readerProgress = findViewById(R.id.text_progress);
         chapterMeta = findViewById(R.id.text_chapter_meta);
@@ -361,11 +375,22 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     }
 
     private void updateReaderLayoutInsets() {
-        hudContainer.setPadding(
-                dp(14) + systemInsetLeft,
+        int bottomPanelBottomMargin = dp(8) + systemInsetBottom;
+        int menuBottomHeight = menuBottomPanel == null ? 0 : menuBottomPanel.getHeight();
+        int infoBottomMargin = menuBottomHeight > 0
+                ? bottomPanelBottomMargin + menuBottomHeight + dp(10)
+                : dp(148) + systemInsetBottom;
+        hudTopContainer.setPadding(
+                dp(12) + systemInsetLeft,
                 dp(8) + systemInsetTop,
-                dp(14) + systemInsetRight,
-                dp(4)
+                dp(12) + systemInsetRight,
+                0
+        );
+        hudBottomContainer.setPadding(
+                dp(12) + systemInsetLeft,
+                0,
+                dp(12) + systemInsetRight,
+                dp(8) + systemInsetBottom
         );
         pageStage.setPadding(
                 dp(2) + systemInsetLeft,
@@ -383,13 +408,13 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
                 dp(10) + systemInsetLeft,
                 0,
                 dp(10) + systemInsetRight,
-                dp(148) + systemInsetBottom
+                infoBottomMargin
         );
         updateFrameLayoutMargins(menuBottomPanel,
                 dp(10) + systemInsetLeft,
                 0,
                 dp(10) + systemInsetRight,
-                dp(8) + systemInsetBottom
+                bottomPanelBottomMargin
         );
     }
 
@@ -403,6 +428,24 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     }
 
     private void setupControls() {
+        sysMetricsReceiver = new android.content.BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, android.content.Intent intent) {
+                if (android.content.Intent.ACTION_BATTERY_CHANGED.equals(intent.getAction())) {
+                    int level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1);
+                    int scale = intent.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1);
+                    if (level >= 0 && scale > 0) {
+                        currentBatteryLevel = (level * 100) / scale;
+                    }
+                }
+                updateReaderHud();
+            }
+        };
+        android.content.IntentFilter filter = new android.content.IntentFilter();
+        filter.addAction(android.content.Intent.ACTION_TIME_TICK);
+        filter.addAction(android.content.Intent.ACTION_BATTERY_CHANGED);
+        registerReceiver(sysMetricsReceiver, filter);
+
         findViewById(R.id.button_back).setOnClickListener(v -> finish());
         findViewById(R.id.button_prev_chapter).setOnClickListener(v -> openChapter(currentChapterIndex - 1, 0, true, -1));
         findViewById(R.id.button_next_chapter).setOnClickListener(v -> openChapter(currentChapterIndex + 1, 0, true, 1));
@@ -885,16 +928,71 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         }
         int percent = Math.round(((currentChapterIndex + (currentPageIndex / (float) safePageCount)) / Math.max(chapters.size(), 1)) * 100f);
         readerProgress.setText(percent + "%");
-        hudLeft.setText(String.format(Locale.SIMPLIFIED_CHINESE, "第 %d 章", currentChapterIndex + 1));
-        hudCenter.setText(book.title == null ? "" : book.title);
-        hudRight.setText(percent + "%");
-        updateDrawerStatus(chapter.title, percent);
+
+        updateReaderHud();
+
         styleReaderMenuButton(progressModeBookButton, "book".equals(settingsStore.getReaderSliderMode()));
         styleReaderMenuButton(progressModeChapterButton, "chapter".equals(settingsStore.getReaderSliderMode()));
         styleReaderMenuButton(ttsButton, ttsActive);
         styleReaderMenuButton(autoPageButton, autoPageActive);
         styleReaderMenuButton(themeToggleButton, isDarkReaderUi());
     }
+
+    private int fetchCurrentProgressPercent() {
+        if (book == null || chapters.isEmpty()) return 0;
+        int safePageCount = Math.max(getPagesForChapter(currentChapterIndex).size(), 1);
+        return Math.round(((currentChapterIndex + (currentPageIndex / (float) safePageCount)) / Math.max(chapters.size(), 1)) * 100f);
+    }
+
+    private void updateReaderHud() {
+        if (book == null || chapters.isEmpty()) return;
+
+        applyHudSlot(hudTopLeft, settingsStore.getHudTopLeft());
+        applyHudSlot(hudTopCenter, settingsStore.getHudTopCenter());
+        applyHudSlot(hudTopRight, settingsStore.getHudTopRight());
+        applyHudSlot(hudBottomLeft, settingsStore.getHudBottomLeft());
+        applyHudSlot(hudBottomCenter, settingsStore.getHudBottomCenter());
+        applyHudSlot(hudBottomRight, settingsStore.getHudBottomRight());
+    }
+
+    private void applyHudSlot(TextView textView, String type) {
+        if (textView == null) {
+            return;
+        }
+        String text;
+        switch (type) {
+            case "title":
+                text = book.title == null ? "" : book.title.trim();
+                break;
+            case "chapter":
+                if (currentChapterIndex < chapters.size()) {
+                    text = chapters.get(currentChapterIndex).title == null ? "" : chapters.get(currentChapterIndex).title.trim();
+                } else {
+                    text = "";
+                }
+                break;
+            case "progress":
+                text = fetchCurrentProgressPercent() + "%";
+                break;
+            case "time":
+                text = new java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(new java.util.Date());
+                break;
+            case "battery":
+                text = currentBatteryLevel >= 0 ? currentBatteryLevel + "%" : "";
+                break;
+            default:
+                text = "";
+                break;
+        }
+        if (text.isEmpty()) {
+            textView.setText("");
+            textView.setVisibility(View.GONE);
+            return;
+        }
+        textView.setText(text);
+        textView.setVisibility(View.VISIBLE);
+    }
+
 
     private void animateTransition(int targetChapterIndex, int targetPageIndex, int direction) {
         long token = ++animationToken;
@@ -1103,27 +1201,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         recreate();
     }
 
-    private void updateDrawerStatus(String chapterTitle, int percent) {
-        if (drawerController == null || book == null) {
-            return;
-        }
-        String safeTitle = book.title == null || book.title.isBlank() ? "当前阅读" : book.title;
-        String safeChapter = chapterTitle == null || chapterTitle.isBlank() ? "未命名章节" : chapterTitle;
-        drawerController.setStatusText(safeTitle + "\n" + safeChapter + " · " + percent + "%");
-    }
 
-    private void handleDrawerDestination(int destination) {
-        persistProgress();
-        if (destination == AppDrawerController.SECTION_SETTINGS) {
-            startActivity(new Intent(this, SettingsActivity.class));
-            return;
-        }
-        Intent intent = MainActivity.createSectionIntent(
-                this,
-                destination == AppDrawerController.SECTION_PREVIEW ? MainActivity.START_SECTION_PREVIEW : MainActivity.START_SECTION_BOOKSHELF
-        );
-        startActivity(intent);
-    }
 
     private void stopAutoPage() {
         autoPageActive = false;
@@ -1135,7 +1213,6 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     private void applyReaderSettings() {
         ReaderThemePalette palette = ReaderThemePalette.from(settingsStore.getReaderTheme());
         readerRoot.setBackgroundColor(palette.backgroundColor);
-        readerBackgroundScrim.setBackgroundColor(palette.overlayColor);
         stylePageContainer(pageCurrent, palette.pageColor);
         stylePageContainer(pageIncoming, palette.pageColor);
         pageTitleCurrent.setTextColor(palette.textColor);
@@ -1162,6 +1239,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         applyBackgroundImage();
         updateSystemBarsVisibility(controlsVisible);
         applyGlassOpacity();
+        updateReaderHud();
     }
 
     private void persistProgress() {
@@ -1323,39 +1401,12 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         keepScreenOn.setChecked(settingsStore.isKeepScreenOn());
         showTitleCheck.setChecked(settingsStore.isChapterTitleVisible());
         backgroundText.setText(currentBackgroundLabel());
-        uiThemeSpinner.setSelection(indexOf(uiThemeKeys, settingsStore.getReaderUiThemeMode(), 0));
+        uiThemeSpinner.setSelection(indexOf(uiThemeKeys, settingsStore.getReaderUiThemeMode(), 0), false);
         final String[] selectedReaderTheme = new String[]{settingsStore.getReaderTheme()};
         updateReaderThemeButtons(paperThemeButton, forestThemeButton, nightThemeButton, selectedReaderTheme[0]);
-        paperThemeButton.setOnClickListener(v -> {
-            selectedReaderTheme[0] = "paper";
-            updateReaderThemeButtons(paperThemeButton, forestThemeButton, nightThemeButton, selectedReaderTheme[0]);
-        });
-        forestThemeButton.setOnClickListener(v -> {
-            selectedReaderTheme[0] = "forest";
-            updateReaderThemeButtons(paperThemeButton, forestThemeButton, nightThemeButton, selectedReaderTheme[0]);
-        });
-        nightThemeButton.setOnClickListener(v -> {
-            selectedReaderTheme[0] = "night";
-            updateReaderThemeButtons(paperThemeButton, forestThemeButton, nightThemeButton, selectedReaderTheme[0]);
-        });
-        updateStyleLabels(fontValue, lineValue, sideValue, verticalValue, fontSeek, lineSeek, sideSeek, verticalSeek);
-        SeekBar.OnSeekBarChangeListener listener = new SimpleSeekListener(() -> updateStyleLabels(fontValue, lineValue, sideValue, verticalValue, fontSeek, lineSeek, sideSeek, verticalSeek));
-        fontSeek.setOnSeekBarChangeListener(listener);
-        lineSeek.setOnSeekBarChangeListener(listener);
-        sideSeek.setOnSeekBarChangeListener(listener);
-        verticalSeek.setOnSeekBarChangeListener(listener);
-        AlertDialog dialog = new AlertDialog.Builder(this).setView(content).create();
-        renderThemeRows(customThemeList, dialog);
-        content.findViewById(R.id.style_button_pick_background).setOnClickListener(v -> openBackgroundPicker());
-        content.findViewById(R.id.style_button_clear_background).setOnClickListener(v -> {
-            FileAssetHelper.deleteIfExists(settingsStore.getReaderBackgroundPath());
-            settingsStore.setReaderBackgroundPath("");
-            backgroundText.setText(currentBackgroundLabel());
-            applyReaderSettings();
-        });
-        content.findViewById(R.id.style_button_save_theme).setOnClickListener(v -> promptSaveTheme(() -> renderThemeRows(customThemeList, dialog)));
-        content.findViewById(R.id.style_button_cancel).setOnClickListener(v -> dialog.dismiss());
-        content.findViewById(R.id.style_button_apply).setOnClickListener(v -> {
+
+        Runnable autoApply = () -> {
+            int anchorOffset = currentCharOffset();
             String previousResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(this);
             settingsStore.setFontSizeSp(fontSeek.getProgress() + 12f);
             settingsStore.setLineSpacingExtraSp(lineSeek.getProgress());
@@ -1367,14 +1418,66 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             settingsStore.setReaderTheme(selectedReaderTheme[0]);
             String nextResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(this);
             clearPageCache();
-            dialog.dismiss();
             if (!previousResolvedUiMode.equals(nextResolvedUiMode)) {
                 recreate();
                 return;
             }
             applyReaderSettings();
-            openChapter(currentChapterIndex, currentCharOffset(), false, 0);
+            openChapter(currentChapterIndex, anchorOffset, false, 0);
+        };
+        paperThemeButton.setOnClickListener(v -> {
+            selectedReaderTheme[0] = "paper";
+            updateReaderThemeButtons(paperThemeButton, forestThemeButton, nightThemeButton, selectedReaderTheme[0]);
+            autoApply.run();
         });
+        forestThemeButton.setOnClickListener(v -> {
+            selectedReaderTheme[0] = "forest";
+            updateReaderThemeButtons(paperThemeButton, forestThemeButton, nightThemeButton, selectedReaderTheme[0]);
+            autoApply.run();
+        });
+        nightThemeButton.setOnClickListener(v -> {
+            selectedReaderTheme[0] = "night";
+            updateReaderThemeButtons(paperThemeButton, forestThemeButton, nightThemeButton, selectedReaderTheme[0]);
+            autoApply.run();
+        });
+        updateStyleLabels(fontValue, lineValue, sideValue, verticalValue, fontSeek, lineSeek, sideSeek, verticalSeek);
+        SeekBar.OnSeekBarChangeListener listener = new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                updateStyleLabels(fontValue, lineValue, sideValue, verticalValue, fontSeek, lineSeek, sideSeek, verticalSeek);
+                if (fromUser) {
+                    autoApply.run();
+                }
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                autoApply.run();
+            }
+        };
+        fontSeek.setOnSeekBarChangeListener(listener);
+        lineSeek.setOnSeekBarChangeListener(listener);
+        sideSeek.setOnSeekBarChangeListener(listener);
+        verticalSeek.setOnSeekBarChangeListener(listener);
+
+        keepScreenOn.setOnCheckedChangeListener((v, isChecked) -> autoApply.run());
+        showTitleCheck.setOnCheckedChangeListener((v, isChecked) -> autoApply.run());
+
+        uiThemeSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                autoApply.run();
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+        });
+
+        AlertDialog dialog = new AlertDialog.Builder(this).setView(content).create();
+        renderThemeRows(customThemeList, dialog);
+        content.findViewById(R.id.style_button_pick_background).setOnClickListener(v -> openBackgroundPicker());
+        content.findViewById(R.id.style_button_clear_background).setOnClickListener(v -> {
+            FileAssetHelper.deleteIfExists(settingsStore.getReaderBackgroundPath());
+            settingsStore.setReaderBackgroundPath("");
+            backgroundText.setText(currentBackgroundLabel());
+            applyReaderSettings();
+        });
+        content.findViewById(R.id.style_button_save_theme).setOnClickListener(v -> promptSaveTheme(() -> renderThemeRows(customThemeList, dialog)));
         showStyledDialog(dialog);
     }
 
@@ -1386,29 +1489,34 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         Button sliderBookButton = content.findViewById(R.id.options_button_slider_book);
         Button sliderChapterButton = content.findViewById(R.id.options_button_slider_chapter);
         CheckBox showTitleCheck = content.findViewById(R.id.options_check_show_title);
+
+        Spinner tLSpinner = content.findViewById(R.id.options_spinner_hud_tl);
+        Spinner tCSpinner = content.findViewById(R.id.options_spinner_hud_tc);
+        Spinner tRSpinner = content.findViewById(R.id.options_spinner_hud_tr);
+        Spinner bLSpinner = content.findViewById(R.id.options_spinner_hud_bl);
+        Spinner bCSpinner = content.findViewById(R.id.options_spinner_hud_bc);
+        Spinner bRSpinner = content.findViewById(R.id.options_spinner_hud_br);
         titleInput.setText(book == null ? "" : book.title);
         authorInput.setText(book == null ? "" : book.author);
         showTitleCheck.setChecked(settingsStore.isChapterTitleVisible());
         String[] flipKeys = new String[]{"cover", "slide", "simulation", "scroll", "none"};
         ArrayAdapter<String> adapter = buildSpinnerAdapter(new String[]{"覆盖", "平移", "仿真", "滚动", "无动画"});
         flipSpinner.setAdapter(adapter);
-        flipSpinner.setSelection(indexOf(flipKeys, settingsStore.getFlipMode(), 0));
+        flipSpinner.setSelection(indexOf(flipKeys, settingsStore.getFlipMode(), 0), false);
         final String[] sliderMode = new String[]{settingsStore.getReaderSliderMode()};
+        AlertDialog dialog = new AlertDialog.Builder(this).setView(content).create();
         styleThemeButton(sliderBookButton, "book".equals(sliderMode[0]));
         styleThemeButton(sliderChapterButton, "chapter".equals(sliderMode[0]));
-        sliderBookButton.setOnClickListener(v -> {
-            sliderMode[0] = "book";
-            styleThemeButton(sliderBookButton, true);
-            styleThemeButton(sliderChapterButton, false);
-        });
-        sliderChapterButton.setOnClickListener(v -> {
-            sliderMode[0] = "chapter";
-            styleThemeButton(sliderBookButton, false);
-            styleThemeButton(sliderChapterButton, true);
-        });
-        AlertDialog dialog = new AlertDialog.Builder(this).setView(content).create();
-        content.findViewById(R.id.options_button_cancel).setOnClickListener(v -> dialog.dismiss());
-        content.findViewById(R.id.options_button_apply).setOnClickListener(v -> {
+
+        String[] hudKeys = new String[]{"none", "title", "chapter", "progress", "time", "battery"};
+        ArrayAdapter<String> hudAdapter = buildSpinnerAdapter(new String[]{"无", "书名", "章节", "进度", "时间", "电量"});
+        tLSpinner.setAdapter(hudAdapter); tLSpinner.setSelection(indexOf(hudKeys, settingsStore.getHudTopLeft(), 0), false);
+        tCSpinner.setAdapter(hudAdapter); tCSpinner.setSelection(indexOf(hudKeys, settingsStore.getHudTopCenter(), 0), false);
+        tRSpinner.setAdapter(hudAdapter); tRSpinner.setSelection(indexOf(hudKeys, settingsStore.getHudTopRight(), 0), false);
+        bLSpinner.setAdapter(hudAdapter); bLSpinner.setSelection(indexOf(hudKeys, settingsStore.getHudBottomLeft(), 0), false);
+        bCSpinner.setAdapter(hudAdapter); bCSpinner.setSelection(indexOf(hudKeys, settingsStore.getHudBottomCenter(), 0), false);
+        bRSpinner.setAdapter(hudAdapter); bRSpinner.setSelection(indexOf(hudKeys, settingsStore.getHudBottomRight(), 0), false);
+        Runnable autoApply = () -> {
             String title = titleInput.getText().toString().trim();
             String author = authorInput.getText().toString().trim();
             if (title.isEmpty()) {
@@ -1416,22 +1524,61 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             }
             String finalTitle = title;
             String finalAuthor = author;
-            executor.execute(() -> {
-                databaseHelper.updateBookInfo(bookId, finalTitle, finalAuthor);
-                runOnUiThread(() -> {
-                    if (book != null) {
-                        book.title = finalTitle;
-                        book.author = finalAuthor;
-                    }
-                    settingsStore.setFlipMode(flipKeys[flipSpinner.getSelectedItemPosition()]);
-                    settingsStore.setReaderSliderMode(sliderMode[0]);
-                    settingsStore.setChapterTitleVisible(showTitleCheck.isChecked());
-                    clearPageCache();
-                    applyReaderSettings();
-                    openChapter(currentChapterIndex, currentCharOffset(), false, 0);
-                    dialog.dismiss();
-                });
-            });
+            int anchorOffset = currentCharOffset();
+            if (book != null) {
+                book.title = finalTitle;
+                book.author = finalAuthor;
+            }
+            settingsStore.setFlipMode(flipKeys[flipSpinner.getSelectedItemPosition()]);
+            settingsStore.setReaderSliderMode(sliderMode[0]);
+            settingsStore.setChapterTitleVisible(showTitleCheck.isChecked());
+            settingsStore.setHudTopLeft(hudKeys[tLSpinner.getSelectedItemPosition()]);
+            settingsStore.setHudTopCenter(hudKeys[tCSpinner.getSelectedItemPosition()]);
+            settingsStore.setHudTopRight(hudKeys[tRSpinner.getSelectedItemPosition()]);
+            settingsStore.setHudBottomLeft(hudKeys[bLSpinner.getSelectedItemPosition()]);
+            settingsStore.setHudBottomCenter(hudKeys[bCSpinner.getSelectedItemPosition()]);
+            settingsStore.setHudBottomRight(hudKeys[bRSpinner.getSelectedItemPosition()]);
+            clearPageCache();
+            applyReaderSettings();
+            openChapter(currentChapterIndex, anchorOffset, false, 0);
+            executor.execute(() -> databaseHelper.updateBookInfo(bookId, finalTitle, finalAuthor));
+        };
+
+        TextWatcher textWatcher = new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override public void afterTextChanged(Editable s) { autoApply.run(); }
+        };
+        titleInput.addTextChangedListener(textWatcher);
+        authorInput.addTextChangedListener(textWatcher);
+        showTitleCheck.setOnCheckedChangeListener((v, isChecked) -> autoApply.run());
+        flipSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) { autoApply.run(); }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+        });
+
+        android.widget.AdapterView.OnItemSelectedListener hudListener = new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) { autoApply.run(); }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+        };
+        tLSpinner.setOnItemSelectedListener(hudListener);
+        tCSpinner.setOnItemSelectedListener(hudListener);
+        tRSpinner.setOnItemSelectedListener(hudListener);
+        bLSpinner.setOnItemSelectedListener(hudListener);
+        bCSpinner.setOnItemSelectedListener(hudListener);
+        bRSpinner.setOnItemSelectedListener(hudListener);
+
+        sliderBookButton.setOnClickListener(v -> {
+            sliderMode[0] = "book";
+            styleThemeButton(sliderBookButton, true);
+            styleThemeButton(sliderChapterButton, false);
+            autoApply.run();
+        });
+        sliderChapterButton.setOnClickListener(v -> {
+            sliderMode[0] = "chapter";
+            styleThemeButton(sliderBookButton, false);
+            styleThemeButton(sliderChapterButton, true);
+            autoApply.run();
         });
         showStyledDialog(dialog);
     }
@@ -1732,10 +1879,17 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
                     row.addView(deleteButton, deleteParams);
                     applyButton.setOnClickListener(v -> {
                         try {
+                            int anchorOffset = currentCharOffset();
+                            String previousResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(this);
                             ReaderThemeConfig.apply(settingsStore, new JSONObject(theme.configJson));
                             clearPageCache();
+                            String nextResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(this);
+                            if (!previousResolvedUiMode.equals(nextResolvedUiMode)) {
+                                recreate();
+                                return;
+                            }
                             applyReaderSettings();
-                            openChapter(currentChapterIndex, currentCharOffset(), false, 0);
+                            openChapter(currentChapterIndex, anchorOffset, false, 0);
                         } catch (Exception ignore) {
                             showToast("主题配置损坏");
                         }
@@ -1879,6 +2033,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         if (controlsVisible == visible) {
             if (visible) {
                 scheduleAutoHide();
+                readerRoot.post(this::updateReaderLayoutInsets);
             } else {
                 mainHandler.removeCallbacks(autoHideRunnable);
             }
@@ -1886,13 +2041,15 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             return;
         }
         controlsVisible = visible;
-        animatePanel(hudContainer, !visible, -dp(12));
+        animatePanel(hudTopContainer, !visible, -dp(12));
+        animatePanel(hudBottomContainer, !visible, dp(12));
         animatePanel(menuTopPanel, visible, -dp(18));
         animatePanel(menuInfoPanel, visible, dp(14));
         animatePanel(menuBottomPanel, visible, dp(20));
         updateSystemBarsVisibility(visible);
         if (visible) {
             scheduleAutoHide();
+            readerRoot.post(this::updateReaderLayoutInsets);
         } else {
             mainHandler.removeCallbacks(autoHideRunnable);
         }

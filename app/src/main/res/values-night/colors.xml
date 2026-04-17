@@ -16,8 +16,9 @@
     <color name="glass_fill">#BF1A2431</color>
     <color name="glass_fill_strong">#D41D2735</color>
     <color name="glass_stroke">#33FFFFFF</color>
-    <color name="glass_dark_fill">#D019222F</color>
-    <color name="glass_dark_stroke">#26FFFFFF</color>
+    <color name="glass_dark_fill">#FF1C2634</color>
+    <color name="glass_dark_fill_strong">#FF253140</color>
+    <color name="glass_dark_stroke">#4DFFFFFF</color>
     <color name="reader_paper_bg">#1D1C17</color>
     <color name="reader_paper_text">#F4EDE1</color>
     <color name="reader_forest_bg">#101917</color>

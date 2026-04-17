@@ -9,15 +9,8 @@
         android:id="@+id/reader_background_image"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:alpha="0.34"
         android:scaleType="centerCrop"
         android:visibility="gone" />
-
-    <View
-        android:id="@+id/reader_background_scrim"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@color/overlay_light" />
 
     <FrameLayout
         android:id="@+id/page_stage"
@@ -103,67 +96,131 @@
             android:visibility="gone" />
     </FrameLayout>
 
-    <LinearLayout
-        android:id="@+id/hud_container"
+    <!-- HUD Top -->
+    <FrameLayout
+        android:id="@+id/hud_container_top"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingLeft="14dp"
+        android:clipToPadding="false"
+        android:paddingLeft="12dp"
         android:paddingTop="8dp"
-        android:paddingRight="14dp"
-        android:paddingBottom="4dp">
+        android:paddingRight="12dp">
 
         <TextView
-            android:id="@+id/text_hud_left"
-            android:layout_width="0dp"
+            android:id="@+id/text_hud_top_left"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginRight="8dp"
-            android:layout_weight="1"
+            android:layout_gravity="start|top"
             android:background="@drawable/bg_reader_hud_pill"
             android:ellipsize="end"
             android:maxLines="1"
-            android:paddingLeft="12dp"
-            android:paddingTop="6dp"
-            android:paddingRight="12dp"
-            android:paddingBottom="6dp"
-            android:textColor="@android:color/white"
-            android:textSize="11sp" />
+            android:maxWidth="176dp"
+            android:paddingLeft="10dp"
+            android:paddingTop="3dp"
+            android:paddingRight="10dp"
+            android:paddingBottom="3dp"
+            android:textColor="#F2FFFFFF"
+            android:textSize="10sp"
+            android:visibility="gone" />
 
         <TextView
-            android:id="@+id/text_hud_center"
-            android:layout_width="0dp"
+            android:id="@+id/text_hud_top_center"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginRight="8dp"
-            android:layout_weight="1"
+            android:layout_gravity="center_horizontal|top"
             android:background="@drawable/bg_reader_hud_pill"
             android:ellipsize="end"
-            android:gravity="center"
             android:maxLines="1"
-            android:paddingLeft="12dp"
-            android:paddingTop="6dp"
-            android:paddingRight="12dp"
-            android:paddingBottom="6dp"
-            android:textColor="@android:color/white"
-            android:textSize="11sp" />
+            android:maxWidth="152dp"
+            android:paddingLeft="10dp"
+            android:paddingTop="3dp"
+            android:paddingRight="10dp"
+            android:paddingBottom="3dp"
+            android:textColor="#F2FFFFFF"
+            android:textSize="10sp"
+            android:visibility="gone" />
 
         <TextView
-            android:id="@+id/text_hud_right"
-            android:layout_width="0dp"
+            android:id="@+id/text_hud_top_right"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
+            android:layout_gravity="end|top"
             android:background="@drawable/bg_reader_hud_pill"
             android:ellipsize="end"
-            android:gravity="end"
             android:maxLines="1"
-            android:paddingLeft="12dp"
-            android:paddingTop="6dp"
-            android:paddingRight="12dp"
-            android:paddingBottom="6dp"
-            android:textColor="@android:color/white"
-            android:textSize="11sp" />
-    </LinearLayout>
+            android:maxWidth="176dp"
+            android:paddingLeft="10dp"
+            android:paddingTop="3dp"
+            android:paddingRight="10dp"
+            android:paddingBottom="3dp"
+            android:textColor="#F2FFFFFF"
+            android:textSize="10sp"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <!-- HUD Bottom -->
+    <FrameLayout
+        android:id="@+id/hud_container_bottom"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:clipToPadding="false"
+        android:paddingLeft="12dp"
+        android:paddingRight="12dp"
+        android:paddingBottom="8dp">
+
+        <TextView
+            android:id="@+id/text_hud_bottom_left"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="start|bottom"
+            android:background="@drawable/bg_reader_hud_pill"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:maxWidth="176dp"
+            android:paddingLeft="10dp"
+            android:paddingTop="3dp"
+            android:paddingRight="10dp"
+            android:paddingBottom="3dp"
+            android:textColor="#F2FFFFFF"
+            android:textSize="10sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/text_hud_bottom_center"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal|bottom"
+            android:background="@drawable/bg_reader_hud_pill"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:maxWidth="152dp"
+            android:paddingLeft="10dp"
+            android:paddingTop="3dp"
+            android:paddingRight="10dp"
+            android:paddingBottom="3dp"
+            android:textColor="#F2FFFFFF"
+            android:textSize="10sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/text_hud_bottom_right"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end|bottom"
+            android:background="@drawable/bg_reader_hud_pill"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:maxWidth="176dp"
+            android:paddingLeft="10dp"
+            android:paddingTop="3dp"
+            android:paddingRight="10dp"
+            android:paddingBottom="3dp"
+            android:textColor="#F2FFFFFF"
+            android:textSize="10sp"
+            android:visibility="gone" />
+    </FrameLayout>
 
     <LinearLayout
         android:id="@+id/menu_top_panel"
@@ -218,15 +275,6 @@
                     android:textColor="@android:color/white"
                     android:textSize="16sp"
                     android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/text_chapter_meta"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="3dp"
-                    android:text=""
-                    android:textColor="#BDE8F4FF"
-                    android:textSize="11sp" />
             </LinearLayout>
 
             <TextView
@@ -241,6 +289,131 @@
                 android:textColor="@android:color/white"
                 android:textSize="11sp" />
         </LinearLayout>
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:clipToPadding="false"
+            android:fadeScrollbars="false"
+            android:overScrollMode="never"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/button_search"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_reader_menu_button"
+                    android:fontFamily="sans-serif-medium"
+                    android:minHeight="40dp"
+                    android:minWidth="0dp"
+                    android:paddingLeft="14dp"
+                    android:paddingTop="8dp"
+                    android:paddingRight="14dp"
+                    android:paddingBottom="8dp"
+                    android:text="@string/reader_search"
+                    android:textAllCaps="false"
+                    android:textColor="@android:color/white"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/button_rules"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_reader_menu_button"
+                    android:fontFamily="sans-serif-medium"
+                    android:minHeight="40dp"
+                    android:minWidth="0dp"
+                    android:paddingLeft="14dp"
+                    android:paddingTop="8dp"
+                    android:paddingRight="14dp"
+                    android:paddingBottom="8dp"
+                    android:text="替换"
+                    android:textAllCaps="false"
+                    android:textColor="@android:color/white"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/button_style"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_reader_menu_button"
+                    android:fontFamily="sans-serif-medium"
+                    android:minHeight="40dp"
+                    android:minWidth="0dp"
+                    android:paddingLeft="14dp"
+                    android:paddingTop="8dp"
+                    android:paddingRight="14dp"
+                    android:paddingBottom="8dp"
+                    android:text="@string/reader_style"
+                    android:textAllCaps="false"
+                    android:textColor="@android:color/white"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/button_auto_page"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_reader_menu_button"
+                    android:fontFamily="sans-serif-medium"
+                    android:minHeight="40dp"
+                    android:minWidth="0dp"
+                    android:paddingLeft="14dp"
+                    android:paddingTop="8dp"
+                    android:paddingRight="14dp"
+                    android:paddingBottom="8dp"
+                    android:text="翻页"
+                    android:textAllCaps="false"
+                    android:textColor="@android:color/white"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/button_tts"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_reader_menu_button"
+                    android:fontFamily="sans-serif-medium"
+                    android:minHeight="40dp"
+                    android:minWidth="0dp"
+                    android:paddingLeft="14dp"
+                    android:paddingTop="8dp"
+                    android:paddingRight="14dp"
+                    android:paddingBottom="8dp"
+                    android:text="@string/reader_tts"
+                    android:textAllCaps="false"
+                    android:textColor="@android:color/white"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/button_theme_toggle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_reader_menu_button"
+                    android:fontFamily="sans-serif-medium"
+                    android:minHeight="40dp"
+                    android:minWidth="0dp"
+                    android:paddingLeft="14dp"
+                    android:paddingTop="8dp"
+                    android:paddingRight="14dp"
+                    android:paddingBottom="8dp"
+                    android:text="明暗"
+                    android:textAllCaps="false"
+                    android:textColor="@android:color/white"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </HorizontalScrollView>
 
     </LinearLayout>
 
@@ -263,56 +436,69 @@
         android:visibility="gone">
 
         <Button
-            android:id="@+id/button_search"
-            android:layout_width="0dp"
+            android:id="@+id/button_toc"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:layout_weight="1"
             android:background="@drawable/bg_reader_menu_button"
             android:fontFamily="sans-serif-medium"
             android:minHeight="40dp"
-            android:text="@string/reader_search"
+            android:minWidth="0dp"
+            android:paddingLeft="14dp"
+            android:paddingTop="8dp"
+            android:paddingRight="14dp"
+            android:paddingBottom="8dp"
+            android:text="@string/reader_toc"
             android:textAllCaps="false"
             android:textColor="@android:color/white"
             android:textSize="12sp" />
 
-        <Button
-            android:id="@+id/button_auto_page"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
+            android:layout_marginLeft="10dp"
+            android:layout_marginRight="10dp"
             android:layout_weight="1"
-            android:background="@drawable/bg_reader_menu_button"
-            android:fontFamily="sans-serif-medium"
-            android:minHeight="40dp"
-            android:text="@string/reader_auto_page"
-            android:textAllCaps="false"
-            android:textColor="@android:color/white"
-            android:textSize="12sp" />
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/text_chapter_meta"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:maxLines="1"
+                android:text=""
+                android:textColor="@android:color/white"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/text_page_meta"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:maxLines="1"
+                android:text="进度调节"
+                android:textColor="#F1F7FDFF"
+                android:textSize="11sp" />
+        </LinearLayout>
 
         <Button
-            android:id="@+id/button_rules"
-            android:layout_width="0dp"
+            android:id="@+id/button_reader_options"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:layout_weight="1"
             android:background="@drawable/bg_reader_menu_button"
             android:fontFamily="sans-serif-medium"
             android:minHeight="40dp"
-            android:text="替换"
-            android:textAllCaps="false"
-            android:textColor="@android:color/white"
-            android:textSize="12sp" />
-
-        <Button
-            android:id="@+id/button_theme_toggle"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:background="@drawable/bg_reader_menu_button"
-            android:fontFamily="sans-serif-medium"
-            android:minHeight="40dp"
-            android:text="明暗"
+            android:minWidth="0dp"
+            android:paddingLeft="14dp"
+            android:paddingTop="8dp"
+            android:paddingRight="14dp"
+            android:paddingBottom="8dp"
+            android:text="设置"
             android:textAllCaps="false"
             android:textColor="@android:color/white"
             android:textSize="12sp" />
@@ -332,19 +518,60 @@
         android:padding="14dp"
         android:visibility="gone">
 
-        <TextView
-            android:id="@+id/text_page_meta"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="进度调节"
-            android:textColor="#BDE8F4FF"
-            android:textSize="11sp"
-            android:textStyle="bold" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/button_prev_chapter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="10dp"
+                android:background="@drawable/bg_reader_menu_button"
+                android:fontFamily="sans-serif-medium"
+                android:minHeight="42dp"
+                android:minWidth="0dp"
+                android:paddingLeft="14dp"
+                android:paddingTop="8dp"
+                android:paddingRight="14dp"
+                android:paddingBottom="8dp"
+                android:text="上一章"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                android:textSize="12sp" />
+
+            <SeekBar
+                android:id="@+id/seek_reader_progress"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:max="100" />
+
+            <Button
+                android:id="@+id/button_next_chapter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:background="@drawable/bg_reader_menu_button"
+                android:fontFamily="sans-serif-medium"
+                android:minHeight="42dp"
+                android:minWidth="0dp"
+                android:paddingLeft="14dp"
+                android:paddingTop="8dp"
+                android:paddingRight="14dp"
+                android:paddingBottom="8dp"
+                android:text="下一章"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                android:textSize="12sp" />
+        </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="10dp"
             android:orientation="horizontal">
 
             <Button
@@ -374,113 +601,7 @@
                 android:textColor="@android:color/white"
                 android:textSize="12sp" />
         </LinearLayout>
-
-        <SeekBar
-            android:id="@+id/seek_reader_progress"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:max="100" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:gravity="center"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/button_prev_chapter"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_reader_menu_button"
-                android:fontFamily="sans-serif-medium"
-                android:minHeight="42dp"
-                android:text="上一章"
-                android:textAllCaps="false"
-                android:textColor="@android:color/white"
-                android:textSize="12sp" />
-
-            <Button
-                android:id="@+id/button_next_chapter"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:background="@drawable/bg_reader_menu_button"
-                android:fontFamily="sans-serif-medium"
-                android:minHeight="42dp"
-                android:text="下一章"
-                android:textAllCaps="false"
-                android:textColor="@android:color/white"
-                android:textSize="12sp" />
-
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/button_toc"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_reader_menu_button"
-                android:fontFamily="sans-serif-medium"
-                android:minHeight="40dp"
-                android:text="@string/reader_toc"
-                android:textAllCaps="false"
-                android:textColor="@android:color/white"
-                android:textSize="12sp" />
-
-            <Button
-                android:id="@+id/button_tts"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_reader_menu_button"
-                android:fontFamily="sans-serif-medium"
-                android:minHeight="40dp"
-                android:text="@string/reader_tts"
-                android:textAllCaps="false"
-                android:textColor="@android:color/white"
-                android:textSize="12sp" />
-
-            <Button
-                android:id="@+id/button_style"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_reader_menu_button"
-                android:fontFamily="sans-serif-medium"
-                android:minHeight="40dp"
-                android:text="@string/reader_style"
-                android:textAllCaps="false"
-                android:textColor="@android:color/white"
-                android:textSize="12sp" />
-
-            <Button
-                android:id="@+id/button_reader_options"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:background="@drawable/bg_reader_menu_button"
-                android:fontFamily="sans-serif-medium"
-                android:minHeight="40dp"
-                android:text="选项"
-                android:textAllCaps="false"
-                android:textColor="@android:color/white"
-                android:textSize="12sp" />
-        </LinearLayout>
     </LinearLayout>
 
-    <include layout="@layout/include_app_drawer" />
 
 </FrameLayout>

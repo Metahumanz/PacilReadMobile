@@ -5,193 +5,186 @@
     android:layout_height="match_parent"
     android:background="@drawable/bg_window_backdrop">
 
-    <View
-        android:layout_width="220dp"
-        android:layout_height="220dp"
-        android:layout_gravity="top|end"
-        android:layout_marginTop="-76dp"
-        android:layout_marginEnd="-52dp"
-        android:alpha="0.54"
-        android:background="@drawable/bg_fluent_orb_blue" />
-
-    <View
-        android:layout_width="180dp"
-        android:layout_height="180dp"
-        android:layout_gravity="bottom|start"
-        android:layout_marginStart="-70dp"
-        android:layout_marginBottom="-52dp"
-        android:alpha="0.38"
-        android:background="@drawable/bg_fluent_orb_gold" />
-
     <LinearLayout
         android:id="@+id/content_shell"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:paddingStart="16dp"
-        android:paddingTop="16dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="12dp">
+        android:orientation="vertical">
 
+        <!-- ========== Compact Top Bar ========== -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_card"
-            android:elevation="8dp"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:padding="14dp">
+            android:paddingStart="8dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="4dp">
 
             <Button
                 android:id="@+id/button_open_drawer"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_outline_button"
-                android:fontFamily="sans-serif-medium"
-                android:minHeight="42dp"
-                android:minWidth="0dp"
-                android:paddingStart="14dp"
-                android:paddingTop="9dp"
-                android:paddingEnd="14dp"
-                android:paddingBottom="9dp"
-                android:text="菜单"
-                android:textAllCaps="false"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:text="☰"
                 android:textColor="@color/on_surface"
-                android:textSize="13sp" />
+                android:textSize="17sp" />
 
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/text_section_title"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="书架"
-                    android:textColor="@color/on_surface"
-                    android:textSize="23sp" />
-
-                <TextView
-                    android:id="@+id/text_section_subtitle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="管理本地书籍"
-                    android:textColor="@color/on_surface_muted"
-                    android:textSize="12sp" />
-            </LinearLayout>
-
-            <Button
-                android:id="@+id/button_header_action"
+            <TextView
+                android:id="@+id/text_section_title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_primary_button"
+                android:layout_marginStart="8dp"
                 android:fontFamily="sans-serif-medium"
-                android:minHeight="42dp"
-                android:minWidth="0dp"
-                android:paddingStart="18dp"
-                android:paddingTop="9dp"
-                android:paddingEnd="18dp"
-                android:paddingBottom="9dp"
-                android:text="导入"
-                android:textAllCaps="false"
-                android:textColor="@android:color/white"
-                android:textSize="13sp" />
+                android:text="书架大厅"
+                android:textColor="@color/on_surface_muted"
+                android:textSize="15sp"
+                android:visibility="gone" />
         </LinearLayout>
 
+        <!-- ========== Content Area ========== -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_marginTop="14dp"
             android:layout_weight="1">
 
+            <!-- ===== Section: Bookshelf ===== -->
             <LinearLayout
                 android:id="@+id/section_bookshelf"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:orientation="vertical">
+                android:orientation="vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="8dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="@drawable/bg_card"
-                    android:elevation="4dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
-                    android:paddingStart="8dp"
-                    android:paddingTop="6dp"
-                    android:paddingEnd="8dp"
-                    android:paddingBottom="6dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:background="@drawable/bg_soft_button"
-                        android:fontFamily="sans-serif-medium"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp"
-                        android:text="搜索"
-                        android:textColor="@color/on_surface"
-                        android:textSize="12sp" />
-
-                    <EditText
-                        android:id="@+id/input_search"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:layout_weight="1"
-                        android:background="@android:color/transparent"
-                        android:hint="@string/bookshelf_search_hint"
-                        android:imeOptions="actionDone"
-                        android:paddingStart="4dp"
-                        android:paddingTop="10dp"
-                        android:paddingEnd="4dp"
-                        android:paddingBottom="10dp"
-                        android:singleLine="true"
-                        android:textColor="@color/on_surface"
-                        android:textColorHint="@color/on_surface_muted"
-                        android:textSize="14sp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:id="@+id/text_stats"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_soft_button"
-                        android:paddingStart="14dp"
-                        android:paddingTop="11dp"
-                        android:paddingEnd="14dp"
-                        android:paddingBottom="11dp"
-                        android:textColor="@color/on_surface_muted"
-                        android:textSize="12sp" />
+                    android:paddingTop="6dp">
 
                     <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="10dp"
-                        android:background="@drawable/bg_card"
-                        android:elevation="2dp"
-                        android:orientation="horizontal"
-                        android:padding="4dp">
+                        android:orientation="vertical">
 
-                        <Button
-                            android:id="@+id/button_mode_card"
+                        <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="我的书架"
+                            android:textColor="@color/on_surface"
+                            android:textSize="22sp" />
+
+                        <TextView
+                            android:id="@+id/text_stats"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:textColor="@color/on_surface_muted"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="14dp"
+                        android:layout_weight="1"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_card"
+                            android:elevation="4dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingStart="10dp"
+                            android:paddingTop="4dp"
+                            android:paddingEnd="10dp"
+                            android:paddingBottom="4dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:alpha="0.55"
+                                android:text="🔍"
+                                android:textSize="14sp" />
+
+                            <EditText
+                                android:id="@+id/input_search"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:layout_weight="1"
+                                android:background="@android:color/transparent"
+                                android:hint="搜索书名或作者..."
+                                android:imeOptions="actionDone"
+                                android:paddingStart="0dp"
+                                android:paddingTop="10dp"
+                                android:paddingEnd="2dp"
+                                android:paddingBottom="10dp"
+                                android:singleLine="true"
+                                android:textColor="@color/on_surface"
+                                android:textColorHint="@color/on_surface_muted"
+                                android:textSize="14sp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="10dp"
+                            android:background="@drawable/bg_card"
+                            android:elevation="2dp"
+                            android:orientation="horizontal"
+                            android:padding="3dp">
+
+                            <Button
+                                android:id="@+id/button_mode_card"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/bg_primary_button"
+                                android:fontFamily="sans-serif-medium"
+                                android:minHeight="34dp"
+                                android:minWidth="0dp"
+                                android:paddingStart="10dp"
+                                android:paddingTop="6dp"
+                                android:paddingEnd="10dp"
+                                android:paddingBottom="6dp"
+                                android:text="▦"
+                                android:textAllCaps="false"
+                                android:textColor="@android:color/white"
+                                android:textSize="13sp" />
+
+                            <Button
+                                android:id="@+id/button_mode_list"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="4dp"
+                                android:background="@drawable/bg_outline_button"
+                                android:fontFamily="sans-serif-medium"
+                                android:minHeight="34dp"
+                                android:minWidth="0dp"
+                                android:paddingStart="10dp"
+                                android:paddingTop="6dp"
+                                android:paddingEnd="10dp"
+                                android:paddingBottom="6dp"
+                                android:text="☰"
+                                android:textAllCaps="false"
+                                android:textColor="@color/on_surface"
+                                android:textSize="13sp" />
+                        </LinearLayout>
+
+                        <Button
+                            android:id="@+id/button_header_action"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="10dp"
                             android:background="@drawable/bg_primary_button"
                             android:fontFamily="sans-serif-medium"
                             android:minHeight="38dp"
@@ -200,31 +193,14 @@
                             android:paddingTop="8dp"
                             android:paddingEnd="14dp"
                             android:paddingBottom="8dp"
-                            android:text="卡片"
+                            android:text="+ 添加"
                             android:textAllCaps="false"
                             android:textColor="@android:color/white"
-                            android:textSize="12sp" />
-
-                        <Button
-                            android:id="@+id/button_mode_list"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="6dp"
-                            android:background="@drawable/bg_outline_button"
-                            android:fontFamily="sans-serif-medium"
-                            android:minHeight="38dp"
-                            android:minWidth="0dp"
-                            android:paddingStart="14dp"
-                            android:paddingTop="8dp"
-                            android:paddingEnd="14dp"
-                            android:paddingBottom="8dp"
-                            android:text="列表"
-                            android:textAllCaps="false"
-                            android:textColor="@color/on_surface"
-                            android:textSize="12sp" />
+                            android:textSize="13sp" />
                     </LinearLayout>
                 </LinearLayout>
 
+                <!-- Book grid / list / empty -->
                 <FrameLayout
                     android:layout_width="match_parent"
                     android:layout_height="0dp"
@@ -333,6 +309,7 @@
                 </FrameLayout>
             </LinearLayout>
 
+            <!-- ===== Section: Preview (typography) ===== -->
             <ScrollView
                 android:id="@+id/section_preview"
                 android:layout_width="match_parent"
@@ -340,6 +317,8 @@
                 android:clipToPadding="false"
                 android:fillViewport="true"
                 android:overScrollMode="never"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
                 android:paddingBottom="8dp"
                 android:visibility="gone">
 
@@ -351,6 +330,32 @@
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingTop="6dp"
+                        android:paddingBottom="4dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="排版与预览"
+                            android:textColor="@color/on_surface"
+                            android:textSize="22sp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:text="全局控制阅读引擎的文字排版、视觉主题与页面布局。"
+                            android:textColor="@color/on_surface_muted"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+
+                    <!-- Theme summary -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
                         android:background="@drawable/bg_card"
                         android:elevation="4dp"
                         android:orientation="vertical"
@@ -360,7 +365,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:fontFamily="sans-serif-medium"
-                            android:text="阅读界面预览"
+                            android:text="阅读引擎实时效果映射"
                             android:textColor="@color/on_surface"
                             android:textSize="18sp" />
 
@@ -375,357 +380,11 @@
                             android:textSize="13sp" />
                     </LinearLayout>
 
+                    <!-- Reader preview (flat, no phone shell) -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="14dp"
-                        android:background="@drawable/bg_card"
-                        android:elevation="4dp"
-                        android:orientation="vertical"
-                        android:padding="18dp"
-                        android:visibility="gone">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="sans-serif-medium"
-                            android:text="书架预览"
-                            android:textColor="@color/on_surface"
-                            android:textSize="18sp" />
-
-                        <TextView
-                            android:id="@+id/text_preview_bookshelf_mode"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:background="@drawable/bg_soft_button"
-                            android:paddingStart="12dp"
-                            android:paddingTop="7dp"
-                            android:paddingEnd="12dp"
-                            android:paddingBottom="7dp"
-                            android:textColor="@color/on_surface"
-                            android:textSize="12sp" />
-
-                        <FrameLayout
-                            android:layout_width="258dp"
-                            android:layout_height="510dp"
-                            android:layout_gravity="center_horizontal"
-                            android:layout_marginTop="18dp"
-                            android:background="@drawable/bg_preview_phone_shell"
-                            android:padding="10dp">
-
-                            <LinearLayout
-                                android:id="@+id/layout_preview_app_screen"
-                                android:layout_width="match_parent"
-                                android:layout_height="match_parent"
-                                android:background="@drawable/bg_preview_phone_screen"
-                                android:orientation="vertical"
-                                android:padding="14dp">
-
-                                <LinearLayout
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    android:gravity="center_vertical"
-                                    android:orientation="horizontal">
-
-                                    <TextView
-                                        android:layout_width="0dp"
-                                        android:layout_height="wrap_content"
-                                        android:layout_weight="1"
-                                        android:text="PacilRead"
-                                        android:textColor="@color/on_surface"
-                                        android:textSize="16sp"
-                                        android:textStyle="bold" />
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:background="@drawable/bg_soft_button"
-                                        android:paddingStart="10dp"
-                                        android:paddingTop="6dp"
-                                        android:paddingEnd="10dp"
-                                        android:paddingBottom="6dp"
-                                        android:text="预览"
-                                        android:textColor="@color/on_surface_muted"
-                                        android:textSize="10sp" />
-                                </LinearLayout>
-
-                                <LinearLayout
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="14dp"
-                                    android:background="@drawable/bg_card"
-                                    android:elevation="2dp"
-                                    android:gravity="center_vertical"
-                                    android:orientation="horizontal"
-                                    android:paddingStart="10dp"
-                                    android:paddingTop="8dp"
-                                    android:paddingEnd="10dp"
-                                    android:paddingBottom="8dp">
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:background="@drawable/bg_outline_button"
-                                        android:paddingStart="10dp"
-                                        android:paddingTop="7dp"
-                                        android:paddingEnd="10dp"
-                                        android:paddingBottom="7dp"
-                                        android:text="菜单"
-                                        android:textColor="@color/on_surface"
-                                        android:textSize="10sp" />
-
-                                    <LinearLayout
-                                        android:layout_width="0dp"
-                                        android:layout_height="wrap_content"
-                                        android:layout_marginStart="10dp"
-                                        android:layout_weight="1"
-                                        android:orientation="vertical">
-
-                                        <TextView
-                                            android:layout_width="wrap_content"
-                                            android:layout_height="wrap_content"
-                                            android:text="书架"
-                                            android:textColor="@color/on_surface"
-                                            android:textSize="15sp"
-                                            android:textStyle="bold" />
-
-                                        <TextView
-                                            android:layout_width="wrap_content"
-                                            android:layout_height="wrap_content"
-                                            android:layout_marginTop="2dp"
-                                            android:text="管理本地书籍"
-                                            android:textColor="@color/on_surface_muted"
-                                            android:textSize="10sp" />
-                                    </LinearLayout>
-
-                                    <TextView
-                                        android:id="@+id/text_preview_shelf_action"
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:background="@drawable/bg_primary_button"
-                                        android:paddingStart="12dp"
-                                        android:paddingTop="7dp"
-                                        android:paddingEnd="12dp"
-                                        android:paddingBottom="7dp"
-                                        android:text="导入"
-                                        android:textColor="@android:color/white"
-                                        android:textSize="10sp" />
-                                </LinearLayout>
-
-                                <TextView
-                                    android:id="@+id/text_preview_search_label"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="12dp"
-                                    android:background="@drawable/bg_card"
-                                    android:elevation="1dp"
-                                    android:paddingStart="14dp"
-                                    android:paddingTop="12dp"
-                                    android:paddingEnd="14dp"
-                                    android:paddingBottom="12dp"
-                                    android:text="搜索书名或作者"
-                                    android:textColor="@color/on_surface_muted"
-                                    android:textSize="11sp" />
-
-                                <TextView
-                                    android:id="@+id/text_preview_shelf_stats"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="10dp"
-                                    android:background="@drawable/bg_soft_button"
-                                    android:paddingStart="12dp"
-                                    android:paddingTop="9dp"
-                                    android:paddingEnd="12dp"
-                                    android:paddingBottom="9dp"
-                                    android:textColor="@color/on_surface_muted"
-                                    android:textSize="10sp" />
-
-                                <LinearLayout
-                                    android:id="@+id/layout_preview_books_card"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="12dp"
-                                    android:orientation="horizontal">
-
-                                    <LinearLayout
-                                        android:layout_width="0dp"
-                                        android:layout_height="wrap_content"
-                                        android:layout_marginEnd="8dp"
-                                        android:layout_weight="1"
-                                        android:background="@drawable/bg_card"
-                                        android:elevation="2dp"
-                                        android:orientation="vertical"
-                                        android:padding="10dp">
-
-                                        <TextView
-                                            android:id="@+id/text_preview_card_initial_1"
-                                            android:layout_width="match_parent"
-                                            android:layout_height="96dp"
-                                            android:background="@drawable/bg_book_cover"
-                                            android:gravity="center"
-                                            android:text="凡"
-                                            android:textColor="@android:color/white"
-                                            android:textSize="24sp"
-                                            android:textStyle="bold" />
-
-                                        <TextView
-                                            android:id="@+id/text_preview_card_title_1"
-                                            android:layout_width="match_parent"
-                                            android:layout_height="wrap_content"
-                                            android:layout_marginTop="10dp"
-                                            android:ellipsize="end"
-                                            android:maxLines="2"
-                                            android:textColor="@color/on_surface"
-                                            android:textSize="11sp"
-                                            android:textStyle="bold" />
-                                    </LinearLayout>
-
-                                    <LinearLayout
-                                        android:layout_width="0dp"
-                                        android:layout_height="wrap_content"
-                                        android:layout_weight="1"
-                                        android:background="@drawable/bg_card"
-                                        android:elevation="2dp"
-                                        android:orientation="vertical"
-                                        android:padding="10dp">
-
-                                        <TextView
-                                            android:id="@+id/text_preview_card_initial_2"
-                                            android:layout_width="match_parent"
-                                            android:layout_height="96dp"
-                                            android:background="@drawable/bg_book_cover"
-                                            android:gravity="center"
-                                            android:text="修"
-                                            android:textColor="@android:color/white"
-                                            android:textSize="24sp"
-                                            android:textStyle="bold" />
-
-                                        <TextView
-                                            android:id="@+id/text_preview_card_title_2"
-                                            android:layout_width="match_parent"
-                                            android:layout_height="wrap_content"
-                                            android:layout_marginTop="10dp"
-                                            android:ellipsize="end"
-                                            android:maxLines="2"
-                                            android:textColor="@color/on_surface"
-                                            android:textSize="11sp"
-                                            android:textStyle="bold" />
-                                    </LinearLayout>
-                                </LinearLayout>
-
-                                <LinearLayout
-                                    android:id="@+id/layout_preview_books_list"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="12dp"
-                                    android:orientation="vertical"
-                                    android:visibility="gone">
-
-                                    <LinearLayout
-                                        android:layout_width="match_parent"
-                                        android:layout_height="wrap_content"
-                                        android:background="@drawable/bg_card"
-                                        android:elevation="2dp"
-                                        android:gravity="center_vertical"
-                                        android:orientation="horizontal"
-                                        android:padding="10dp">
-
-                                        <TextView
-                                            android:layout_width="32dp"
-                                            android:layout_height="44dp"
-                                            android:background="@drawable/bg_book_cover"
-                                            android:gravity="center"
-                                            android:text="书"
-                                            android:textColor="@android:color/white"
-                                            android:textSize="15sp" />
-
-                                        <TextView
-                                            android:id="@+id/text_preview_list_title_1"
-                                            android:layout_width="0dp"
-                                            android:layout_height="wrap_content"
-                                            android:layout_marginStart="10dp"
-                                            android:layout_weight="1"
-                                            android:ellipsize="end"
-                                            android:maxLines="1"
-                                            android:textColor="@color/on_surface"
-                                            android:textSize="11sp"
-                                            android:textStyle="bold" />
-                                    </LinearLayout>
-
-                                    <LinearLayout
-                                        android:layout_width="match_parent"
-                                        android:layout_height="wrap_content"
-                                        android:layout_marginTop="8dp"
-                                        android:background="@drawable/bg_card"
-                                        android:elevation="2dp"
-                                        android:gravity="center_vertical"
-                                        android:orientation="horizontal"
-                                        android:padding="10dp">
-
-                                        <TextView
-                                            android:layout_width="32dp"
-                                            android:layout_height="44dp"
-                                            android:background="@drawable/bg_book_cover"
-                                            android:gravity="center"
-                                            android:text="读"
-                                            android:textColor="@android:color/white"
-                                            android:textSize="15sp" />
-
-                                        <TextView
-                                            android:id="@+id/text_preview_list_title_2"
-                                            android:layout_width="0dp"
-                                            android:layout_height="wrap_content"
-                                            android:layout_marginStart="10dp"
-                                            android:layout_weight="1"
-                                            android:ellipsize="end"
-                                            android:maxLines="1"
-                                            android:textColor="@color/on_surface"
-                                            android:textSize="11sp"
-                                            android:textStyle="bold" />
-                                    </LinearLayout>
-
-                                    <LinearLayout
-                                        android:layout_width="match_parent"
-                                        android:layout_height="wrap_content"
-                                        android:layout_marginTop="8dp"
-                                        android:background="@drawable/bg_card"
-                                        android:elevation="2dp"
-                                        android:gravity="center_vertical"
-                                        android:orientation="horizontal"
-                                        android:padding="10dp">
-
-                                        <TextView
-                                            android:layout_width="32dp"
-                                            android:layout_height="44dp"
-                                            android:background="@drawable/bg_book_cover"
-                                            android:gravity="center"
-                                            android:text="+"
-                                            android:textColor="@android:color/white"
-                                            android:textSize="17sp" />
-
-                                        <TextView
-                                            android:id="@+id/text_preview_list_title_3"
-                                            android:layout_width="0dp"
-                                            android:layout_height="wrap_content"
-                                            android:layout_marginStart="10dp"
-                                            android:layout_weight="1"
-                                            android:ellipsize="end"
-                                            android:maxLines="1"
-                                            android:textColor="@color/on_surface"
-                                            android:textSize="11sp"
-                                            android:textStyle="bold" />
-                                    </LinearLayout>
-                                </LinearLayout>
-                            </LinearLayout>
-                        </FrameLayout>
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:layout_marginBottom="8dp"
                         android:background="@drawable/bg_card"
                         android:elevation="4dp"
                         android:orientation="vertical"
@@ -739,310 +398,118 @@
                             android:textColor="@color/on_surface"
                             android:textSize="18sp" />
 
+                        <!-- Flat reader preview area -->
                         <FrameLayout
-                            android:layout_width="258dp"
-                            android:layout_height="520dp"
-                            android:layout_gravity="center_horizontal"
-                            android:layout_marginTop="18dp"
-                            android:background="@drawable/bg_preview_phone_shell"
-                            android:padding="10dp">
+                            android:layout_width="match_parent"
+                            android:layout_height="360dp"
+                            android:layout_marginTop="14dp"
+                            android:background="@drawable/bg_reader_stage">
 
-                            <FrameLayout
-                                android:id="@+id/layout_preview_reader_screen"
+                            <ImageView
+                                android:id="@+id/image_preview_reader_background"
                                 android:layout_width="match_parent"
                                 android:layout_height="match_parent"
-                                android:background="@drawable/bg_preview_phone_screen">
+                                android:scaleType="centerCrop" />
 
-                                <ImageView
-                                    android:id="@+id/image_preview_reader_background"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="match_parent"
-                                    android:scaleType="centerCrop" />
+                            <View
+                                android:id="@+id/view_preview_reader_scrim"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:background="@color/overlay_light" />
 
-                                <View
-                                    android:id="@+id/view_preview_reader_scrim"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="match_parent"
-                                    android:background="@color/overlay_light" />
+                            <!-- Reader text area -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:orientation="vertical"
+                                android:padding="18dp">
 
-                                <LinearLayout
-                                    android:id="@+id/layout_preview_reader_top"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginStart="10dp"
-                                    android:layout_marginTop="10dp"
-                                    android:layout_marginEnd="10dp"
-                                    android:background="@drawable/bg_menu_panel"
-                                    android:elevation="8dp"
-                                    android:orientation="vertical"
-                                    android:padding="12dp">
-
-                                    <LinearLayout
-                                        android:layout_width="match_parent"
-                                        android:layout_height="wrap_content"
-                                        android:gravity="center_vertical"
-                                        android:orientation="horizontal">
-
-                                        <TextView
-                                            android:id="@+id/text_preview_reader_back"
-                                            android:layout_width="wrap_content"
-                                            android:layout_height="wrap_content"
-                                            android:background="@drawable/bg_outline_button_light"
-                                            android:paddingStart="11dp"
-                                            android:paddingTop="7dp"
-                                            android:paddingEnd="11dp"
-                                            android:paddingBottom="7dp"
-                                            android:text="返回"
-                                            android:textColor="@android:color/white"
-                                            android:textSize="10sp" />
-
-                                        <LinearLayout
-                                            android:layout_width="0dp"
-                                            android:layout_height="wrap_content"
-                                            android:layout_marginStart="10dp"
-                                            android:layout_weight="1"
-                                            android:orientation="vertical">
-
-                                            <TextView
-                                                android:id="@+id/text_preview_reader_title"
-                                                android:layout_width="wrap_content"
-                                                android:layout_height="wrap_content"
-                                                android:ellipsize="end"
-                                                android:maxLines="1"
-                                                android:textColor="@android:color/white"
-                                                android:textSize="14sp"
-                                                android:textStyle="bold" />
-
-                                            <TextView
-                                                android:id="@+id/text_preview_reader_subtitle"
-                                                android:layout_width="wrap_content"
-                                                android:layout_height="wrap_content"
-                                                android:layout_marginTop="2dp"
-                                                android:textColor="#C9E6F3FF"
-                                                android:textSize="10sp" />
-                                        </LinearLayout>
-
-                                        <TextView
-                                            android:id="@+id/text_preview_reader_progress"
-                                            android:layout_width="wrap_content"
-                                            android:layout_height="wrap_content"
-                                            android:background="@drawable/bg_reader_hud_pill"
-                                            android:paddingStart="10dp"
-                                            android:paddingTop="6dp"
-                                            android:paddingEnd="10dp"
-                                            android:paddingBottom="6dp"
-                                            android:textColor="@android:color/white"
-                                            android:textSize="10sp" />
-                                    </LinearLayout>
-
-                                    <LinearLayout
-                                        android:layout_width="match_parent"
-                                        android:layout_height="wrap_content"
-                                        android:layout_marginTop="10dp"
-                                        android:orientation="horizontal">
-
-                                        <TextView
-                                            android:id="@+id/text_preview_reader_chip_1"
-                                            android:layout_width="0dp"
-                                            android:layout_height="wrap_content"
-                                            android:layout_marginEnd="6dp"
-                                            android:layout_weight="1"
-                                            android:background="@drawable/bg_outline_button_light"
-                                            android:gravity="center"
-                                            android:paddingTop="7dp"
-                                            android:paddingBottom="7dp"
-                                            android:text="搜索"
-                                            android:textColor="@android:color/white"
-                                            android:textSize="10sp" />
-
-                                        <TextView
-                                            android:id="@+id/text_preview_reader_chip_2"
-                                            android:layout_width="0dp"
-                                            android:layout_height="wrap_content"
-                                            android:layout_marginEnd="6dp"
-                                            android:layout_weight="1"
-                                            android:background="@drawable/bg_outline_button_light"
-                                            android:gravity="center"
-                                            android:paddingTop="7dp"
-                                            android:paddingBottom="7dp"
-                                            android:text="样式"
-                                            android:textColor="@android:color/white"
-                                            android:textSize="10sp" />
-
-                                        <TextView
-                                            android:id="@+id/text_preview_reader_chip_3"
-                                            android:layout_width="0dp"
-                                            android:layout_height="wrap_content"
-                                            android:layout_weight="1"
-                                            android:background="@drawable/bg_outline_button_light"
-                                            android:gravity="center"
-                                            android:paddingTop="7dp"
-                                            android:paddingBottom="7dp"
-                                            android:text="自动"
-                                            android:textColor="@android:color/white"
-                                            android:textSize="10sp" />
-                                    </LinearLayout>
-                                </LinearLayout>
-
-                                <LinearLayout
-                                    android:layout_width="match_parent"
-                                    android:layout_height="match_parent"
-                                    android:orientation="vertical"
-                                    android:paddingStart="18dp"
-                                    android:paddingTop="124dp"
-                                    android:paddingEnd="18dp"
-                                    android:paddingBottom="118dp">
-
-                                    <TextView
-                                        android:id="@+id/text_preview_reader_heading"
-                                        android:layout_width="match_parent"
-                                        android:layout_height="wrap_content"
-                                        android:text="前言"
-                                        android:textColor="@color/on_surface"
-                                        android:textSize="18sp"
-                                        android:textStyle="bold" />
-
-                                    <TextView
-                                        android:id="@+id/text_preview_reader_body"
-                                        android:layout_width="match_parent"
-                                        android:layout_height="0dp"
-                                        android:layout_marginTop="14dp"
-                                        android:layout_weight="1"
-                                        android:lineSpacingExtra="5sp"
-                                        android:textColor="@color/on_surface"
-                                        android:textSize="14sp" />
-                                </LinearLayout>
-
-                                <LinearLayout
-                                    android:id="@+id/layout_preview_reader_bottom"
+                                <TextView
+                                    android:id="@+id/text_preview_reader_heading"
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
-                                    android:layout_gravity="bottom"
-                                    android:layout_marginStart="10dp"
-                                    android:layout_marginEnd="10dp"
-                                    android:layout_marginBottom="12dp"
-                                    android:background="@drawable/bg_menu_panel"
-                                    android:elevation="8dp"
-                                    android:orientation="vertical"
-                                    android:padding="12dp">
+                                    android:text="前言"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="18sp"
+                                    android:textStyle="bold" />
 
-                                    <LinearLayout
-                                        android:layout_width="match_parent"
-                                        android:layout_height="wrap_content"
-                                        android:gravity="center_vertical"
-                                        android:orientation="horizontal">
-
-                                        <TextView
-                                            android:id="@+id/text_preview_reader_hud_left"
-                                            android:layout_width="wrap_content"
-                                            android:layout_height="wrap_content"
-                                            android:background="@drawable/bg_reader_hud_pill"
-                                            android:paddingStart="11dp"
-                                            android:paddingTop="7dp"
-                                            android:paddingEnd="11dp"
-                                            android:paddingBottom="7dp"
-                                            android:text="目录"
-                                            android:textColor="@android:color/white"
-                                            android:textSize="10sp" />
-
-                                        <TextView
-                                            android:id="@+id/text_preview_reader_hud_center"
-                                            android:layout_width="0dp"
-                                            android:layout_height="wrap_content"
-                                            android:layout_marginStart="8dp"
-                                            android:layout_marginEnd="8dp"
-                                            android:layout_weight="1"
-                                            android:background="@drawable/bg_reader_hud_pill"
-                                            android:gravity="center"
-                                            android:paddingTop="7dp"
-                                            android:paddingBottom="7dp"
-                                            android:textColor="@android:color/white"
-                                            android:textSize="10sp" />
-
-                                        <TextView
-                                            android:id="@+id/text_preview_reader_hud_right"
-                                            android:layout_width="wrap_content"
-                                            android:layout_height="wrap_content"
-                                            android:background="@drawable/bg_reader_hud_pill"
-                                            android:paddingStart="11dp"
-                                            android:paddingTop="7dp"
-                                            android:paddingEnd="11dp"
-                                            android:paddingBottom="7dp"
-                                            android:text="选项"
-                                            android:textColor="@android:color/white"
-                                            android:textSize="10sp" />
-                                    </LinearLayout>
-
-                                    <LinearLayout
-                                        android:layout_width="match_parent"
-                                        android:layout_height="wrap_content"
-                                        android:layout_marginTop="10dp"
-                                        android:orientation="horizontal">
-
-                                        <TextView
-                                            android:layout_width="0dp"
-                                            android:layout_height="wrap_content"
-                                            android:layout_marginEnd="6dp"
-                                            android:layout_weight="1"
-                                            android:background="@drawable/bg_outline_button_light"
-                                            android:gravity="center"
-                                            android:paddingTop="8dp"
-                                            android:paddingBottom="8dp"
-                                            android:text="上一章"
-                                            android:textColor="@android:color/white"
-                                            android:textSize="10sp" />
-
-                                        <TextView
-                                            android:layout_width="0dp"
-                                            android:layout_height="wrap_content"
-                                            android:layout_weight="1"
-                                            android:background="@drawable/bg_outline_button_light"
-                                            android:gravity="center"
-                                            android:paddingTop="8dp"
-                                            android:paddingBottom="8dp"
-                                            android:text="下一章"
-                                            android:textColor="@android:color/white"
-                                            android:textSize="10sp" />
-                                    </LinearLayout>
-                                </LinearLayout>
-                            </FrameLayout>
+                                <TextView
+                                    android:id="@+id/text_preview_reader_body"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="0dp"
+                                    android:layout_marginTop="14dp"
+                                    android:layout_weight="1"
+                                    android:lineSpacingExtra="5sp"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="14sp" />
+                            </LinearLayout>
                         </FrameLayout>
 
                         <Button
                             android:id="@+id/button_preview_open_settings"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="18dp"
+                            android:layout_marginTop="14dp"
                             android:background="@drawable/bg_outline_button"
                             android:fontFamily="sans-serif-medium"
-                            android:minHeight="46dp"
-                            android:text="进入设置"
+                            android:minHeight="44dp"
+                            android:text="进入设置调排版"
                             android:textAllCaps="false"
                             android:textColor="@color/on_surface" />
                     </LinearLayout>
                 </LinearLayout>
             </ScrollView>
 
+            <!-- ===== Section: Settings (embedded) ===== -->
             <ScrollView
-                android:id="@+id/section_settings_overview"
+                android:id="@+id/section_settings"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:clipToPadding="false"
                 android:fillViewport="true"
                 android:overScrollMode="never"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="8dp"
                 android:visibility="gone">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:paddingBottom="8dp">
+                    android:paddingBottom="18dp">
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingTop="6dp"
+                        android:paddingBottom="4dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="偏好设置"
+                            android:textColor="@color/on_surface"
+                            android:textSize="22sp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:text="定制 PacilRead 的各项核心行为与界面特质"
+                            android:textColor="@color/on_surface_muted"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+
+                    <!-- Theme card -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
                         android:background="@drawable/bg_card"
-                        android:elevation="4dp"
+                        android:elevation="6dp"
                         android:orientation="vertical"
                         android:padding="18dp">
 
@@ -1050,37 +517,85 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:fontFamily="sans-serif-medium"
-                            android:text="完整设置"
+                            android:text="界面主题"
                             android:textColor="@color/on_surface"
                             android:textSize="18sp" />
 
                         <TextView
-                            android:layout_width="match_parent"
+                            android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:text="主题、同步、听书和备份都在这里继续细调。"
+                            android:layout_marginTop="6dp"
+                            android:text="应用与阅读界面可以分开控制明暗。"
                             android:textColor="@color/on_surface_muted"
                             android:textSize="12sp" />
 
-                        <Button
-                            android:id="@+id/button_overview_open_settings"
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp"
+                            android:text="应用主题"
+                            android:textColor="@color/on_surface"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <Spinner
+                            android:id="@+id/spinner_app_theme_mode"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:background="@drawable/bg_input"
+                            android:paddingStart="10dp"
+                            android:paddingEnd="10dp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
                             android:layout_marginTop="14dp"
-                            android:background="@drawable/bg_primary_button"
-                            android:fontFamily="sans-serif-medium"
-                            android:minHeight="48dp"
-                            android:text="打开完整设置"
-                            android:textAllCaps="false"
-                            android:textColor="@android:color/white" />
+                            android:text="阅读界面"
+                            android:textColor="@color/on_surface"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <Spinner
+                            android:id="@+id/spinner_reader_ui_theme_mode"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:background="@drawable/bg_input"
+                            android:paddingStart="10dp"
+                            android:paddingEnd="10dp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="14dp"
+                            android:text="阅读菜单不透明度"
+                            android:textColor="@color/on_surface"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <SeekBar
+                            android:id="@+id/seek_glass_opacity"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:max="80" />
+
+                        <TextView
+                            android:id="@+id/text_glass_opacity"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/on_surface_muted"
+                            android:textSize="12sp" />
                     </LinearLayout>
 
+                    <!-- Reading habits -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="14dp"
                         android:background="@drawable/bg_card"
-                        android:elevation="4dp"
+                        android:elevation="6dp"
                         android:orientation="vertical"
                         android:padding="18dp">
 
@@ -1088,39 +603,268 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:fontFamily="sans-serif-medium"
-                            android:text="当前状态"
+                            android:text="阅读习惯"
+                            android:textColor="@color/on_surface"
+                            android:textSize="18sp" />
+
+                        <CheckBox
+                            android:id="@+id/check_auto_open"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:buttonTint="@color/primary"
+                            android:text="启动时自动回到最近阅读"
+                            android:textColor="@color/on_surface"
+                            android:textSize="14sp" />
+                    </LinearLayout>
+
+                    <!-- WebDAV -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:background="@drawable/bg_card"
+                        android:elevation="6dp"
+                        android:orientation="vertical"
+                        android:padding="18dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="WebDAV 云同步"
+                            android:textColor="@color/on_surface"
+                            android:textSize="18sp" />
+
+                        <CheckBox
+                            android:id="@+id/check_webdav_enabled"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:buttonTint="@color/primary"
+                            android:text="启用 WebDAV 进度同步"
+                            android:textColor="@color/on_surface"
+                            android:textSize="14sp" />
+
+                        <EditText
+                            android:id="@+id/input_webdav_url"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="14dp"
+                            android:background="@drawable/bg_input"
+                            android:hint="服务器地址"
+                            android:padding="14dp"
+                            android:textColor="@color/on_surface"
+                            android:textColorHint="@color/on_surface_muted"
+                            android:textSize="14sp" />
+
+                        <EditText
+                            android:id="@+id/input_webdav_dir"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:background="@drawable/bg_input"
+                            android:hint="子目录"
+                            android:padding="14dp"
+                            android:textColor="@color/on_surface"
+                            android:textColorHint="@color/on_surface_muted"
+                            android:textSize="14sp" />
+
+                        <EditText
+                            android:id="@+id/input_webdav_user"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:background="@drawable/bg_input"
+                            android:hint="用户名"
+                            android:padding="14dp"
+                            android:textColor="@color/on_surface"
+                            android:textColorHint="@color/on_surface_muted"
+                            android:textSize="14sp" />
+
+                        <EditText
+                            android:id="@+id/input_webdav_password"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:background="@drawable/bg_input"
+                            android:hint="密码"
+                            android:inputType="textPassword"
+                            android:padding="14dp"
+                            android:textColor="@color/on_surface"
+                            android:textColorHint="@color/on_surface_muted"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/text_status"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="14dp"
+                            android:background="@drawable/bg_soft_button"
+                            android:lineSpacingExtra="2dp"
+                            android:padding="14dp"
+                            android:textColor="@color/on_surface"
+                            android:textSize="13sp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:orientation="horizontal">
+
+                            <Button
+                                android:id="@+id/button_test_webdav"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/bg_outline_button"
+                                android:fontFamily="sans-serif-medium"
+                                android:minHeight="42dp"
+                                android:text="@string/settings_test"
+                                android:textAllCaps="false"
+                                android:textColor="@color/on_surface"
+                                android:textSize="13sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- MiMo TTS -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:background="@drawable/bg_card"
+                        android:elevation="6dp"
+                        android:orientation="vertical"
+                        android:padding="18dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="MiMo 听书"
+                            android:textColor="@color/on_surface"
+                            android:textSize="18sp" />
+
+                        <EditText
+                            android:id="@+id/input_mimo_api_key"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:background="@drawable/bg_input"
+                            android:hint="输入 MiMo API Key"
+                            android:inputType="textPassword"
+                            android:padding="14dp"
+                            android:textColor="@color/on_surface"
+                            android:textColorHint="@color/on_surface_muted"
+                            android:textSize="14sp" />
+                    </LinearLayout>
+
+                    <!-- Backup -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:background="@drawable/bg_card"
+                        android:elevation="6dp"
+                        android:orientation="vertical"
+                        android:padding="18dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="备份与恢复"
                             android:textColor="@color/on_surface"
                             android:textSize="18sp" />
 
                         <TextView
-                            android:id="@+id/text_overview_theme"
+                            android:id="@+id/text_backup_full"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp"
+                            android:layout_marginTop="14dp"
                             android:background="@drawable/bg_soft_button"
                             android:padding="14dp"
+                            android:text="全量备份：尚未执行"
                             android:textColor="@color/on_surface"
                             android:textSize="13sp" />
 
-                        <TextView
-                            android:id="@+id/text_overview_sync"
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="10dp"
+                            android:orientation="horizontal">
+
+                            <Button
+                                android:id="@+id/button_full_backup"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="8dp"
+                                android:layout_weight="1"
+                                android:background="@drawable/bg_positive_button"
+                                android:fontFamily="sans-serif-medium"
+                                android:minHeight="42dp"
+                                android:text="全量备份"
+                                android:textAllCaps="false"
+                                android:textColor="@android:color/white"
+                                android:textSize="13sp" />
+
+                            <Button
+                                android:id="@+id/button_full_restore"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:background="@drawable/bg_outline_button"
+                                android:fontFamily="sans-serif-medium"
+                                android:minHeight="42dp"
+                                android:text="全量恢复"
+                                android:textAllCaps="false"
+                                android:textColor="@color/on_surface"
+                                android:textSize="13sp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/text_backup_lite"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="14dp"
                             android:background="@drawable/bg_soft_button"
                             android:padding="14dp"
+                            android:text="增量备份：尚未执行"
                             android:textColor="@color/on_surface"
                             android:textSize="13sp" />
 
-                        <TextView
-                            android:id="@+id/text_overview_reader"
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="10dp"
-                            android:background="@drawable/bg_soft_button"
-                            android:padding="14dp"
-                            android:textColor="@color/on_surface"
-                            android:textSize="13sp" />
+                            android:orientation="horizontal">
+
+                            <Button
+                                android:id="@+id/button_lite_backup"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="8dp"
+                                android:layout_weight="1"
+                                android:background="@drawable/bg_positive_button"
+                                android:fontFamily="sans-serif-medium"
+                                android:minHeight="42dp"
+                                android:text="增量备份"
+                                android:textAllCaps="false"
+                                android:textColor="@android:color/white"
+                                android:textSize="13sp" />
+
+                            <Button
+                                android:id="@+id/button_lite_restore"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:background="@drawable/bg_outline_button"
+                                android:fontFamily="sans-serif-medium"
+                                android:minHeight="42dp"
+                                android:text="增量恢复"
+                                android:textAllCaps="false"
+                                android:textColor="@color/on_surface"
+                                android:textSize="13sp" />
+                        </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
             </ScrollView>

@@ -12,8 +12,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class AppDrawerController {
-    private static final int EDGE_ACTIVATION_DP = 88;
-    private static final int EDGE_EXCLUSION_DP = 88;
+    private static final int EDGE_ACTIVATION_MIN_DP = 112;
+    private static final int EDGE_ACTIVATION_MAX_DP = 156;
+    private static final int EDGE_EXCLUSION_DP = 156;
+    private static final int OPEN_DRAWER_DRAG_EXTRA_DP = 72;
+    private static final float OPEN_THRESHOLD_RATIO = 0.62f;
+    private static final float FLING_VELOCITY_THRESHOLD = 0.55f;
     public static final int SECTION_NONE = -1;
     public static final int SECTION_BOOKSHELF = 0;
     public static final int SECTION_PREVIEW = 1;
@@ -30,12 +34,9 @@ public class AppDrawerController {
     private final View navBookshelf;
     private final View navPreview;
     private final View navSettings;
-    private final TextView navBookshelfTitle;
-    private final TextView navBookshelfSubtitle;
-    private final TextView navPreviewTitle;
-    private final TextView navPreviewSubtitle;
-    private final TextView navSettingsTitle;
-    private final TextView navSettingsSubtitle;
+    private final TextView navBookshelfText;
+    private final TextView navPreviewText;
+    private final TextView navSettingsText;
     private final TextView statusText;
     private final NavigationListener navigationListener;
     private final int touchSlop;
@@ -50,6 +51,7 @@ public class AppDrawerController {
     private float drawerLastX = 0f;
     private long drawerLastEventTime = 0L;
     private float drawerVelocityX = 0f;
+    private boolean pendingChildTouchCancel = false;
 
     public AppDrawerController(Activity activity, View rootView, NavigationListener navigationListener) {
         this.activity = activity;
@@ -60,12 +62,9 @@ public class AppDrawerController {
         this.navBookshelf = activity.findViewById(R.id.nav_bookshelf);
         this.navPreview = activity.findViewById(R.id.nav_preview);
         this.navSettings = activity.findViewById(R.id.nav_settings);
-        this.navBookshelfTitle = activity.findViewById(R.id.text_nav_bookshelf_title);
-        this.navBookshelfSubtitle = activity.findViewById(R.id.text_nav_bookshelf_subtitle);
-        this.navPreviewTitle = activity.findViewById(R.id.text_nav_preview_title);
-        this.navPreviewSubtitle = activity.findViewById(R.id.text_nav_preview_subtitle);
-        this.navSettingsTitle = activity.findViewById(R.id.text_nav_settings_title);
-        this.navSettingsSubtitle = activity.findViewById(R.id.text_nav_settings_subtitle);
+        this.navBookshelfText = activity.findViewById(R.id.text_nav_bookshelf);
+        this.navPreviewText = activity.findViewById(R.id.text_nav_preview);
+        this.navSettingsText = activity.findViewById(R.id.text_nav_settings);
         this.statusText = activity.findViewById(R.id.text_drawer_status);
         this.touchSlop = ViewConfiguration.get(activity).getScaledTouchSlop();
         setupViews();
@@ -138,6 +137,7 @@ public class AppDrawerController {
         float y = event.getY();
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
+                pendingChildTouchCancel = false;
                 drawerGestureCandidate = shouldStartDrawerGesture(x);
                 drawerDragging = false;
                 drawerVelocityX = 0f;
@@ -156,14 +156,20 @@ public class AppDrawerController {
                 float deltaX = x - drawerDownX;
                 float deltaY = y - drawerDownY;
                 if (!drawerDragging) {
+                    int horizontalThreshold = isDrawerVisible() ? touchSlop : Math.max(4, touchSlop / 2);
                     if (Math.abs(deltaY) > touchSlop && Math.abs(deltaY) > Math.abs(deltaX)) {
                         drawerGestureCandidate = false;
                         return false;
                     }
-                    if (Math.abs(deltaX) <= touchSlop || Math.abs(deltaX) <= Math.abs(deltaY)) {
+                    if (Math.abs(deltaX) <= horizontalThreshold || Math.abs(deltaX) <= Math.abs(deltaY)) {
+                        return false;
+                    }
+                    if (!isDrawerVisible() && deltaX < 0f) {
+                        drawerGestureCandidate = false;
                         return false;
                     }
                     drawerDragging = true;
+                    pendingChildTouchCancel = true;
                     prepareDrawerForGesture();
                 }
                 float targetOffset = clamp(drawerBaseOffset + deltaX, -drawerPanel.getWidth(), 0f);
@@ -216,36 +222,41 @@ public class AppDrawerController {
         return drawerPanel != null && (drawerPanel.getVisibility() == View.VISIBLE || drawerDragging);
     }
 
-    private void updateNavigationState() {
-        styleDrawerItem(navBookshelf, navBookshelfTitle, navBookshelfSubtitle, currentSection == SECTION_BOOKSHELF);
-        styleDrawerItem(navPreview, navPreviewTitle, navPreviewSubtitle, currentSection == SECTION_PREVIEW);
-        styleDrawerItem(navSettings, navSettingsTitle, navSettingsSubtitle, currentSection == SECTION_SETTINGS);
+    public boolean consumePendingChildTouchCancel() {
+        boolean shouldCancel = pendingChildTouchCancel;
+        pendingChildTouchCancel = false;
+        return shouldCancel;
     }
 
-    private void styleDrawerItem(View container, TextView titleView, TextView subtitleView, boolean selected) {
-        if (container == null || titleView == null || subtitleView == null) {
+    private void updateNavigationState() {
+        styleNavItem(navBookshelf, navBookshelfText, currentSection == SECTION_BOOKSHELF);
+        styleNavItem(navPreview, navPreviewText, currentSection == SECTION_PREVIEW);
+        styleNavItem(navSettings, navSettingsText, currentSection == SECTION_SETTINGS);
+    }
+
+    private void styleNavItem(View container, TextView textView, boolean selected) {
+        if (container == null) {
             return;
         }
-        container.setBackgroundResource(selected ? R.drawable.bg_sidebar_nav_active : R.drawable.bg_sidebar_nav_idle);
-        int titleColor = activity.getColor(selected ? android.R.color.white : R.color.on_surface);
-        int subtitleColor = activity.getColor(selected ? android.R.color.white : R.color.on_surface_muted);
-        titleView.setTextColor(titleColor);
-        subtitleView.setTextColor(subtitleColor);
+        container.setBackgroundResource(selected ? R.drawable.bg_nav_item_active : R.drawable.bg_nav_item_idle);
+        if (textView != null) {
+            textView.setTextColor(activity.getColor(selected ? R.color.primary : R.color.on_surface));
+        }
     }
 
     private boolean shouldStartDrawerGesture(float x) {
         if (!isDrawerVisible()) {
-            return x <= dp(EDGE_ACTIVATION_DP);
+            return x <= closedDrawerActivationWidth();
         }
         float panelWidth = drawerPanel.getWidth();
-        return x <= panelWidth + dp(36);
+        return x <= panelWidth + dp(OPEN_DRAWER_DRAG_EXTRA_DP);
     }
 
     private void finishDrawerGesture() {
         float offset = drawerPanel.getTranslationX();
-        float openThreshold = -drawerPanel.getWidth() * 0.45f;
-        boolean shouldOpen = offset > openThreshold || drawerVelocityX > 0.8f;
-        if (drawerVelocityX < -0.8f) {
+        float openThreshold = -drawerPanel.getWidth() * (1f - OPEN_THRESHOLD_RATIO);
+        boolean shouldOpen = offset > openThreshold || drawerVelocityX > FLING_VELOCITY_THRESHOLD;
+        if (drawerVelocityX < -FLING_VELOCITY_THRESHOLD) {
             shouldOpen = false;
         }
         drawerGestureCandidate = false;
@@ -307,12 +318,22 @@ public class AppDrawerController {
         return Math.round(activity.getResources().getDisplayMetrics().density * value);
     }
 
+    private int closedDrawerActivationWidth() {
+        int panelWidth = drawerPanel == null ? 0 : drawerPanel.getWidth();
+        int preferred = panelWidth > 0 ? Math.round(panelWidth * 0.56f) : dp(EDGE_ACTIVATION_MIN_DP);
+        return clamp(preferred, dp(EDGE_ACTIVATION_MIN_DP), dp(EDGE_ACTIVATION_MAX_DP));
+    }
+
+    private int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
     private void updateDrawerGestureExclusion() {
         if (rootView == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             return;
         }
         List<Rect> exclusionRects = new ArrayList<>();
-        exclusionRects.add(new Rect(0, 0, dp(EDGE_EXCLUSION_DP), rootView.getHeight()));
+        exclusionRects.add(new Rect(0, 0, Math.max(dp(EDGE_EXCLUSION_DP), closedDrawerActivationWidth()), rootView.getHeight()));
         rootView.setSystemGestureExclusionRects(exclusionRects);
     }
 }

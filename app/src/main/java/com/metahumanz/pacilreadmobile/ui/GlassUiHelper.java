@@ -19,7 +19,7 @@ public final class GlassUiHelper {
             R.drawable.bg_input,
             R.drawable.bg_menu_panel,
             R.drawable.bg_sidebar_panel,
-            R.drawable.bg_sidebar_nav_idle,
+            R.drawable.bg_nav_item_idle,
             R.drawable.bg_reader_hud_pill,
             R.drawable.bg_reader_menu_button
     };
