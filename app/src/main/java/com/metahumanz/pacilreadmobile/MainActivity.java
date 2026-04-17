@@ -1,6 +1,7 @@
 package com.metahumanz.pacilread;
 
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
@@ -39,6 +40,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends ThemedActivity {
+    public static final String EXTRA_START_SECTION = "start_section";
+    public static final String START_SECTION_BOOKSHELF = "bookshelf";
+    public static final String START_SECTION_PREVIEW = "preview";
     private static final int REQUEST_PICK_BOOK = 1001;
     private static final int REQUEST_PICK_COVER = 1002;
     private static final int SECTION_BOOKSHELF = 0;
@@ -52,6 +56,7 @@ public class MainActivity extends ThemedActivity {
     private ReaderDatabaseHelper databaseHelper;
     private SettingsStore settingsStore;
     private BookImportService importService;
+    private AppDrawerController drawerController;
     private BookListAdapter listAdapter;
     private BookGridAdapter gridAdapter;
 
@@ -149,7 +154,7 @@ public class MainActivity extends ThemedActivity {
         setupAdapters();
         setupInteractions();
         configureDrawerInitialState();
-        showSection(SECTION_BOOKSHELF);
+        showSection(resolveStartSection(getIntent()));
 
         if (savedInstanceState == null && settingsStore.isAutoOpenLastBook()) {
             maybeAutoOpenLastBook();
@@ -164,6 +169,16 @@ public class MainActivity extends ThemedActivity {
     }
 
     @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        showSection(resolveStartSection(intent));
+        if (drawerController != null) {
+            drawerController.closeDrawer();
+        }
+    }
+
+    @Override
     protected void onDestroy() {
         super.onDestroy();
         executor.shutdownNow();
@@ -171,8 +186,7 @@ public class MainActivity extends ThemedActivity {
 
     @Override
     public void onBackPressed() {
-        if (isDrawerVisible()) {
-            closeDrawer();
+        if (drawerController != null && drawerController.onBackPressed()) {
             return;
         }
         if (currentSection != SECTION_BOOKSHELF) {
@@ -184,7 +198,7 @@ public class MainActivity extends ThemedActivity {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
-        if (handleDrawerGesture(event)) {
+        if (drawerController != null && drawerController.handleTouchEvent(event)) {
             return true;
         }
         return super.dispatchTouchEvent(event);
@@ -282,22 +296,6 @@ public class MainActivity extends ThemedActivity {
     }
 
     private void setupInteractions() {
-        findViewById(R.id.button_open_drawer).setOnClickListener(v -> openDrawer());
-        drawerScrim.setOnClickListener(v -> closeDrawer());
-
-        navBookshelf.setOnClickListener(v -> {
-            showSection(SECTION_BOOKSHELF);
-            closeDrawer();
-        });
-        navPreview.setOnClickListener(v -> {
-            showSection(SECTION_PREVIEW);
-            closeDrawer();
-        });
-        navSettings.setOnClickListener(v -> {
-            closeDrawer();
-            openSettings();
-        });
-
         headerActionButton.setOnClickListener(v -> {
             if (currentSection == SECTION_BOOKSHELF) {
                 openPicker();
@@ -378,16 +376,8 @@ public class MainActivity extends ThemedActivity {
     }
 
     private void configureDrawerInitialState() {
-        drawerPanel.post(() -> {
-            setDrawerOffset(-drawerPanel.getWidth());
-            drawerPanel.setVisibility(View.INVISIBLE);
-            drawerScrim.setVisibility(View.GONE);
-            drawerScrim.setAlpha(0f);
-        });
-        if (mainRoot != null) {
-            mainRoot.post(this::updateDrawerGestureExclusion);
-            mainRoot.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> updateDrawerGestureExclusion());
-        }
+        drawerController = new AppDrawerController(this, mainRoot, this::handleDrawerDestination);
+        drawerController.bindMenuButton(R.id.button_open_drawer);
     }
 
     private void showSection(int section) {
@@ -401,7 +391,7 @@ public class MainActivity extends ThemedActivity {
             headerActionButton.setText("导入");
         } else {
             sectionTitle.setText("界面预览");
-            sectionSubtitle.setText("阅读界面与排版预览");
+            sectionSubtitle.setText("阅读菜单与排版预览");
             headerActionButton.setText("设置");
         }
         updateNavigationState();
@@ -410,9 +400,9 @@ public class MainActivity extends ThemedActivity {
     }
 
     private void updateNavigationState() {
-        styleDrawerItem(navBookshelf, navBookshelfTitle, navBookshelfSubtitle, currentSection == SECTION_BOOKSHELF);
-        styleDrawerItem(navPreview, navPreviewTitle, navPreviewSubtitle, currentSection == SECTION_PREVIEW);
-        styleDrawerItem(navSettings, navSettingsTitle, navSettingsSubtitle, false);
+        if (drawerController != null) {
+            drawerController.setCurrentSection(currentSection);
+        }
     }
 
     private void styleDrawerItem(View container, TextView titleView, TextView subtitleView, boolean selected) {
@@ -584,7 +574,9 @@ public class MainActivity extends ThemedActivity {
                 isCardMode() ? "卡片书架" : "列表书架",
                 labelForAppTheme(settingsStore.getAppThemeMode())
         );
-        drawerStatus.setText(status);
+        if (drawerController != null) {
+            drawerController.setStatusText(status);
+        }
     }
 
     private void updatePreviewPanels() {
@@ -788,6 +780,36 @@ public class MainActivity extends ThemedActivity {
         Intent intent = new Intent(this, ReaderActivity.class);
         intent.putExtra("book_id", bookId);
         startActivity(intent);
+    }
+
+    public static Intent createSectionIntent(Context context, String startSection) {
+        Intent intent = new Intent(context, MainActivity.class);
+        intent.putExtra(EXTRA_START_SECTION, startSection);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        return intent;
+    }
+
+    private int resolveStartSection(Intent intent) {
+        if (intent == null) {
+            return SECTION_BOOKSHELF;
+        }
+        String startSection = intent.getStringExtra(EXTRA_START_SECTION);
+        if (START_SECTION_PREVIEW.equals(startSection)) {
+            return SECTION_PREVIEW;
+        }
+        return SECTION_BOOKSHELF;
+    }
+
+    private void handleDrawerDestination(int destination) {
+        if (destination == AppDrawerController.SECTION_PREVIEW) {
+            showSection(SECTION_PREVIEW);
+            return;
+        }
+        if (destination == AppDrawerController.SECTION_SETTINGS) {
+            openSettings();
+            return;
+        }
+        showSection(SECTION_BOOKSHELF);
     }
 
     private void maybeAutoOpenLastBook() {

@@ -1,6 +1,9 @@
 package com.metahumanz.pacilread;
 
 import android.app.AlertDialog;
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -24,6 +27,7 @@ import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
+import android.view.ViewConfiguration;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -40,6 +44,7 @@ import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.model.ChapterRecord;
 import com.metahumanz.pacilread.model.ReaderThemeRecord;
 import com.metahumanz.pacilread.model.ReplacementRuleRecord;
+import com.metahumanz.pacilread.reader.JustifiedPageTextView;
 import com.metahumanz.pacilread.reader.PageSlice;
 import com.metahumanz.pacilread.reader.ReaderPaginator;
 import com.metahumanz.pacilread.reader.ReaderThemeConfig;
@@ -50,6 +55,7 @@ import com.metahumanz.pacilread.sync.WebDavClient;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.theme.ThemedReaderActivity;
 import com.metahumanz.pacilread.tts.MimoTtsClient;
+import com.metahumanz.pacilread.ui.GlassUiHelper;
 import com.metahumanz.pacilread.util.FileAssetHelper;
 
 import org.json.JSONObject;
@@ -80,6 +86,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     private SettingsStore settingsStore;
     private WebDavClient webDavClient;
     private MimoTtsClient mimoTtsClient;
+    private AppDrawerController drawerController;
 
     private View readerRoot;
     private View hudContainer;
@@ -89,6 +96,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     private View pageStage;
     private View pageCurrent;
     private View pageIncoming;
+    private View pageShadow;
     private View readerBackgroundScrim;
     private android.widget.ImageView readerBackgroundImage;
     private TextView hudLeft;
@@ -99,14 +107,15 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     private TextView chapterMeta;
     private TextView pageMeta;
     private TextView pageTitleCurrent;
-    private TextView pageBodyCurrent;
+    private JustifiedPageTextView pageBodyCurrent;
     private TextView pageTitleIncoming;
-    private TextView pageBodyIncoming;
+    private JustifiedPageTextView pageBodyIncoming;
     private SeekBar progressSeekBar;
     private Button progressModeBookButton;
     private Button progressModeChapterButton;
     private Button ttsButton;
     private Button autoPageButton;
+    private Button themeToggleButton;
 
     private long bookId;
     private BookRecord book;
@@ -124,6 +133,20 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     private boolean ttsActive = false;
     private boolean isAnimating = false;
     private long animationToken = 0L;
+    private int pagingTouchSlop;
+    private boolean pagingGestureCandidate = false;
+    private boolean interactivePaging = false;
+    private float pagingDownX = 0f;
+    private float pagingDownY = 0f;
+    private float pagingLastX = 0f;
+    private float pagingVelocityX = 0f;
+    private float interactiveProgress = 0f;
+    private float interactiveTouchY = 0f;
+    private long pagingLastEventTime = 0L;
+    private int interactiveDirection = 0;
+    private int interactiveTargetChapterIndex = -1;
+    private int interactiveTargetPageIndex = -1;
+    private ValueAnimator interactiveAnimator;
 
     private GestureDetector gestureDetector;
     private TextToSpeech textToSpeech;
@@ -153,6 +176,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         settingsStore = new SettingsStore(this);
         webDavClient = new WebDavClient(settingsStore);
         mimoTtsClient = new MimoTtsClient();
+        pagingTouchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
         bookId = getIntent().getLongExtra("book_id", -1L);
         if (savedInstanceState != null) {
             restoredChapterIndex = savedInstanceState.getInt("restored_chapter_index", -1);
@@ -160,6 +184,9 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         }
 
         bindViews();
+        drawerController = new AppDrawerController(this, readerRoot, this::handleDrawerDestination);
+        drawerController.setCurrentSection(AppDrawerController.SECTION_NONE);
+        drawerController.setStatusText("正在载入书籍...");
         configureReaderWindow();
         applyEdgeToEdgeInsets();
         setupGestures();
@@ -174,6 +201,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     protected void onResume() {
         super.onResume();
         updateSystemBarsVisibility(controlsVisible);
+        applyGlassOpacity();
     }
 
     @Override
@@ -186,6 +214,8 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     @Override
     protected void onPause() {
         super.onPause();
+        cancelInteractiveAnimator();
+        cancelInteractivePaging();
         stopAutoPage();
         stopTts();
         persistProgress();
@@ -199,6 +229,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         mainHandler.removeCallbacks(autoHideRunnable);
         mainHandler.removeCallbacks(autoPageRunnable);
         mainHandler.removeCallbacks(saveProgressRunnable);
+        cancelInteractiveAnimator();
         if (mimoTtsClient != null) {
             mimoTtsClient.cancel();
         }
@@ -210,12 +241,18 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
 
     @Override
     public void onBackPressed() {
+        if (drawerController != null && drawerController.onBackPressed()) {
+            return;
+        }
         persistProgress();
         super.onBackPressed();
     }
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
+        if (handleReaderPagingTouchEvent(event)) {
+            return true;
+        }
         gestureDetector.onTouchEvent(event);
         return super.dispatchTouchEvent(event);
     }
@@ -264,6 +301,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         pageStage = findViewById(R.id.page_stage);
         pageCurrent = findViewById(R.id.page_current);
         pageIncoming = findViewById(R.id.page_incoming);
+        pageShadow = findViewById(R.id.view_page_shadow);
         readerBackgroundImage = findViewById(R.id.reader_background_image);
         readerBackgroundScrim = findViewById(R.id.reader_background_scrim);
         hudLeft = findViewById(R.id.text_hud_left);
@@ -282,6 +320,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         progressModeChapterButton = findViewById(R.id.button_progress_chapter);
         ttsButton = findViewById(R.id.button_tts);
         autoPageButton = findViewById(R.id.button_auto_page);
+        themeToggleButton = findViewById(R.id.button_theme_toggle);
     }
 
     private void configureReaderWindow() {
@@ -344,7 +383,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
                 dp(10) + systemInsetLeft,
                 0,
                 dp(10) + systemInsetRight,
-                dp(110) + systemInsetBottom
+                dp(148) + systemInsetBottom
         );
         updateFrameLayoutMargins(menuBottomPanel,
                 dp(10) + systemInsetLeft,
@@ -372,7 +411,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         findViewById(R.id.button_rules).setOnClickListener(v -> showRulesDialog());
         findViewById(R.id.button_style).setOnClickListener(v -> showStyleDialog());
         findViewById(R.id.button_reader_options).setOnClickListener(v -> showReaderOptionsDialog());
-        findViewById(R.id.button_sync).setOnClickListener(v -> syncFromWebDav(false));
+        themeToggleButton.setOnClickListener(v -> toggleReaderUiTheme());
         progressModeBookButton.setOnClickListener(v -> {
             settingsStore.setReaderSliderMode("book");
             updateUiAfterPageChange();
@@ -443,7 +482,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
 
             @Override
             public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
-                if (controlsVisible || isAnimating) {
+                if (controlsVisible || isAnimating || interactivePaging) {
                     return false;
                 }
                 if (Math.abs(velocityX) > Math.abs(velocityY) * 1.3f && Math.abs(velocityX) > 700f) {
@@ -457,6 +496,255 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
                 return false;
             }
         });
+    }
+
+    private boolean handleReaderPagingTouchEvent(MotionEvent event) {
+        if (controlsVisible || chapters.isEmpty() || pageStage == null || pageStage.getWidth() == 0 || pageStage.getHeight() == 0) {
+            return false;
+        }
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                cancelInteractiveAnimator();
+                pagingGestureCandidate = isInsideView(event, pageStage) && !isAnimating;
+                pagingDownX = event.getX();
+                pagingDownY = event.getY();
+                pagingLastX = event.getX();
+                pagingLastEventTime = event.getEventTime();
+                pagingVelocityX = 0f;
+                interactiveTouchY = localTouchY(event);
+                return false;
+            case MotionEvent.ACTION_MOVE:
+                if (!pagingGestureCandidate && !interactivePaging) {
+                    return false;
+                }
+                updatePagingVelocity(event);
+                if (!interactivePaging) {
+                    float deltaX = event.getX() - pagingDownX;
+                    float deltaY = event.getY() - pagingDownY;
+                    if (Math.abs(deltaY) > pagingTouchSlop && Math.abs(deltaY) > Math.abs(deltaX)) {
+                        pagingGestureCandidate = false;
+                        return false;
+                    }
+                    if (Math.abs(deltaX) <= pagingTouchSlop || Math.abs(deltaX) <= Math.abs(deltaY)) {
+                        return false;
+                    }
+                    int direction = deltaX < 0f ? 1 : -1;
+                    if (!prepareInteractivePaging(direction, localTouchY(event))) {
+                        pagingGestureCandidate = false;
+                        return false;
+                    }
+                }
+                interactiveTouchY = localTouchY(event);
+                float width = Math.max(pageStage.getWidth(), dp(240));
+                float deltaX = event.getX() - pagingDownX;
+                float progress = interactiveDirection > 0 ? -deltaX / width : deltaX / width;
+                applyInteractivePagingProgress(progress, interactiveTouchY);
+                return true;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                if (!interactivePaging) {
+                    pagingGestureCandidate = false;
+                    return false;
+                }
+                updatePagingVelocity(event);
+                boolean commit = event.getActionMasked() != MotionEvent.ACTION_CANCEL && shouldCommitInteractivePaging();
+                finishInteractivePaging(commit);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void updatePagingVelocity(MotionEvent event) {
+        long now = event.getEventTime();
+        long elapsed = Math.max(1L, now - pagingLastEventTime);
+        pagingVelocityX = (event.getX() - pagingLastX) / elapsed;
+        pagingLastX = event.getX();
+        pagingLastEventTime = now;
+    }
+
+    private boolean prepareInteractivePaging(int direction, float touchY) {
+        PageTarget target = resolveInteractiveTarget(direction);
+        if (target == null) {
+            return false;
+        }
+        cancelInteractiveAnimator();
+        interactivePaging = true;
+        isAnimating = true;
+        interactiveDirection = direction;
+        interactiveTargetChapterIndex = target.chapterIndex;
+        interactiveTargetPageIndex = target.pageIndex;
+        interactiveProgress = 0f;
+        interactiveTouchY = touchY;
+        bindPage(pageTitleIncoming, pageBodyIncoming, target.chapterIndex, target.pageIndex);
+        pageIncoming.setVisibility(View.VISIBLE);
+        resetAnimatedPage(pageCurrent);
+        resetAnimatedPage(pageIncoming);
+        resetShadowView();
+        if ("simulation".equals(settingsStore.getFlipMode())) {
+            pageCurrent.bringToFront();
+        } else {
+            pageIncoming.bringToFront();
+        }
+        if (pageShadow != null) {
+            pageShadow.bringToFront();
+        }
+        applyInteractivePagingProgress(0f, touchY);
+        return true;
+    }
+
+    private PageTarget resolveInteractiveTarget(int direction) {
+        if (direction > 0) {
+            List<PageSlice> pages = getPagesForChapter(currentChapterIndex);
+            if (currentPageIndex < pages.size() - 1) {
+                return new PageTarget(currentChapterIndex, currentPageIndex + 1);
+            }
+            if (currentChapterIndex < chapters.size() - 1) {
+                return new PageTarget(currentChapterIndex + 1, 0);
+            }
+            return null;
+        }
+        if (currentPageIndex > 0) {
+            return new PageTarget(currentChapterIndex, currentPageIndex - 1);
+        }
+        if (currentChapterIndex > 0) {
+            List<PageSlice> previousPages = getPagesForChapter(currentChapterIndex - 1);
+            return new PageTarget(currentChapterIndex - 1, previousPages.size() - 1);
+        }
+        return null;
+    }
+
+    private void applyInteractivePagingProgress(float progress, float touchY) {
+        if (!interactivePaging) {
+            return;
+        }
+        float width = Math.max(pageStage.getWidth(), dp(240));
+        float height = Math.max(pageStage.getHeight(), dp(320));
+        float safeProgress = Math.max(0f, Math.min(1f, progress));
+        float safeTouchY = Math.max(0f, Math.min(height, touchY));
+        interactiveProgress = safeProgress;
+
+        resetAnimatedPage(pageCurrent);
+        resetAnimatedPage(pageIncoming);
+        pageIncoming.setVisibility(View.VISIBLE);
+
+        String mode = settingsStore.getFlipMode();
+        if ("simulation".equals(mode)) {
+            pageCurrent.setCameraDistance(width * 12f);
+            pageCurrent.setPivotX(interactiveDirection > 0 ? width : 0f);
+            pageCurrent.setPivotY(safeTouchY);
+            float rotationY = (interactiveDirection > 0 ? -1f : 1f) * 72f * safeProgress;
+            float translationX = (interactiveDirection > 0 ? -1f : 1f) * width * 0.16f * safeProgress;
+            float rotationX = (0.5f - (safeTouchY / height)) * 14f * safeProgress;
+            pageCurrent.setRotationY(rotationY);
+            pageCurrent.setRotationX(rotationX);
+            pageCurrent.setTranslationX(translationX);
+            pageCurrent.setScaleX(1f - 0.08f * safeProgress);
+            pageCurrent.setScaleY(1f - 0.02f * safeProgress);
+            pageCurrent.setAlpha(1f - 0.34f * safeProgress);
+            pageIncoming.setAlpha(0.76f + 0.24f * safeProgress);
+            pageIncoming.setScaleX(0.97f + 0.03f * safeProgress);
+            pageIncoming.setScaleY(0.97f + 0.03f * safeProgress);
+            pageIncoming.setTranslationX((interactiveDirection > 0 ? 1f : -1f) * width * 0.06f * (1f - safeProgress));
+            float edgeX = interactiveDirection > 0 ? width * (1f - safeProgress) : width * safeProgress;
+            updateInteractiveShadow(edgeX, 0.12f + 0.38f * safeProgress);
+            return;
+        }
+
+        if ("cover".equals(mode)) {
+            float incomingX = (interactiveDirection > 0 ? 1f : -1f) * width * (1f - safeProgress);
+            pageIncoming.setTranslationX(incomingX);
+            pageCurrent.setTranslationX((interactiveDirection > 0 ? -1f : 1f) * width * 0.04f * safeProgress);
+            float edgeX = interactiveDirection > 0 ? incomingX : width + incomingX;
+            updateInteractiveShadow(edgeX, 0.16f + 0.28f * safeProgress);
+            return;
+        }
+
+        float offset = (interactiveDirection > 0 ? -1f : 1f) * width * safeProgress;
+        pageCurrent.setTranslationX(offset);
+        pageIncoming.setTranslationX(offset + (interactiveDirection > 0 ? width : -width));
+        float edgeX = interactiveDirection > 0 ? width + offset : offset;
+        updateInteractiveShadow(edgeX, "none".equals(mode) ? 0f : 0.12f + 0.18f * safeProgress);
+    }
+
+    private void updateInteractiveShadow(float edgeX, float alpha) {
+        if (pageShadow == null) {
+            return;
+        }
+        float shadowWidth = Math.max(pageShadow.getWidth(), dp(48));
+        pageShadow.setVisibility(alpha <= 0f ? View.GONE : View.VISIBLE);
+        if (alpha <= 0f) {
+            pageShadow.setAlpha(0f);
+            return;
+        }
+        pageShadow.setScaleX(interactiveDirection > 0 ? 1f : -1f);
+        pageShadow.setTranslationX(interactiveDirection > 0 ? edgeX - shadowWidth : edgeX);
+        pageShadow.setAlpha(Math.max(0f, Math.min(0.56f, alpha)));
+    }
+
+    private boolean shouldCommitInteractivePaging() {
+        float directionalVelocity = interactiveDirection > 0 ? -pagingVelocityX : pagingVelocityX;
+        return interactiveProgress >= 0.34f || directionalVelocity > 0.85f;
+    }
+
+    private void finishInteractivePaging(boolean commit) {
+        float start = interactiveProgress;
+        float end = commit ? 1f : 0f;
+        long token = ++animationToken;
+        cancelInteractiveAnimator();
+        interactiveAnimator = ValueAnimator.ofFloat(start, end);
+        long duration = Math.max(90L, Math.round((110f + Math.abs(end - start) * 150f) / Math.max(0.8f, Math.abs(pagingVelocityX) * 1.8f)));
+        interactiveAnimator.setDuration(duration);
+        interactiveAnimator.addUpdateListener(animation ->
+                applyInteractivePagingProgress((float) animation.getAnimatedValue(), interactiveTouchY)
+        );
+        interactiveAnimator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationCancel(Animator animation) {
+                interactiveAnimator = null;
+            }
+
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                interactiveAnimator = null;
+                if (token != animationToken) {
+                    return;
+                }
+                if (commit) {
+                    finishAnimation(interactiveTargetChapterIndex, interactiveTargetPageIndex, token);
+                } else {
+                    cancelInteractivePaging();
+                }
+            }
+        });
+        interactiveAnimator.start();
+    }
+
+    private void cancelInteractiveAnimator() {
+        if (interactiveAnimator != null) {
+            interactiveAnimator.cancel();
+            interactiveAnimator = null;
+        }
+    }
+
+    private void cancelInteractivePaging() {
+        pagingGestureCandidate = false;
+        interactivePaging = false;
+        interactiveDirection = 0;
+        interactiveProgress = 0f;
+        interactiveTargetChapterIndex = -1;
+        interactiveTargetPageIndex = -1;
+        resetAnimatedPage(pageCurrent);
+        resetAnimatedPage(pageIncoming);
+        pageIncoming.setVisibility(View.GONE);
+        resetShadowView();
+        isAnimating = false;
+    }
+
+    private float localTouchY(MotionEvent event) {
+        int[] stageLocation = new int[2];
+        pageStage.getLocationOnScreen(stageLocation);
+        return event.getRawY() - stageLocation[1];
     }
 
     private void loadBook() {
@@ -574,7 +862,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         titleView.setVisibility(showTitle ? View.VISIBLE : View.GONE);
         titleView.setText(chapter.title);
         updateBodyTopMargin(bodyView, showTitle ? dp(16) : 0);
-        bodyView.setText(slice.text == null ? "" : slice.text.toString().trim());
+        bodyView.setText(slice.text == null ? "" : slice.text);
     }
 
     private void updateUiAfterPageChange() {
@@ -600,10 +888,12 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         hudLeft.setText(String.format(Locale.SIMPLIFIED_CHINESE, "第 %d 章", currentChapterIndex + 1));
         hudCenter.setText(book.title == null ? "" : book.title);
         hudRight.setText(percent + "%");
+        updateDrawerStatus(chapter.title, percent);
         styleReaderMenuButton(progressModeBookButton, "book".equals(settingsStore.getReaderSliderMode()));
         styleReaderMenuButton(progressModeChapterButton, "chapter".equals(settingsStore.getReaderSliderMode()));
         styleReaderMenuButton(ttsButton, ttsActive);
         styleReaderMenuButton(autoPageButton, autoPageActive);
+        styleReaderMenuButton(themeToggleButton, isDarkReaderUi());
     }
 
     private void animateTransition(int targetChapterIndex, int targetPageIndex, int direction) {
@@ -611,34 +901,70 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         isAnimating = true;
         String mode = settingsStore.getFlipMode();
         float width = Math.max(pageStage.getWidth(), dp(240));
+        float height = Math.max(pageStage.getHeight(), dp(320));
         resetAnimatedPage(pageCurrent);
         resetAnimatedPage(pageIncoming);
+        resetShadowView();
         if ("none".equals(mode)) {
             finishAnimation(targetChapterIndex, targetPageIndex, token);
             return;
         }
-        if ("fade".equals(mode)) {
-            pageIncoming.setAlpha(0f);
-            pageCurrent.animate().alpha(0f).setDuration(180L).start();
-            pageIncoming.animate().alpha(1f).setDuration(220L).withEndAction(() -> finishAnimation(targetChapterIndex, targetPageIndex, token)).start();
-            return;
-        }
         if ("cover".equals(mode)) {
+            prepareShadow(direction > 0 ? width - dp(48) : 0f);
             pageIncoming.setTranslationX(direction > 0 ? width : -width);
-            pageIncoming.animate().translationX(0f).setDuration(220L).withEndAction(() -> finishAnimation(targetChapterIndex, targetPageIndex, token)).start();
+            pageIncoming.animate().translationX(0f).setDuration(260L).withEndAction(() -> finishAnimation(targetChapterIndex, targetPageIndex, token)).start();
+            if (pageShadow != null) {
+                pageShadow.setScaleX(direction > 0 ? 1f : -1f);
+                pageShadow.animate()
+                        .translationX(direction > 0 ? -dp(48) : width)
+                        .alpha(0.38f)
+                        .setDuration(260L)
+                        .withEndAction(this::resetShadowView)
+                        .start();
+            }
             return;
         }
-        if ("flip".equals(mode)) {
+        if ("simulation".equals(mode)) {
             pageCurrent.setCameraDistance(width * 12f);
-            pageIncoming.setCameraDistance(width * 12f);
-            pageIncoming.setRotationY(direction > 0 ? -72f : 72f);
-            pageIncoming.setAlpha(0.45f);
-            pageCurrent.animate().rotationY(direction > 0 ? 72f : -72f).alpha(0.08f).setDuration(220L).start();
-            pageIncoming.animate().rotationY(0f).alpha(1f).setDuration(220L).withEndAction(() -> finishAnimation(targetChapterIndex, targetPageIndex, token)).start();
+            pageCurrent.setPivotX(direction > 0 ? width : 0f);
+            pageCurrent.setPivotY(height * 0.5f);
+            pageIncoming.setAlpha(0.84f);
+            pageIncoming.setScaleX(0.985f);
+            pageIncoming.setScaleY(0.985f);
+            prepareShadow(direction > 0 ? width - dp(48) : 0f);
+            pageCurrent.animate()
+                    .translationX(direction > 0 ? -width * 0.22f : width * 0.22f)
+                    .rotationY(direction > 0 ? 28f : -28f)
+                    .scaleX(0.94f)
+                    .alpha(0.68f)
+                    .setDuration(240L)
+                    .start();
+            pageIncoming.animate()
+                    .alpha(1f)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .setDuration(240L)
+                    .withEndAction(() -> finishAnimation(targetChapterIndex, targetPageIndex, token))
+                    .start();
+            if (pageShadow != null) {
+                pageShadow.setScaleX(direction > 0 ? 1f : -1f);
+                pageShadow.animate()
+                        .translationX(direction > 0 ? width * 0.42f : width * 0.58f)
+                        .alpha(0.44f)
+                        .setDuration(240L)
+                        .withEndAction(this::resetShadowView)
+                        .start();
+            }
+            return;
+        }
+        if ("scroll".equals(mode)) {
+            pageIncoming.setTranslationY(direction > 0 ? height : -height);
+            pageCurrent.animate().translationY(direction > 0 ? -height : height).setDuration(240L).start();
+            pageIncoming.animate().translationY(0f).setDuration(240L).withEndAction(() -> finishAnimation(targetChapterIndex, targetPageIndex, token)).start();
             return;
         }
         pageIncoming.setTranslationX(direction > 0 ? width : -width);
-        pageCurrent.animate().translationX(direction > 0 ? -width * 0.28f : width * 0.28f).alpha(0.12f).setDuration(220L).start();
+        pageCurrent.animate().translationX(direction > 0 ? -width : width).setDuration(220L).start();
         pageIncoming.animate().translationX(0f).setDuration(220L).withEndAction(() -> finishAnimation(targetChapterIndex, targetPageIndex, token)).start();
     }
 
@@ -652,6 +978,13 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         resetAnimatedPage(pageCurrent);
         resetAnimatedPage(pageIncoming);
         pageIncoming.setVisibility(View.GONE);
+        resetShadowView();
+        pagingGestureCandidate = false;
+        interactivePaging = false;
+        interactiveDirection = 0;
+        interactiveProgress = 0f;
+        interactiveTargetChapterIndex = -1;
+        interactiveTargetPageIndex = -1;
         isAnimating = false;
         updateUiAfterPageChange();
         scheduleProgressSave();
@@ -764,6 +1097,34 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         styleReaderMenuButton(ttsButton, false);
     }
 
+    private void toggleReaderUiTheme() {
+        boolean darkUi = isDarkReaderUi();
+        settingsStore.setReaderUiThemeMode(darkUi ? "light" : "dark");
+        recreate();
+    }
+
+    private void updateDrawerStatus(String chapterTitle, int percent) {
+        if (drawerController == null || book == null) {
+            return;
+        }
+        String safeTitle = book.title == null || book.title.isBlank() ? "当前阅读" : book.title;
+        String safeChapter = chapterTitle == null || chapterTitle.isBlank() ? "未命名章节" : chapterTitle;
+        drawerController.setStatusText(safeTitle + "\n" + safeChapter + " · " + percent + "%");
+    }
+
+    private void handleDrawerDestination(int destination) {
+        persistProgress();
+        if (destination == AppDrawerController.SECTION_SETTINGS) {
+            startActivity(new Intent(this, SettingsActivity.class));
+            return;
+        }
+        Intent intent = MainActivity.createSectionIntent(
+                this,
+                destination == AppDrawerController.SECTION_PREVIEW ? MainActivity.START_SECTION_PREVIEW : MainActivity.START_SECTION_BOOKSHELF
+        );
+        startActivity(intent);
+    }
+
     private void stopAutoPage() {
         autoPageActive = false;
         mainHandler.removeCallbacks(autoPageRunnable);
@@ -787,8 +1148,8 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         pageBodyIncoming.setTextSize(settingsStore.getFontSizeSp());
         pageBodyCurrent.setLineSpacing(settingsStore.getLineSpacingExtraSp(), 1f);
         pageBodyIncoming.setLineSpacing(settingsStore.getLineSpacingExtraSp(), 1f);
-        pageBodyCurrent.setJustificationMode(android.text.Layout.JUSTIFICATION_MODE_INTER_WORD);
-        pageBodyIncoming.setJustificationMode(android.text.Layout.JUSTIFICATION_MODE_INTER_WORD);
+        pageBodyCurrent.setFullJustifyEnabled(true);
+        pageBodyIncoming.setFullJustifyEnabled(true);
         int sidePadding = dp(settingsStore.getSidePaddingDp());
         int verticalPadding = dp(settingsStore.getVerticalPaddingDp());
         ((ViewGroup) pageCurrent).setPadding(sidePadding, verticalPadding, sidePadding, verticalPadding);
@@ -800,6 +1161,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         }
         applyBackgroundImage();
         updateSystemBarsVisibility(controlsVisible);
+        applyGlassOpacity();
     }
 
     private void persistProgress() {
@@ -1027,8 +1389,8 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         titleInput.setText(book == null ? "" : book.title);
         authorInput.setText(book == null ? "" : book.author);
         showTitleCheck.setChecked(settingsStore.isChapterTitleVisible());
-        String[] flipKeys = new String[]{"slide", "cover", "fade", "flip", "none"};
-        ArrayAdapter<String> adapter = buildSpinnerAdapter(new String[]{"平移", "覆盖", "淡入", "翻折", "无动画"});
+        String[] flipKeys = new String[]{"cover", "slide", "simulation", "scroll", "none"};
+        ArrayAdapter<String> adapter = buildSpinnerAdapter(new String[]{"覆盖", "平移", "仿真", "滚动", "无动画"});
         flipSpinner.setAdapter(adapter);
         flipSpinner.setSelection(indexOf(flipKeys, settingsStore.getFlipMode(), 0));
         final String[] sliderMode = new String[]{settingsStore.getReaderSliderMode()};
@@ -1173,6 +1535,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         if (window != null) {
             window.setBackgroundDrawableResource(android.R.color.transparent);
         }
+        GlassUiHelper.applyToHierarchy(this, dialog.findViewById(android.R.id.content), settingsStore.getGlassOpacityPercent());
     }
 
     private void syncFromWebDav(boolean silent) {
@@ -1358,6 +1721,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
                     applyButton.setText(theme.name);
                     applyButton.setBackgroundResource(R.drawable.bg_outline_button);
                     applyButton.setTextColor(getColor(R.color.primary));
+                    GlassUiHelper.applyToView(this, applyButton, settingsStore.getGlassOpacityPercent());
                     Button deleteButton = new Button(this);
                     deleteButton.setText("删除");
                     deleteButton.setBackgroundResource(R.drawable.bg_danger_button);
@@ -1440,12 +1804,22 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
 
     private void styleThemeButton(Button button, boolean active) {
         button.setBackgroundResource(active ? R.drawable.bg_primary_button : R.drawable.bg_outline_button);
+        button.setTag(R.id.tag_glass_background, !active);
         button.setTextColor(active ? getColor(android.R.color.white) : themeColor(R.color.on_surface));
+        GlassUiHelper.applyToView(this, button, settingsStore.getGlassOpacityPercent());
     }
 
     private void styleReaderMenuButton(Button button, boolean active) {
         button.setBackgroundResource(active ? R.drawable.bg_reader_menu_button_active : R.drawable.bg_reader_menu_button);
+        button.setTag(R.id.tag_glass_background, !active);
         button.setTextColor(getColor(android.R.color.white));
+        GlassUiHelper.applyToView(this, button, settingsStore.getGlassOpacityPercent());
+    }
+
+    private void applyGlassOpacity() {
+        GlassUiHelper.applyToHierarchy(this, menuTopPanel, settingsStore.getGlassOpacityPercent());
+        GlassUiHelper.applyToHierarchy(this, menuInfoPanel, settingsStore.getGlassOpacityPercent());
+        GlassUiHelper.applyToHierarchy(this, menuBottomPanel, settingsStore.getGlassOpacityPercent());
     }
 
     private int indexOf(String[] values, String target, int fallback) {
@@ -1460,7 +1834,13 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     private void resetAnimatedPage(View view) {
         view.animate().cancel();
         view.setTranslationX(0f);
+        view.setTranslationY(0f);
+        view.setRotationX(0f);
         view.setRotationY(0f);
+        view.setScaleX(1f);
+        view.setScaleY(1f);
+        view.setPivotX(view.getWidth() * 0.5f);
+        view.setPivotY(view.getHeight() * 0.5f);
         view.setAlpha(1f);
     }
 
@@ -1472,6 +1852,27 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) bodyView.getLayoutParams();
         params.topMargin = topMargin;
         bodyView.setLayoutParams(params);
+    }
+
+    private void prepareShadow(float startTranslationX) {
+        if (pageShadow == null) {
+            return;
+        }
+        pageShadow.animate().cancel();
+        pageShadow.setVisibility(View.VISIBLE);
+        pageShadow.setAlpha(0f);
+        pageShadow.setTranslationX(startTranslationX);
+    }
+
+    private void resetShadowView() {
+        if (pageShadow == null) {
+            return;
+        }
+        pageShadow.animate().cancel();
+        pageShadow.setAlpha(0f);
+        pageShadow.setVisibility(View.GONE);
+        pageShadow.setTranslationX(0f);
+        pageShadow.setScaleX(1f);
     }
 
     private void setControlsVisible(boolean visible) {
@@ -1592,6 +1993,16 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
 
     private void showToast(String text) {
         Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
+    }
+
+    private static class PageTarget {
+        final int chapterIndex;
+        final int pageIndex;
+
+        private PageTarget(int chapterIndex, int pageIndex) {
+            this.chapterIndex = chapterIndex;
+            this.pageIndex = pageIndex;
+        }
     }
 
     private static class SearchResult {

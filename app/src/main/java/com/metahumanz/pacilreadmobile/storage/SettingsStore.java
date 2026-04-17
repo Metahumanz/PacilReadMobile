@@ -36,6 +36,7 @@ public class SettingsStore {
     private static final String KEY_READER_SLIDER_MODE = "reader_slider_mode";
     private static final String KEY_CHAPTER_TITLE_VISIBILITY = "chapter_title_visibility";
     private static final String KEY_BOOKSHELF_VIEW_MODE = "bookshelf_view_mode";
+    private static final String KEY_GLASS_OPACITY_PERCENT = "glass_opacity_percent";
 
     private final SharedPreferences preferences;
 
@@ -213,11 +214,11 @@ public class SettingsStore {
     }
 
     public String getFlipMode() {
-        return preferences.getString(KEY_FLIP_MODE, "slide");
+        return normalizeFlipMode(preferences.getString(KEY_FLIP_MODE, "slide"));
     }
 
     public void setFlipMode(String value) {
-        preferences.edit().putString(KEY_FLIP_MODE, value == null ? "slide" : value).apply();
+        preferences.edit().putString(KEY_FLIP_MODE, normalizeFlipMode(value)).apply();
     }
 
     public String getReaderSliderMode() {
@@ -244,6 +245,14 @@ public class SettingsStore {
 
     public void setBookshelfViewMode(String value) {
         preferences.edit().putString(KEY_BOOKSHELF_VIEW_MODE, "list".equals(value) ? "list" : "card").apply();
+    }
+
+    public int getGlassOpacityPercent() {
+        return clamp(preferences.getInt(KEY_GLASS_OPACITY_PERCENT, 80), 20, 100);
+    }
+
+    public void setGlassOpacityPercent(int value) {
+        preferences.edit().putInt(KEY_GLASS_OPACITY_PERCENT, clamp(value, 20, 100)).apply();
     }
 
     public String getWebDavProgressBaseUrl() {
@@ -325,5 +334,18 @@ public class SettingsStore {
             return value;
         }
         return "follow_app";
+    }
+
+    private static String normalizeFlipMode(String value) {
+        if ("cover".equals(value) || "slide".equals(value) || "simulation".equals(value) || "scroll".equals(value) || "none".equals(value)) {
+            return value;
+        }
+        if ("flip".equals(value)) {
+            return "simulation";
+        }
+        if ("fade".equals(value)) {
+            return "scroll";
+        }
+        return "slide";
     }
 }

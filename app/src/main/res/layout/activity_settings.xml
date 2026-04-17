@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/settings_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/bg_window_backdrop">
@@ -7,6 +8,7 @@
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:layout_marginBottom="104dp"
         android:clipToPadding="false"
         android:fillViewport="true"
         android:overScrollMode="never">
@@ -130,6 +132,37 @@
                     android:background="@drawable/bg_input"
                     android:paddingStart="10dp"
                     android:paddingEnd="10dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="阅读菜单不透明度"
+                    android:textColor="@color/on_surface"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <SeekBar
+                    android:id="@+id/seek_glass_opacity"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:max="80" />
+
+                <TextView
+                    android:id="@+id/text_glass_opacity"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/on_surface_muted"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="只作用于阅读页顶部/底部菜单和阅读弹窗。"
+                    android:textColor="@color/on_surface_muted"
+                    android:textSize="12sp" />
             </LinearLayout>
 
             <LinearLayout
@@ -445,42 +478,49 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:background="@drawable/bg_card"
-                android:elevation="6dp"
-                android:orientation="horizontal"
-                android:padding="18dp">
-
-                <Button
-                    android:id="@+id/button_test_webdav"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="8dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/bg_outline_button"
-                    android:fontFamily="sans-serif-medium"
-                    android:minHeight="46dp"
-                    android:text="@string/settings_test"
-                    android:textAllCaps="false"
-                    android:textColor="@color/on_surface"
-                    android:textSize="14sp" />
-
-                <Button
-                    android:id="@+id/button_save_settings"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:background="@drawable/bg_primary_button"
-                    android:fontFamily="sans-serif-medium"
-                    android:minHeight="46dp"
-                    android:text="@string/settings_save"
-                    android:textAllCaps="false"
-                    android:textColor="@android:color/white"
-                    android:textSize="14sp" />
-            </LinearLayout>
         </LinearLayout>
     </ScrollView>
+
+    <LinearLayout
+        android:id="@+id/settings_action_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginStart="18dp"
+        android:layout_marginEnd="18dp"
+        android:layout_marginBottom="18dp"
+        android:background="@drawable/bg_card"
+        android:elevation="10dp"
+        android:orientation="horizontal"
+        android:padding="14dp">
+
+        <Button
+            android:id="@+id/button_test_webdav"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_outline_button"
+            android:fontFamily="sans-serif-medium"
+            android:minHeight="46dp"
+            android:text="@string/settings_test"
+            android:textAllCaps="false"
+            android:textColor="@color/on_surface"
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/button_save_settings"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/bg_primary_button"
+            android:fontFamily="sans-serif-medium"
+            android:minHeight="46dp"
+            android:text="@string/settings_save"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <include layout="@layout/include_app_drawer" />
 </FrameLayout>
