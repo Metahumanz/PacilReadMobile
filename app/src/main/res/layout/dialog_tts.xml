@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/card"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="听书设置"
+        android:textColor="@color/on_surface"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="引擎"
+        android:textColor="@color/on_surface"
+        android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/tts_spinner_engine"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="语速"
+        android:textColor="@color/on_surface"
+        android:textStyle="bold" />
+
+    <SeekBar
+        android:id="@+id/tts_seek_rate"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="15" />
+
+    <TextView
+        android:id="@+id/tts_text_rate"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/on_surface_muted" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="MiMo API Key"
+        android:textColor="@color/on_surface"
+        android:textStyle="bold" />
+
+    <EditText
+        android:id="@+id/tts_input_mimo_api_key"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_input"
+        android:hint="仅 MiMo 引擎需要"
+        android:inputType="textPassword"
+        android:padding="12dp"
+        android:textColor="@color/on_surface"
+        android:textColorHint="@color/on_surface_muted" />
+
+    <TextView
+        android:id="@+id/tts_text_note"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="当前版本使用 Android 原生 TTS 引擎。"
+        android:textColor="@color/on_surface_muted"
+        android:textSize="13sp" />
+
+    <Button
+        android:id="@+id/tts_button_toggle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:background="@drawable/bg_primary_button"
+        android:text="开始听书"
+        android:textColor="@android:color/white" />
+</LinearLayout>

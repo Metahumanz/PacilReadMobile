@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/card"
+    android:orientation="vertical"
+    android:padding="18dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="替换规则"
+        android:textColor="@color/on_surface"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <EditText
+        android:id="@+id/rules_input_pattern"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:background="@drawable/bg_input"
+        android:hint="查找内容"
+        android:padding="12dp"
+        android:textColor="@color/on_surface"
+        android:textColorHint="@color/on_surface_muted" />
+
+    <EditText
+        android:id="@+id/rules_input_replacement"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_input"
+        android:hint="替换为（留空表示删除）"
+        android:padding="12dp"
+        android:textColor="@color/on_surface"
+        android:textColorHint="@color/on_surface_muted" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <CheckBox
+            android:id="@+id/rules_check_global"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="全局规则"
+            android:textColor="@color/on_surface" />
+
+        <CheckBox
+            android:id="@+id/rules_check_regex"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:text="正则"
+            android:textColor="@color/on_surface" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <Button
+            android:id="@+id/rules_button_add"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_primary_button"
+            android:text="添加"
+            android:textColor="@android:color/white" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/rules_text_hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:textColor="@color/on_surface_muted"
+        android:textSize="12sp" />
+
+    <ListView
+        android:id="@+id/rules_list"
+        android:layout_width="match_parent"
+        android:layout_height="320dp"
+        android:layout_marginTop="10dp"
+        android:divider="@color/divider"
+        android:dividerHeight="1dp"
+        android:fastScrollEnabled="true"
+        android:scrollbarStyle="outsideInset"
+        android:scrollbars="vertical" />
+</LinearLayout>

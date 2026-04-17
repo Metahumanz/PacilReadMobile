@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/card"
+    android:orientation="vertical"
+    android:padding="18dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="目录"
+        android:textColor="@color/on_surface"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="拖动右侧滚动条可以快速定位章节。"
+        android:textColor="@color/on_surface_muted"
+        android:textSize="12sp" />
+
+    <ListView
+        android:id="@+id/toc_list"
+        android:layout_width="match_parent"
+        android:layout_height="360dp"
+        android:layout_marginTop="14dp"
+        android:divider="@color/divider"
+        android:dividerHeight="1dp"
+        android:fastScrollEnabled="true"
+        android:scrollbarStyle="outsideInset"
+        android:scrollbars="vertical" />
+</LinearLayout>

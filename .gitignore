@@ -1,0 +1,15 @@
+/.gradle/
+/build/
+/app/build/
+/local.properties
+*.iml
+.idea/
+/originalWin11APP
+/DS_Store
+*.apk
+*.keystore
+*.jks
+*.log
+*.tmp
+*.bak
+/AndroidLegado
