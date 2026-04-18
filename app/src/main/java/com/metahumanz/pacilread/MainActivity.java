@@ -67,8 +67,10 @@ public class MainActivity extends ThemedActivity {
     private static final String VIEW_MODE_CARD = "card";
     private static final String[] APP_THEME_KEYS = new String[]{"system", "light", "dark"};
     private static final String[] READER_THEME_KEYS = new String[]{"follow_app", "system", "light", "dark"};
-    private static final String[] READER_FONT_FAMILY_KEYS = new String[]{"serif", "sans-serif", "monospace", "system_default"};
-    private static final String[] READER_FONT_FAMILY_LABELS = new String[]{"默认阅读体", "无衬线", "等宽体", "系统默认"};
+    private static final String[] VOLUME_KEY_ACTION_KEYS = new String[]{"system", "page_up", "page_down"};
+    private static final String[] VOLUME_KEY_ACTION_LABELS = new String[]{"系统音量", "上一页", "下一页"};
+    private static final String[] READER_FONT_FAMILY_KEYS = new String[]{"system_default", "sans-serif", "monospace"};
+    private static final String[] READER_FONT_FAMILY_LABELS = new String[]{"系统默认", "无衬线", "等宽体"};
     private static final int[] READER_FONT_WEIGHT_VALUES = new int[]{250, 400, 700};
     private static final String[] READER_FONT_WEIGHT_LABELS = new String[]{"细体", "标准", "粗体"};
 
@@ -145,6 +147,8 @@ public class MainActivity extends ThemedActivity {
     private EditText mimoApiKeyInput;
     private Spinner appThemeSpinner;
     private Spinner readerUiThemeSpinner;
+    private Spinner volumeKeyUpActionSpinner;
+    private Spinner volumeKeyDownActionSpinner;
     private SeekBar glassOpacitySeekBar;
     private TextView glassOpacityText;
     private TextView settingsStatusText;
@@ -254,11 +258,21 @@ public class MainActivity extends ThemedActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (resultCode != RESULT_OK || data == null || data.getData() == null) {
+        if (resultCode != RESULT_OK || data == null) {
             return;
         }
         if (requestCode == REQUEST_PICK_BOOK) {
-            importBook(data.getData());
+            if (data.getClipData() != null) {
+                // 批量导入
+                int count = data.getClipData().getItemCount();
+                for (int i = 0; i < count; i++) {
+                    Uri uri = data.getClipData().getItemAt(i).getUri();
+                    importBook(uri);
+                }
+            } else if (data.getData() != null) {
+                // 单个导入
+                importBook(data.getData());
+            }
         } else if (requestCode == REQUEST_PICK_COVER && pendingCoverBookId > 0) {
             attachCover(pendingCoverBookId, data.getData());
         } else if (requestCode == REQUEST_PICK_READER_BACKGROUND) {
@@ -325,6 +339,8 @@ public class MainActivity extends ThemedActivity {
         mimoApiKeyInput = findViewById(R.id.input_mimo_api_key);
         appThemeSpinner = findViewById(R.id.spinner_app_theme_mode);
         readerUiThemeSpinner = findViewById(R.id.spinner_reader_ui_theme_mode);
+        volumeKeyUpActionSpinner = findViewById(R.id.spinner_volume_key_up_action);
+        volumeKeyDownActionSpinner = findViewById(R.id.spinner_volume_key_down_action);
         glassOpacitySeekBar = findViewById(R.id.seek_glass_opacity);
         glassOpacityText = findViewById(R.id.text_glass_opacity);
         settingsStatusText = findViewById(R.id.text_status);
@@ -435,6 +451,7 @@ public class MainActivity extends ThemedActivity {
 
     private void setupSettingsSection() {
         setupThemeSpinners();
+        setupVolumeKeyActionSpinners();
         setupGlassOpacityControl();
 
         testButton.setOnClickListener(v -> testWebDav());
@@ -564,6 +581,23 @@ public class MainActivity extends ThemedActivity {
         readerUiThemeSpinner.setOnItemSelectedListener(autoSaveSpinnerListener);
     }
 
+    private void setupVolumeKeyActionSpinners() {
+        if (volumeKeyUpActionSpinner == null || volumeKeyDownActionSpinner == null) {
+            return;
+        }
+        ArrayAdapter<String> actionAdapter = buildSpinnerAdapter(VOLUME_KEY_ACTION_LABELS);
+        volumeKeyUpActionSpinner.setAdapter(actionAdapter);
+        ArrayAdapter<String> secondActionAdapter = buildSpinnerAdapter(VOLUME_KEY_ACTION_LABELS);
+        volumeKeyDownActionSpinner.setAdapter(secondActionAdapter);
+
+        android.widget.AdapterView.OnItemSelectedListener autoSaveSpinnerListener = new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) { handleSettingsInputChanged(true); }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+        };
+        volumeKeyUpActionSpinner.setOnItemSelectedListener(autoSaveSpinnerListener);
+        volumeKeyDownActionSpinner.setOnItemSelectedListener(autoSaveSpinnerListener);
+    }
+
     private void setupGlassOpacityControl() {
         glassOpacitySeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
@@ -596,6 +630,12 @@ public class MainActivity extends ThemedActivity {
         mimoApiKeyInput.setText(settingsStore.getTtsMimoApiKey());
         appThemeSpinner.setSelection(indexOf(APP_THEME_KEYS, settingsStore.getAppThemeMode(), 0));
         readerUiThemeSpinner.setSelection(indexOf(READER_THEME_KEYS, settingsStore.getReaderUiThemeMode(), 0));
+        if (volumeKeyUpActionSpinner != null) {
+            volumeKeyUpActionSpinner.setSelection(indexOf(VOLUME_KEY_ACTION_KEYS, settingsStore.getVolumeKeyUpAction(), 1));
+        }
+        if (volumeKeyDownActionSpinner != null) {
+            volumeKeyDownActionSpinner.setSelection(indexOf(VOLUME_KEY_ACTION_KEYS, settingsStore.getVolumeKeyDownAction(), 2));
+        }
         glassOpacitySeekBar.setProgress(settingsStore.getGlassOpacityPercent() - 20);
         updateGlassOpacityLabel(settingsStore.getGlassOpacityPercent());
         updateWebDavSyncButtons();
@@ -626,6 +666,12 @@ public class MainActivity extends ThemedActivity {
         settingsStore.setTtsMimoApiKey(mimoApiKeyInput.getText().toString());
         settingsStore.setAppThemeMode(APP_THEME_KEYS[appThemeSpinner.getSelectedItemPosition()]);
         settingsStore.setReaderUiThemeMode(READER_THEME_KEYS[readerUiThemeSpinner.getSelectedItemPosition()]);
+        if (volumeKeyUpActionSpinner != null) {
+            settingsStore.setVolumeKeyUpAction(VOLUME_KEY_ACTION_KEYS[volumeKeyUpActionSpinner.getSelectedItemPosition()]);
+        }
+        if (volumeKeyDownActionSpinner != null) {
+            settingsStore.setVolumeKeyDownAction(VOLUME_KEY_ACTION_KEYS[volumeKeyDownActionSpinner.getSelectedItemPosition()]);
+        }
         settingsStore.setGlassOpacityPercent(glassOpacitySeekBar.getProgress() + 20);
         settingsStore.setWebDavSyncBookshelfEnabled(webDavSyncBookshelfButton.isSelected());
         settingsStore.setWebDavSyncFilesEnabled(webDavSyncFilesButton.isSelected());
@@ -1237,6 +1283,8 @@ public class MainActivity extends ThemedActivity {
                 "application/pdf",
                 "application/octet-stream"
         });
+        // 开启多选
+        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
         startActivityForResult(intent, REQUEST_PICK_BOOK);
     }
 
@@ -1249,10 +1297,35 @@ public class MainActivity extends ThemedActivity {
     }
 
     private void importBook(Uri uri) {
+        // 对于 PDF 文件，询问用户是否按页拆分
+        boolean pdfSplitByPage = false;
+        String fileName = uri.getLastPathSegment();
+        if (fileName != null && fileName.toLowerCase(Locale.ROOT).endsWith(".pdf")) {
+            final boolean[] result = {false};
+            runOnUiThread(() -> {
+                new AlertDialog.Builder(this)
+                        .setTitle("PDF 导入选项")
+                        .setMessage("是否将每一页作为一个章节？\n选择“否”将尝试按标题智能拆分。")
+                        .setNegativeButton("否", (d, w) -> {
+                            result[0] = false;
+                            startImport(uri, result[0]);
+                        })
+                        .setPositiveButton("是", (d, w) -> {
+                            result[0] = true;
+                            startImport(uri, result[0]);
+                        })
+                        .show();
+            });
+            return; 
+        }
+        startImport(uri, pdfSplitByPage);
+    }
+
+    private void startImport(Uri uri, boolean pdfSplitByPage) {
         showLoading("正在解析书籍...");
         executor.execute(() -> {
             try {
-                long bookId = databaseHelper.insertImportedBook(importService.importFromUri(uri));
+                long bookId = databaseHelper.insertImportedBook(importService.importFromUri(uri, pdfSplitByPage));
                 runOnUiThread(() -> {
                     hideLoading();
                     refreshBooks();
@@ -1485,10 +1558,7 @@ public class MainActivity extends ThemedActivity {
         if ("monospace".equals(value)) {
             return "等宽体";
         }
-        if ("system_default".equals(value)) {
-            return "系统默认";
-        }
-        return "默认阅读体";
+        return "系统默认";
     }
 
     private String labelForReaderFontWeight(int value) {

@@ -25,7 +25,10 @@ public class BookImportService {
         PDFBoxResourceLoader.init(this.context);
     }
 
-    public ImportedBook importFromUri(Uri uri) throws Exception {
+    /**
+     * 导入书籍，支持指定 PDF 是否按页拆分。
+     */
+    public ImportedBook importFromUri(Uri uri, boolean pdfSplitByPage) throws Exception {
         String displayName = resolveDisplayName(uri);
         String extension = extensionOf(displayName);
         if (!".txt".equals(extension) && !".epub".equals(extension) && !".pdf".equals(extension)) {
@@ -67,7 +70,7 @@ public class BookImportService {
             }
             importedBook.bookType = "text";
         } else if (".pdf".equals(extension)) {
-            parsedChapters = PdfChapterParser.parse(localCopy);
+            parsedChapters = PdfChapterParser.parse(localCopy, pdfSplitByPage);
             importedBook.bookType = "pdf";
         } else {
             parsedChapters = EpubChapterParser.parse(localCopy);

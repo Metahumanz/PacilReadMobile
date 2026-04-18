@@ -1,4 +1,6 @@
 {
-  "java.import.gradle.java.home": "C:\\Program Files\\Microsoft\\jdk-17.0.18.8-hotspot",
-  "java.configuration.updateBuildConfiguration": "automatic"
+  "java.configuration.updateBuildConfiguration": "automatic",
+  "java.configuration.userSettings": {  
+    "java.home": " C:\\Program Files\\Java\\jdk-17.0.2"
+  }
 }

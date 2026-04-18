@@ -42,6 +42,8 @@ public class SettingsStore {
     private static final String KEY_TTS_MIMO_API_KEY = "tts_mimo_api_key";
     private static final String KEY_FLIP_MODE = "flip_mode";
     private static final String KEY_READER_SLIDER_MODE = "reader_slider_mode";
+    private static final String KEY_VOLUME_KEY_UP_ACTION = "volume_key_up_action";
+    private static final String KEY_VOLUME_KEY_DOWN_ACTION = "volume_key_down_action";
     private static final String KEY_CHAPTER_TITLE_VISIBILITY = "chapter_title_visibility";
     private static final String KEY_BOOKSHELF_VIEW_MODE = "bookshelf_view_mode";
     private static final String KEY_GLASS_OPACITY_PERCENT = "glass_opacity_percent";
@@ -171,7 +173,7 @@ public class SettingsStore {
     }
 
     public String getReaderFontFamily() {
-        return normalizeReaderFontFamily(preferences.getString(KEY_FONT_FAMILY, "serif"));
+        return normalizeReaderFontFamily(preferences.getString(KEY_FONT_FAMILY, "system_default"));
     }
 
     public void setReaderFontFamily(String value) {
@@ -306,6 +308,22 @@ public class SettingsStore {
 
     public void setReaderSliderMode(String value) {
         preferences.edit().putString(KEY_READER_SLIDER_MODE, "chapter".equals(value) ? "chapter" : "book").apply();
+    }
+
+    public String getVolumeKeyUpAction() {
+        return normalizeVolumeKeyAction(preferences.getString(KEY_VOLUME_KEY_UP_ACTION, "page_up"), "page_up");
+    }
+
+    public void setVolumeKeyUpAction(String value) {
+        preferences.edit().putString(KEY_VOLUME_KEY_UP_ACTION, normalizeVolumeKeyAction(value, "page_up")).apply();
+    }
+
+    public String getVolumeKeyDownAction() {
+        return normalizeVolumeKeyAction(preferences.getString(KEY_VOLUME_KEY_DOWN_ACTION, "page_down"), "page_down");
+    }
+
+    public void setVolumeKeyDownAction(String value) {
+        preferences.edit().putString(KEY_VOLUME_KEY_DOWN_ACTION, normalizeVolumeKeyAction(value, "page_down")).apply();
     }
 
     public boolean isChapterTitleVisible() {
@@ -463,14 +481,15 @@ public class SettingsStore {
     }
 
     private static String normalizeReaderFontFamily(String value) {
-        if ("serif".equals(value)
-                || "sans-serif".equals(value)
+        if ("sans-serif".equals(value)
                 || "monospace".equals(value)
-                || "system_default".equals(value)
-                || "system-ui".equals(value)) {
-            return "system-ui".equals(value) ? "system_default" : value;
+                || "system_default".equals(value)) {
+            return value;
         }
-        return "serif";
+        if ("serif".equals(value) || "system-ui".equals(value)) {
+            return "system_default";
+        }
+        return "system_default";
     }
 
     private static int normalizeReaderFontWeight(int value) {
@@ -507,6 +526,13 @@ public class SettingsStore {
             return "scroll";
         }
         return "slide";
+    }
+
+    private static String normalizeVolumeKeyAction(String value, String fallback) {
+        if ("system".equals(value) || "page_up".equals(value) || "page_down".equals(value)) {
+            return value;
+        }
+        return fallback;
     }
 
     private static String normalizeHudSlot(String value) {

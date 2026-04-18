@@ -7,6 +7,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.TextView;
 
 import java.util.ArrayList;
@@ -58,6 +59,7 @@ public class AppDrawerController {
     private float drawerVelocityX = 0f;
     private boolean pendingChildTouchCancel = false;
     private boolean drawerGestureStartedOpen = false;
+    private long drawerAnimationToken = 0L;
 
     public AppDrawerController(Activity activity, View rootView, NavigationListener navigationListener) {
         this.activity = activity;
@@ -221,7 +223,7 @@ public class AppDrawerController {
             return;
         }
         drawerOpen = true;
-        animateDrawerTo(0f, 220L);
+        animateDrawerTo(0f, 280L);
     }
 
     public void closeDrawer() {
@@ -229,7 +231,7 @@ public class AppDrawerController {
             return;
         }
         drawerOpen = false;
-        animateDrawerTo(-drawerPanel.getWidth(), 180L);
+        animateDrawerTo(-drawerPanel.getWidth(), 240L);
     }
 
     public boolean isDrawerVisible() {
@@ -260,6 +262,9 @@ public class AppDrawerController {
 
     private boolean shouldStartDrawerGesture(float x) {
         if (!isDrawerVisible()) {
+            if (currentSection == SECTION_BOOKSHELF || currentSection == SECTION_PREVIEW) {
+                return true;
+            }
             return x <= closedDrawerActivationWidth();
         }
         float panelWidth = drawerPanel.getWidth();
@@ -297,30 +302,45 @@ public class AppDrawerController {
         prepareDrawerForInteraction(true);
         drawerPanel.animate().cancel();
         drawerScrim.animate().cancel();
+        final long animationToken = ++drawerAnimationToken;
+        float startOffset = clamp(drawerPanel.getTranslationX(), -drawerPanel.getWidth(), 0f);
+        float panelWidth = Math.max(drawerPanel.getWidth(), 1f);
+        float remainingRatio = Math.abs(targetOffset - startOffset) / panelWidth;
+        if (remainingRatio <= 0.015f) {
+            applyDrawerOffsetState(targetOffset, false);
+            return;
+        }
         float progress = drawerProgressForOffset(targetOffset);
+        float scrimAlpha = drawerScrimAlpha(progress);
+        
+        // Use different interpolators for open and close actions
+        boolean isOpening = targetOffset == 0f;
+        android.view.animation.Interpolator interpolator = isOpening 
+                ? new DecelerateInterpolator(1.3f) 
+                : new android.view.animation.AccelerateInterpolator(1.2f);
+
         drawerPanel.animate()
                 .translationX(targetOffset)
                 .alpha(drawerPanelAlpha(progress))
                 .scaleY(drawerPanelScaleY(progress))
                 .setDuration(durationMs)
+                .setInterpolator(interpolator)
                 .withEndAction(() -> {
-                    if (targetOffset <= -drawerPanel.getWidth()) {
-                        drawerPanel.setVisibility(View.INVISIBLE);
+                    if (animationToken != drawerAnimationToken) {
+                        return;
                     }
+                    applyDrawerOffsetState(targetOffset, false);
                 })
                 .start();
         drawerScrim.animate()
-                .alpha(progress)
+                .alpha(scrimAlpha)
                 .setDuration(durationMs)
-                .withEndAction(() -> {
-                    if (progress <= 0f) {
-                        drawerScrim.setVisibility(View.GONE);
-                    }
-                })
+                .setInterpolator(isOpening ? new DecelerateInterpolator(1.3f) : new android.view.animation.AccelerateInterpolator(1.2f))
                 .start();
     }
 
     private void prepareDrawerForInteraction(boolean forceVisible) {
+        drawerAnimationToken++;
         drawerScrim.bringToFront();
         drawerPanel.bringToFront();
         drawerPanel.animate().cancel();

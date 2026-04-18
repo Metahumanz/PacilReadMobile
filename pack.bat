@@ -2,6 +2,67 @@
 setlocal EnableExtensions EnableDelayedExpansion
 goto :main
 
+:ensure_java
+if defined JAVA_HOME (
+  call :try_java_home "%JAVA_HOME%"
+  if not errorlevel 1 (
+    echo [PacilRead] Using JAVA_HOME: !JAVA_HOME!
+    exit /b 0
+  )
+  echo [PacilRead] Ignoring invalid JAVA_HOME: %JAVA_HOME%
+  set "JAVA_HOME="
+)
+
+call :find_java_home_in_dir "C:\Program Files\Java" "jdk-17*"
+if not errorlevel 1 exit /b 0
+
+call :find_java_home_in_dir "C:\Program Files\Microsoft" "jdk-17*"
+if not errorlevel 1 exit /b 0
+
+call :find_java_home_in_dir "C:\Program Files\Java" "jdk*"
+if not errorlevel 1 exit /b 0
+
+call :find_java_home_in_dir "C:\Program Files\Microsoft" "jdk*"
+if not errorlevel 1 exit /b 0
+
+call :try_java_home "%ProgramFiles%\Android\Android Studio\jbr"
+if not errorlevel 1 (
+  echo [PacilRead] Detected JDK from Android Studio: !JAVA_HOME!
+  exit /b 0
+)
+
+where java >nul 2>nul
+if not errorlevel 1 (
+  echo [PacilRead] JAVA_HOME not set. Falling back to java.exe from PATH.
+  exit /b 0
+)
+
+echo [PacilRead] JDK 17 not found.
+echo [PacilRead] Please install JDK 17 or set JAVA_HOME manually.
+exit /b 1
+
+:find_java_home_in_dir
+set "SEARCH_ROOT=%~1"
+set "SEARCH_PATTERN=%~2"
+if not exist "%SEARCH_ROOT%" exit /b 1
+
+for /d %%D in ("%SEARCH_ROOT%\%SEARCH_PATTERN%") do (
+  call :try_java_home "%%~fD"
+  if not errorlevel 1 (
+    echo [PacilRead] Detected JDK: !JAVA_HOME!
+    exit /b 0
+  )
+)
+
+exit /b 1
+
+:try_java_home
+set "CANDIDATE=%~1"
+if not defined CANDIDATE exit /b 1
+if not exist "%CANDIDATE%\bin\java.exe" exit /b 1
+set "JAVA_HOME=%CANDIDATE%"
+exit /b 0
+
 :ensure_sdk
 if exist "local.properties" (
   call :load_sdk_from_local_properties
@@ -122,6 +183,9 @@ if /I "%MODE%"=="debug" (
 )
 
 call :ensure_sdk
+if errorlevel 1 exit /b %errorlevel%
+
+call :ensure_java
 if errorlevel 1 exit /b %errorlevel%
 
 if /I "%MODE%"=="install" call :preflight_install

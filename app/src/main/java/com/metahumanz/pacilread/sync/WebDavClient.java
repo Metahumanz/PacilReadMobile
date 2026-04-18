@@ -29,38 +29,31 @@ public class WebDavClient {
     }
 
     public Response probe() throws Exception {
-        String base = settingsStore.getWebDavUrl();
-        if (base.isBlank()) {
-            return new Response(0, "服务器地址为空");
-        }
+        String base = requireConfiguredServerUrl();
         Response response = request(base, "PROPFIND", null, "0");
-        if (response.code >= 200 && response.code < 300) {
-            ensureProgressDirectory();
-        }
+        requireSuccessfulResponse(response, "连接服务器", false);
+        ensureProgressDirectory();
         return response;
     }
 
     public void ensureProgressDirectory() throws Exception {
-        String base = settingsStore.getWebDavProgressBaseUrl();
-        if (base.isBlank()) {
-            return;
-        }
+        String base = requireConfiguredProgressBaseUrl();
         if (!settingsStore.getWebDavDir().isBlank()) {
-            request(base, "MKCOL", null, null);
+            requireSuccessfulResponse(request(base, "MKCOL", null, null), "初始化同步目录", true);
         }
-        request(base + "bookProgress/", "MKCOL", null, null);
+        requireSuccessfulResponse(request(base + "bookProgress/", "MKCOL", null, null), "初始化进度目录", true);
     }
 
     public void ensureBackupDirectories() throws Exception {
         String base = backupBaseUrl();
-        request(base, "MKCOL", null, null);
-        request(base + "books/", "MKCOL", null, null);
-        request(base + "covers/", "MKCOL", null, null);
-        request(base + "backgrounds/", "MKCOL", null, null);
+        requireSuccessfulResponse(request(base, "MKCOL", null, null), "初始化备份目录", true);
+        requireSuccessfulResponse(request(base + "books/", "MKCOL", null, null), "初始化书籍备份目录", true);
+        requireSuccessfulResponse(request(base + "covers/", "MKCOL", null, null), "初始化封面备份目录", true);
+        requireSuccessfulResponse(request(base + "backgrounds/", "MKCOL", null, null), "初始化背景备份目录", true);
     }
 
     public String backupBaseUrl() {
-        String base = settingsStore.getWebDavProgressBaseUrl();
+        String base = requireConfiguredProgressBaseUrl();
         if (!base.endsWith("/")) {
             base += "/";
         }
@@ -226,6 +219,35 @@ public class WebDavClient {
     private String authorizationHeader() {
         String raw = settingsStore.getWebDavUser() + ":" + settingsStore.getWebDavPassword();
         return "Basic " + Base64.encodeToString(raw.getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP);
+    }
+
+    private String requireConfiguredServerUrl() {
+        String base = settingsStore.getWebDavUrl();
+        if (base == null || base.isBlank()) {
+            throw new IllegalStateException("请先填写 WebDAV 服务器地址");
+        }
+        return base;
+    }
+
+    private String requireConfiguredProgressBaseUrl() {
+        String base = settingsStore.getWebDavProgressBaseUrl();
+        if (base == null || base.isBlank()) {
+            throw new IllegalStateException("请先填写 WebDAV 服务器地址");
+        }
+        return base;
+    }
+
+    private void requireSuccessfulResponse(Response response, String action, boolean allowExistingCollection) {
+        if (response == null) {
+            throw new IllegalStateException(action + "失败");
+        }
+        int code = response.code;
+        boolean success = code >= 200 && code < 300;
+        boolean existingCollection = allowExistingCollection && (code == 405 || code == 301 || code == 302);
+        if (success || existingCollection) {
+            return;
+        }
+        throw new IllegalStateException(action + "失败: HTTP " + code);
     }
 
     private void setMethod(HttpURLConnection connection, String method) throws Exception {

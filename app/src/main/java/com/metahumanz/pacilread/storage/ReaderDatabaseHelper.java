@@ -86,6 +86,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 "order_index INTEGER NOT NULL," +
                 "FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE" +
                 ")");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_chapters_book_order ON chapters(book_id, order_index)");
 
         db.execSQL("CREATE TABLE IF NOT EXISTS replacement_rules (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT," +
@@ -103,6 +104,14 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 "config_json TEXT NOT NULL," +
                 "updated_at INTEGER NOT NULL" +
                 ")");
+
+        db.execSQL("CREATE TABLE IF NOT EXISTS reading_stats (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                "date TEXT NOT NULL," +
+                "duration_seconds INTEGER NOT NULL DEFAULT 0," +
+                "char_count INTEGER NOT NULL DEFAULT 0" +
+                ")");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_reading_stats_date ON reading_stats(date)");
     }
 
     private void ensureSchema(SQLiteDatabase db) {
@@ -214,10 +223,15 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     }
 
     public synchronized List<ChapterRecord> getChapters(long bookId) {
+        return getChapters(bookId, false);
+    }
+
+    public synchronized List<ChapterRecord> getChapters(long bookId, boolean includeContent) {
         List<ChapterRecord> chapters = new ArrayList<>();
+        String[] columns = includeContent ? null : new String[]{"id", "book_id", "title", "order_index"};
         try (Cursor cursor = getReadableDatabase().query(
                 "chapters",
-                null,
+                columns,
                 "book_id=?",
                 new String[]{String.valueOf(bookId)},
                 null,
@@ -229,13 +243,37 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 chapter.id = cursor.getLong(cursor.getColumnIndexOrThrow("id"));
                 chapter.bookId = cursor.getLong(cursor.getColumnIndexOrThrow("book_id"));
                 chapter.title = cursor.getString(cursor.getColumnIndexOrThrow("title"));
-                chapter.bodyHtml = cursor.getString(cursor.getColumnIndexOrThrow("body_html"));
-                chapter.bodyText = cursor.getString(cursor.getColumnIndexOrThrow("body_text"));
+                if (includeContent) {
+                    chapter.bodyHtml = cursor.getString(cursor.getColumnIndexOrThrow("body_html"));
+                    chapter.bodyText = cursor.getString(cursor.getColumnIndexOrThrow("body_text"));
+                }
                 chapter.orderIndex = cursor.getInt(cursor.getColumnIndexOrThrow("order_index"));
                 chapters.add(chapter);
             }
         }
         return chapters;
+    }
+
+    public synchronized ChapterRecord getChapterContent(long chapterId) {
+        try (Cursor cursor = getReadableDatabase().query(
+                "chapters",
+                new String[]{"body_text", "body_html"},
+                "id=?",
+                new String[]{String.valueOf(chapterId)},
+                null,
+                null,
+                null,
+                "1"
+        )) {
+            if (cursor.moveToFirst()) {
+                ChapterRecord chapter = new ChapterRecord();
+                chapter.id = chapterId;
+                chapter.bodyText = cursor.getString(cursor.getColumnIndexOrThrow("body_text"));
+                chapter.bodyHtml = cursor.getString(cursor.getColumnIndexOrThrow("body_html"));
+                return chapter;
+            }
+        }
+        return null;
     }
 
     public synchronized void updateBookInfo(long bookId, String title, String author) {
@@ -379,6 +417,28 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         getWritableDatabase().delete("custom_themes", "id=?", new String[]{String.valueOf(themeId)});
     }
 
+    public synchronized void recordReadingStats(String date, int durationSeconds, int charCount) {
+        SQLiteDatabase db = getWritableDatabase();
+        // 检查当天是否已有记录
+        try (Cursor cursor = db.query("reading_stats", new String[]{"id", "duration_seconds", "char_count"}, "date=?", new String[]{date}, null, null, null)) {
+            if (cursor.moveToFirst()) {
+                int id = cursor.getInt(0);
+                int oldDuration = cursor.getInt(1);
+                int oldCharCount = cursor.getInt(2);
+                ContentValues values = new ContentValues();
+                values.put("duration_seconds", oldDuration + durationSeconds);
+                values.put("char_count", oldCharCount + charCount);
+                db.update("reading_stats", values, "id=?", new String[]{String.valueOf(id)});
+            } else {
+                ContentValues values = new ContentValues();
+                values.put("date", date);
+                values.put("duration_seconds", durationSeconds);
+                values.put("char_count", charCount);
+                db.insert("reading_stats", null, values);
+            }
+        }
+    }
+
     public synchronized File exportDatabase(File destination) throws IOException {
         close();
         copyFile(getDatabaseFile(), destination);
@@ -496,7 +556,13 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                     }
                     int typeIndex = sourceBooks.getColumnIndex("book_type");
                     values.put("book_type", typeIndex >= 0 ? sourceBooks.getString(typeIndex) : "text");
-                    values.put("progress_index", sourceBooks.getInt(sourceBooks.getColumnIndexOrThrow("progress_index")));
+                    
+                    // 进度一致性校验：确保章节存在
+                    int progressIndex = sourceBooks.getInt(sourceBooks.getColumnIndexOrThrow("progress_index"));
+                    // 这里假设 order_index 与 chapter count 对应，实际恢复时可能需要更复杂的逻辑
+                    // 暂时先存入，由阅读器在打开时处理越界回退
+                    values.put("progress_index", progressIndex);
+                    
                     values.put("progress_offset", sourceBooks.getInt(sourceBooks.getColumnIndexOrThrow("progress_offset")));
                     values.put("last_read_at", sourceBooks.getLong(sourceBooks.getColumnIndexOrThrow("last_read_at")));
                     values.put("pinned", sourceBooks.getInt(sourceBooks.getColumnIndexOrThrow("pinned")));

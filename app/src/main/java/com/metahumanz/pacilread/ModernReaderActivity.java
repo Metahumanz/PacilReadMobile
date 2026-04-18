@@ -29,6 +29,7 @@ import android.text.TextWatcher;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.GestureDetector;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -52,6 +53,11 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import android.content.BroadcastReceiver;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.BatteryManager;
+import android.util.LruCache;
 import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.model.ChapterRecord;
 import com.metahumanz.pacilread.model.ReaderThemeRecord;
@@ -67,7 +73,9 @@ import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.sync.WebDavClient;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.theme.ThemedReaderActivity;
+import com.metahumanz.pacilread.tts.EdgeTtsClient;
 import com.metahumanz.pacilread.tts.MimoTtsClient;
+import com.metahumanz.pacilread.tts.OpusDecoder;
 import com.metahumanz.pacilread.ui.GlassUiHelper;
 import com.metahumanz.pacilread.util.FileAssetHelper;
 
@@ -88,12 +96,14 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     private static final String TAG = "PacilReadReader";
     private static final int CHAPTER_TITLE_BODY_MARGIN_DP = 16;
     private static final int REQUEST_PICK_BACKGROUND = 2001;
+    // 与 Win11 版完全一致的分句正则：[^ \n\t。！？.!?,，;；、]+[。！？.!?,，;；、]*
     private static final Pattern TTS_SEGMENT_PATTERN = Pattern.compile("[^ \\n\\t。！？.!?,，;；、]+[。！？.!?,，;；、]*");
     private static final String TTS_UTTERANCE_PREFIX = "reader-tts-";
     private static final DecelerateInterpolator PAGE_SLIDE_INTERPOLATOR = new DecelerateInterpolator(1.35f);
     private static final AccelerateDecelerateInterpolator PAGE_TURN_INTERPOLATOR = new AccelerateDecelerateInterpolator();
-    private static final String[] READER_FONT_FAMILY_KEYS = new String[]{"serif", "sans-serif", "monospace", "system_default"};
-    private static final String[] READER_FONT_FAMILY_LABELS = new String[]{"默认阅读体", "无衬线", "等宽体", "系统默认"};
+    private static final int MAX_PENDING_TAP_PAGE_STEPS = 2;
+    private static final String[] READER_FONT_FAMILY_KEYS = new String[]{"system_default", "sans-serif", "monospace"};
+    private static final String[] READER_FONT_FAMILY_LABELS = new String[]{"系统默认", "无衬线", "等宽体"};
     private static final int[] READER_FONT_WEIGHT_VALUES = new int[]{250, 400, 700};
     private static final String[] READER_FONT_WEIGHT_LABELS = new String[]{"细体", "标准", "粗体"};
     private static final String[] READER_TEXT_COLOR_KEYS = new String[]{"theme_default", "ink_brown", "graphite", "warm_gray", "jade_ink", "forest_ink", "moon_white"};
@@ -105,14 +115,20 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     private final List<SpeechUnit> ttsUnits = new ArrayList<>();
     private final List<ChapterRecord> chapters = new ArrayList<>();
     private final List<ReplacementRuleRecord> replacementRules = new ArrayList<>();
-    private final Map<Integer, String> processedChapterCache = new HashMap<>();
+    // 使用 LruCache 优化内存占用，限制缓存条目数
+    private final LruCache<Integer, String> processedChapterLruCache = new LruCache<>(100);
     private final Map<Integer, Integer> processedChapterLengthCache = new HashMap<>();
     private final Map<Integer, List<PageSlice>> chapterPageCache = new HashMap<>();
+    // 使用 LruCache 优化内存占用，限制缓存条目数
+    private final LruCache<Integer, String> processedChapterLruCache = new LruCache<>(100);
 
     private ReaderDatabaseHelper databaseHelper;
     private SettingsStore settingsStore;
     private WebDavClient webDavClient;
     private MimoTtsClient mimoTtsClient;
+    private EdgeTtsClient edgeTtsClient;
+    private OpusDecoder opusDecoder;
+    private android.media.AudioTrack audioTrack;
 
 
     private View readerRoot;
@@ -195,12 +211,18 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     private int totalProcessedBookLength = -1;
     private int currentReaderPageColor = 0xFFF7F0E1;
     private int currentReaderTextColor = 0xFF5C4B37;
+    private int pendingTapPagingDelta = 0;
 
     private GestureDetector gestureDetector;
     private TextToSpeech textToSpeech;
     private Bitmap currentPageSnapshotBitmap;
     private Bitmap incomingPageSnapshotBitmap;
     private final Canvas pagingSnapshotCanvas = new Canvas();
+    private int preparedCurrentSnapshotChapterIndex = -1;
+    private int preparedCurrentSnapshotPageIndex = -1;
+    private int preparedIncomingSnapshotChapterIndex = -1;
+    private int preparedIncomingSnapshotPageIndex = -1;
+    private final Runnable pagingSnapshotWarmupRunnable = this::warmPreparedPagingSnapshots;
 
     private final Runnable autoHideRunnable = () -> setControlsVisible(false);
     private final Runnable saveProgressRunnable = this::persistProgress;
@@ -217,6 +239,9 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         }
     };
 
+    private long sessionStartTime = 0;
+    private int sessionStartOffset = 0;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -226,6 +251,8 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         settingsStore = new SettingsStore(this);
         webDavClient = new WebDavClient(settingsStore);
         mimoTtsClient = new MimoTtsClient();
+        edgeTtsClient = new EdgeTtsClient();
+        opusDecoder = new OpusDecoder();
         pagingTouchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
         bookId = getIntent().getLongExtra("book_id", -1L);
         if (savedInstanceState != null) {
@@ -241,6 +268,22 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         setupControls();
 
         textToSpeech = new TextToSpeech(this, this);
+
+        // 记录会话开始
+        sessionStartTime = System.currentTimeMillis();
+        sessionStartOffset = 0; // 将在 loadBook 后更新
+
+        // 注册电池电量广播接收器
+        sysMetricsReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                int level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+                currentBatteryLevel = level;
+                updateHudDisplay();
+            }
+        };
+        registerReceiver(sysMetricsReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+
         pageBodyCurrent.setText("正在载入...");
         loadBook();
     }
@@ -267,6 +310,11 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         stopAutoPage();
         stopTts();
         persistProgress();
+        recordSessionStats();
+        pendingTapPagingDelta = 0;
+        if (pageStage != null) {
+            pageStage.removeCallbacks(pagingSnapshotWarmupRunnable);
+        }
     }
 
     @Override
@@ -306,6 +354,14 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         }
         gestureDetector.onTouchEvent(event);
         return super.dispatchTouchEvent(event);
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (handleReaderVolumeKeyEvent(event)) {
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     @Override
@@ -464,6 +520,8 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
                 dp(10) + systemInsetRight,
                 bottomPanelBottomMargin
         );
+        invalidatePreparedPagingSnapshots();
+        schedulePagingSnapshotWarmup();
     }
 
     private void updateFrameLayoutMargins(View view, int left, int top, int right, int bottom) {
@@ -541,7 +599,12 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     private void setupGestures() {
         gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             @Override
-            public boolean onSingleTapConfirmed(MotionEvent e) {
+            public boolean onDown(MotionEvent e) {
+                return true;
+            }
+
+            @Override
+            public boolean onSingleTapUp(MotionEvent e) {
                 if (controlsVisible) {
                     if (isInsideView(e, menuTopPanel) || isInsideView(e, menuInfoPanel) || isInsideView(e, menuBottomPanel)) {
                         return false;
@@ -552,9 +615,9 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
                 float width = readerRoot.getWidth();
                 float third = width / 3f;
                 if (e.getX() < third) {
-                    pageUp();
+                    requestTapPageTurn(-1);
                 } else if (e.getX() > third * 2f) {
-                    pageDown();
+                    requestTapPageTurn(1);
                 } else {
                     setControlsVisible(true);
                 }
@@ -585,7 +648,9 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         }
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                cancelInteractiveAnimator();
+                if (interactivePaging) {
+                    cancelInteractiveAnimator();
+                }
                 pagingGestureCandidate = isInsideView(event, pageStage) && !isAnimating;
                 pagingDownX = localTouchX(event);
                 pagingDownY = localTouchY(event);
@@ -647,6 +712,28 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         pagingLastEventTime = now;
     }
 
+    private boolean handleReaderVolumeKeyEvent(KeyEvent event) {
+        if (event == null || controlsVisible) {
+            return false;
+        }
+        String action = null;
+        if (event.getKeyCode() == KeyEvent.KEYCODE_VOLUME_UP) {
+            action = settingsStore == null ? "page_up" : settingsStore.getVolumeKeyUpAction();
+        } else if (event.getKeyCode() == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            action = settingsStore == null ? "page_down" : settingsStore.getVolumeKeyDownAction();
+        }
+        if (action == null || "system".equals(action)) {
+            return false;
+        }
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            if (event.getRepeatCount() == 0) {
+                requestTapPageTurn("page_up".equals(action) ? -1 : 1);
+            }
+            return true;
+        }
+        return event.getAction() == KeyEvent.ACTION_UP;
+    }
+
     private boolean prepareInteractivePaging(int direction, float startX, float startY) {
         PageTarget target = resolveInteractiveTarget(direction);
         if (target == null) {
@@ -665,7 +752,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         resetAnimatedPage(pageCurrent);
         resetAnimatedPage(pageIncoming);
         resetShadowView();
-        preparePagingSnapshots();
+        preparePagingSnapshots(target.chapterIndex, target.pageIndex);
         arrangePagingLayers(settingsStore.getFlipMode());
         applyInteractivePagingProgress(0f, interactiveTouchY);
         return true;
@@ -842,7 +929,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         executor.execute(() -> {
             try {
                 BookRecord loadedBook = databaseHelper.getBook(bookId);
-                List<ChapterRecord> loadedChapters = databaseHelper.getChapters(bookId);
+                List<ChapterRecord> loadedChapters = databaseHelper.getChapters(bookId, false); // 仅加载元数据
                 List<ReplacementRuleRecord> loadedRules = databaseHelper.getReplacementRules(bookId);
                 runOnUiThread(() -> {
                     if (loadedBook == null || loadedChapters.isEmpty()) {
@@ -855,7 +942,16 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
                     chapters.addAll(loadedChapters);
                     replacementRules.clear();
                     replacementRules.addAll(loadedRules);
-                    currentChapterIndex = clamp(chapterIndexFromOrder(loadedBook.progressIndex), 0, chapters.size() - 1);
+                    
+                    // 进度越界回退处理
+                    int targetChapterIndex = clamp(chapterIndexFromOrder(loadedBook.progressIndex), 0, chapters.size() - 1);
+                    if (targetChapterIndex != chapterIndexFromOrder(loadedBook.progressIndex)) {
+                        Log.w(TAG, "恢复进度时发现章节缺失，已回退至最近可用章节: " + targetChapterIndex);
+                        databaseHelper.updateProgress(book.id, chapters.get(targetChapterIndex).orderIndex, 0);
+                        book.progressIndex = chapters.get(targetChapterIndex).orderIndex;
+                        book.progressOffset = 0;
+                    }
+                    currentChapterIndex = targetChapterIndex;
                     applyReaderSettings();
                     if (restoredChapterIndex >= 0) {
                         showPage(
@@ -868,7 +964,9 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
                         restoredPageIndex = -1;
                     } else {
                         openChapter(currentChapterIndex, loadedBook.progressOffset, false, 0);
-                        syncFromWebDav(true);
+                        sessionStartOffset = loadedBook.progressOffset;
+                        // 延迟同步，避免阻塞首屏渲染
+                        mainHandler.postDelayed(() -> syncFromWebDav(true), 2000);
                     }
                 });
             } catch (Exception error) {
@@ -905,6 +1003,8 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         List<PageSlice> pages = getPagesForChapter(safeChapterIndex);
         int safePageIndex = clamp(pageIndex, 0, pages.size() - 1);
         if (!animate || isAnimating || book == null) {
+            pendingTapPagingDelta = 0;
+            invalidatePreparedPagingSnapshots();
             bindPage(pageTitleCurrent, pageBodyCurrent, safeChapterIndex, safePageIndex);
             currentChapterIndex = safeChapterIndex;
             currentPageIndex = safePageIndex;
@@ -915,6 +1015,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             updateUiAfterPageChange();
             scheduleProgressSave();
             scheduleAutoHide();
+            schedulePagingSnapshotWarmup();
             return;
         }
         bindPage(pageTitleIncoming, pageBodyIncoming, safeChapterIndex, safePageIndex);
@@ -936,6 +1037,40 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             return true;
         }
         return false;
+    }
+
+    private boolean requestTapPageTurn(int direction) {
+        if (direction == 0 || chapters.isEmpty()) {
+            return false;
+        }
+        if (isAnimating || interactivePaging) {
+            cancelInteractiveAnimator();
+            isAnimating = false;
+            interactivePaging = false;
+            pendingTapPagingDelta = 0;
+        }
+        return direction > 0 ? pageDown() : pageUp();
+    }
+
+    private void consumePendingTapPageTurn() {
+        if (pendingTapPagingDelta == 0 || controlsVisible || isAnimating || interactivePaging) {
+            return;
+        }
+        boolean moved;
+        if (pendingTapPagingDelta > 0) {
+            moved = pageDown();
+            if (moved) {
+                pendingTapPagingDelta--;
+            }
+        } else {
+            moved = pageUp();
+            if (moved) {
+                pendingTapPagingDelta++;
+            }
+        }
+        if (!moved) {
+            pendingTapPagingDelta = 0;
+        }
     }
 
     private boolean pageUp() {
@@ -1124,7 +1259,11 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         cancelInteractiveAnimator();
         resetAnimatedPage(pageCurrent);
         resetAnimatedPage(pageIncoming);
+        if (simulationPageTurnView != null) {
+            simulationPageTurnView.clear();
+        }
         resetShadowView();
+        pageIncoming.setVisibility(View.GONE);
         if ("none".equals(mode)) {
             finishAnimation(targetChapterIndex, targetPageIndex, token);
             return;
@@ -1134,7 +1273,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         } else {
             resetInteractiveTouchState();
         }
-        preparePagingSnapshots();
+        preparePagingSnapshots(targetChapterIndex, targetPageIndex);
         arrangePagingLayers(mode);
         applyPagingVisuals(mode, direction, 0f, "simulation".equals(mode) ? interactiveTouchY : height * 0.5f);
         interactiveAnimator = ValueAnimator.ofFloat(0f, 1f);
@@ -1187,6 +1326,8 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         }
         currentChapterIndex = targetChapterIndex;
         currentPageIndex = targetPageIndex;
+        promoteIncomingSnapshotToCurrent(targetChapterIndex, targetPageIndex);
+        bindPage(pageTitleCurrent, pageBodyCurrent, targetChapterIndex, targetPageIndex);
         boolean keepIncomingCover = pageIncoming != null && pageIncoming.getVisibility() == View.VISIBLE;
         restoreLivePageLayers(keepIncomingCover);
         resetAnimatedPage(pageCurrent);
@@ -1211,7 +1352,6 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         if (token != animationToken) {
             return;
         }
-        bindPage(pageTitleCurrent, pageBodyCurrent, targetChapterIndex, targetPageIndex);
         pageCurrent.setVisibility(View.VISIBLE);
         pageCurrent.bringToFront();
         pageIncoming.setVisibility(View.GONE);
@@ -1220,6 +1360,12 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         updateUiAfterPageChange();
         scheduleProgressSave();
         scheduleAutoHide();
+        schedulePagingSnapshotWarmup();
+        if (pageStage != null) {
+            pageStage.post(this::consumePendingTapPageTurn);
+        } else {
+            consumePendingTapPageTurn();
+        }
     }
 
     private void showTocDialog() {
@@ -1345,6 +1491,17 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         if (mimoTtsClient != null) {
             mimoTtsClient.cancel();
         }
+        if (edgeTtsClient != null) {
+            edgeTtsClient.cancel();
+        }
+        if (opusDecoder != null) {
+            opusDecoder.stop();
+        }
+        if (audioTrack != null) {
+            audioTrack.stop();
+            audioTrack.release();
+            audioTrack = null;
+        }
         if (textToSpeech != null) {
             textToSpeech.stop();
         }
@@ -1423,6 +1580,44 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         updateSystemBarsVisibility(controlsVisible);
         applyGlassOpacity();
         updateReaderHud();
+        updateHudDisplay();
+        invalidatePreparedPagingSnapshots();
+        schedulePagingSnapshotWarmup();
+    }
+
+    private void recordSessionStats() {
+        if (sessionStartTime == 0 || book == null) return;
+        long durationMs = System.currentTimeMillis() - sessionStartTime;
+        if (durationMs < 5000) return; // 少于 5 秒不记录
+        
+        int durationSeconds = (int) (durationMs / 1000);
+        int currentOffset = currentCharOffset();
+        int charCount = Math.max(0, currentOffset - sessionStartOffset);
+        
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
+        String date = sdf.format(new java.util.Date());
+        
+        executor.execute(() -> databaseHelper.recordReadingStats(date, durationSeconds, charCount));
+    }
+
+    private void updateHudDisplay() {
+        if (hudTopLeft == null || hudTopCenter == null || hudTopRight == null) return;
+
+        // 时间
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm", Locale.getDefault());
+        hudTopLeft.setText(sdf.format(new java.util.Date()));
+
+        // 标题
+        if (book != null && !chapters.isEmpty()) {
+            hudTopCenter.setText(book.title);
+        }
+
+        // 电量
+        if (currentBatteryLevel >= 0) {
+            hudTopRight.setText(currentBatteryLevel + "%");
+        } else {
+            hudTopRight.setText("");
+        }
     }
 
     private void persistProgress() {
@@ -1474,16 +1669,29 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             }
             results.clear();
             adapter.clear();
-            for (int i = 0; i < chapters.size(); i++) {
-                String text = getProcessedChapterText(i);
-                int index = text.toLowerCase(Locale.ROOT).indexOf(query);
-                if (index >= 0) {
-                    String snippet = text.substring(Math.max(0, index - 18), Math.min(text.length(), index + query.length() + 24)).replace('\n', ' ').trim();
-                    results.add(new SearchResult(i, chapters.get(i).title, snippet, index));
-                    adapter.add(chapters.get(i).title + "\n" + snippet);
+            resultCount.setText("正在搜索...");
+            
+            executor.execute(() -> {
+                List<SearchResult> tempResults = new ArrayList<>();
+                for (int i = 0; i < chapters.size(); i++) {
+                    String text = getProcessedChapterText(i);
+                    int index = text.toLowerCase(Locale.ROOT).indexOf(query);
+                    if (index >= 0) {
+                        String snippet = text.substring(Math.max(0, index - 18), Math.min(text.length(), index + query.length() + 24)).replace('\n', ' ').trim();
+                        tempResults.add(new SearchResult(i, chapters.get(i).title, snippet, index));
+                    }
                 }
-            }
-            resultCount.setText(results.isEmpty() ? "没有找到匹配内容" : "找到 " + results.size() + " 条结果");
+                
+                runOnUiThread(() -> {
+                    results.clear();
+                    results.addAll(tempResults);
+                    adapter.clear();
+                    for (SearchResult r : results) {
+                        adapter.add(r.chapterTitle + "\n" + r.snippet);
+                    }
+                    resultCount.setText(results.isEmpty() ? "没有找到匹配内容" : "找到 " + results.size() + " 条结果");
+                });
+            });
         });
         showStyledDialog(dialog);
     }
@@ -1507,6 +1715,15 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             if (pattern.trim().isEmpty()) {
                 showToast("请先输入查找内容");
                 return;
+            }
+            // 简单的正则语法预检
+            if (regexCheck.isChecked()) {
+                try {
+                    java.util.regex.Pattern.compile(pattern);
+                } catch (Exception e) {
+                    showToast("正则表达式语法错误: " + e.getMessage());
+                    return;
+                }
             }
             int offset = currentCharOffset();
             executor.execute(() -> {
@@ -1841,8 +2058,8 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         EditText mimoKeyInput = content.findViewById(R.id.tts_input_mimo_api_key);
         TextView noteText = content.findViewById(R.id.tts_text_note);
         Button toggleButton = content.findViewById(R.id.tts_button_toggle);
-        String[] engineKeys = new String[]{"system", "mimo"};
-        ArrayAdapter<String> engineAdapter = buildSpinnerAdapter(new String[]{"本地系统 TTS", "小米 MiMo"});
+        String[] engineKeys = new String[]{"system", "mimo", "edge"};
+        ArrayAdapter<String> engineAdapter = buildSpinnerAdapter(new String[]{"本地系统 TTS", "小米 MiMo", "微软 Edge"});
         engineSpinner.setAdapter(engineAdapter);
         engineSpinner.setSelection(indexOf(engineKeys, settingsStore.getTtsEngine(), 0));
         seekBar.setProgress(clamp(Math.round((settingsStore.getTtsRate() - 0.5f) * 10f), 0, 15));
@@ -1862,6 +2079,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
                 settingsStore.setTtsEngine(engineKeys[position]);
                 updateTtsDialogState(noteText, mimoKeyInput, position == 1);
+                // If switching to Edge, we might want to show a note about network usage or voice selection
             }
 
             @Override
@@ -2084,13 +2302,22 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     }
 
     private String getProcessedChapterText(int chapterIndex) {
-        String cached = processedChapterCache.get(chapterIndex);
+        String cached = processedChapterLruCache.get(chapterIndex);
         if (cached != null) {
             return cached;
         }
-        String body = chapters.get(chapterIndex).bodyText == null ? "" : chapters.get(chapterIndex).bodyText;
+        ChapterRecord chapter = chapters.get(chapterIndex);
+        // 懒加载：如果正文为空，则从数据库获取
+        if (chapter.bodyText == null || chapter.bodyText.isEmpty()) {
+            ChapterRecord fullChapter = databaseHelper.getChapterContent(chapter.id);
+            if (fullChapter != null) {
+                chapter.bodyText = fullChapter.bodyText;
+                chapter.bodyHtml = fullChapter.bodyHtml;
+            }
+        }
+        String body = chapter.bodyText == null ? "" : chapter.bodyText;
         String processed = ReplacementEngine.apply(body, replacementRules);
-        processedChapterCache.put(chapterIndex, processed);
+        processedChapterLruCache.put(chapterIndex, processed);
         processedChapterLengthCache.put(chapterIndex, processed.length());
         return processed;
     }
@@ -2220,6 +2447,99 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             advanceToNextTtsChapter();
             return;
         }
+
+        // TTS 引擎切换逻辑补全
+        String engine = settingsStore.getTtsEngine();
+        if ("mimo".equals(engine)) {
+            speakWithMimo();
+        } else if ("edge".equals(engine)) {
+            speakWithEdge();
+        } else {
+            speakWithSystemTts();
+        }
+    }
+
+    private void speakWithEdge() {
+        int groupCount = 1;
+        StringBuilder builder = new StringBuilder(ttsUnits.get(currentTtsUnitIndex).text);
+        while (currentTtsUnitIndex + groupCount < ttsUnits.size()
+                && !endsWithFullSentence(ttsUnits.get(currentTtsUnitIndex + groupCount - 1).text)) {
+            builder.append(ttsUnits.get(currentTtsUnitIndex + groupCount).text);
+            groupCount++;
+        }
+        String groupText = builder.toString().trim();
+        if (groupText.isEmpty()) {
+            advanceTtsPlayback(groupCount);
+            return;
+        }
+
+        int sessionId = ttsSessionId;
+        int consumedUnits = groupCount;
+        
+        // Initialize AudioTrack for PCM playback (24kHz, Mono, 16-bit)
+        if (audioTrack == null || audioTrack.getState() != android.media.AudioTrack.STATE_INITIALIZED) {
+            int minBufferSize = android.media.AudioTrack.getMinBufferSize(24000, 
+                    android.media.AudioFormat.CHANNEL_OUT_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT);
+            audioTrack = new android.media.AudioTrack(
+                    android.media.AudioManager.STREAM_MUSIC,
+                    24000,
+                    android.media.AudioFormat.CHANNEL_OUT_MONO,
+                    android.media.AudioFormat.ENCODING_PCM_16BIT,
+                    Math.max(minBufferSize, 4096),
+                    android.media.AudioTrack.MODE_STREAM
+            );
+            audioTrack.play();
+        }
+
+        opusDecoder.start(new OpusDecoder.Callback() {
+            @Override
+            public void onPcmData(byte[] pcm, int sampleRate, int channels) {
+                if (audioTrack != null && audioTrack.getPlayState() == android.media.AudioTrack.PLAYSTATE_PLAYING) {
+                    audioTrack.write(pcm, 0, pcm.length);
+                }
+            }
+
+            @Override
+            public void onError(Exception e) {
+                runOnUiThread(() -> {
+                    stopTts();
+                    showToast("Edge TTS 解码失败: " + e.getMessage());
+                });
+            }
+        });
+        
+        edgeTtsClient.synthesize(groupText, settingsStore.getTtsVoice(), settingsStore.getTtsRate(), "+0Hz", new EdgeTtsClient.TtsCallback() {
+            @Override
+            public void onAudioChunk(byte[] chunk) {
+                opusDecoder.feed(chunk);
+            }
+
+            @Override
+            public void onDone() {
+                opusDecoder.stop();
+                runOnUiThread(() -> {
+                    if (!ttsActive || sessionId != ttsSessionId) {
+                        return;
+                    }
+                    advanceTtsPlayback(consumedUnits);
+                });
+            }
+
+            @Override
+            public void onError(Exception e) {
+                opusDecoder.stop();
+                runOnUiThread(() -> {
+                    if (!ttsActive || sessionId != ttsSessionId) {
+                        return;
+                    }
+                    stopTts();
+                    showToast("Edge TTS 失败: " + e.getMessage());
+                });
+            }
+        });
+    }
+
+    private void speakWithMimo() {
         int groupCount = 1;
         StringBuilder builder = new StringBuilder(ttsUnits.get(currentTtsUnitIndex).text);
         while (currentTtsUnitIndex + groupCount < ttsUnits.size()
@@ -2255,6 +2575,17 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         });
     }
 
+    private void speakWithSystemTts() {
+        if (!ttsReady || textToSpeech == null) {
+            advanceToNextTtsChapter();
+            return;
+        }
+        SpeechUnit unit = ttsUnits.get(currentTtsUnitIndex);
+        HashMap<String, String> params = new HashMap<>();
+        params.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, TTS_UTTERANCE_PREFIX + currentTtsUnitIndex);
+        textToSpeech.speak(unit.text, TextToSpeech.QUEUE_ADD, params);
+    }
+
     private boolean endsWithFullSentence(String text) {
         if (text == null) {
             return false;
@@ -2276,15 +2607,15 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             return 0L;
         }
         if ("cover".equals(mode)) {
-            return 280L;
+            return 220L;
         }
         if ("simulation".equals(mode)) {
-            return 380L;
+            return 300L;
         }
         if ("scroll".equals(mode)) {
-            return 240L;
+            return 190L;
         }
-        return 230L;
+        return 180L;
     }
 
     private boolean ensurePageAreaReady(Runnable action) {
@@ -2381,7 +2712,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     }
 
     private void clearAllReaderCaches() {
-        processedChapterCache.clear();
+        processedChapterLruCache.evictAll();
         processedChapterLengthCache.clear();
         chapterPageCache.clear();
         totalProcessedBookLength = -1;
@@ -2468,12 +2799,8 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             case "monospace":
                 familyTypeface = Typeface.MONOSPACE;
                 break;
-            case "system_default":
-                familyTypeface = Typeface.DEFAULT;
-                break;
-            case "serif":
             default:
-                familyTypeface = Typeface.SERIF;
+                familyTypeface = Typeface.DEFAULT;
                 break;
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -2516,14 +2843,26 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         return fallback;
     }
 
-    private void preparePagingSnapshots() {
+    private void preparePagingSnapshots(int targetChapterIndex, int targetPageIndex) {
         if (pageSnapshotCurrent == null || pageSnapshotIncoming == null) {
             pagingSnapshotsVisible = false;
             return;
         }
         clearSimulationPagingLayer();
-        currentPageSnapshotBitmap = screenshotPageLayer(pageCurrent, currentPageSnapshotBitmap);
-        incomingPageSnapshotBitmap = screenshotPageLayer(pageIncoming, incomingPageSnapshotBitmap);
+        if (!hasPreparedCurrentSnapshot(currentChapterIndex, currentPageIndex)) {
+            currentPageSnapshotBitmap = screenshotPageLayer(pageCurrent, currentPageSnapshotBitmap);
+            if (currentPageSnapshotBitmap != null) {
+                preparedCurrentSnapshotChapterIndex = currentChapterIndex;
+                preparedCurrentSnapshotPageIndex = currentPageIndex;
+            }
+        }
+        if (!hasPreparedIncomingSnapshot(targetChapterIndex, targetPageIndex)) {
+            incomingPageSnapshotBitmap = screenshotPageLayer(pageIncoming, incomingPageSnapshotBitmap);
+            if (incomingPageSnapshotBitmap != null) {
+                preparedIncomingSnapshotChapterIndex = targetChapterIndex;
+                preparedIncomingSnapshotPageIndex = targetPageIndex;
+            }
+        }
         if (currentPageSnapshotBitmap == null || incomingPageSnapshotBitmap == null) {
             restoreLivePageLayers(true);
             return;
@@ -2561,6 +2900,174 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         pagingSnapshotCanvas.setBitmap(null);
         targetBitmap.prepareToDraw();
         return targetBitmap;
+    }
+
+    private void schedulePagingSnapshotWarmup() {
+        if (pageStage == null) {
+            return;
+        }
+        pageStage.removeCallbacks(pagingSnapshotWarmupRunnable);
+        if (chapters.isEmpty() || isAnimating || interactivePaging) {
+            return;
+        }
+        pageStage.post(pagingSnapshotWarmupRunnable);
+    }
+
+    private void warmPreparedPagingSnapshots() {
+        if (pageStage == null || chapters.isEmpty() || isAnimating || interactivePaging) {
+            return;
+        }
+        if (!ensurePageAreaReady(this::schedulePagingSnapshotWarmup)) {
+            return;
+        }
+        if (!hasPreparedCurrentSnapshot(currentChapterIndex, currentPageIndex)) {
+            currentPageSnapshotBitmap = screenshotPageLayer(pageCurrent, currentPageSnapshotBitmap);
+            if (currentPageSnapshotBitmap != null) {
+                preparedCurrentSnapshotChapterIndex = currentChapterIndex;
+                preparedCurrentSnapshotPageIndex = currentPageIndex;
+            }
+        }
+        PageTarget target = resolveInteractiveTarget(1);
+        if (target == null) {
+            target = resolveInteractiveTarget(-1);
+        }
+        if (target == null || hasPreparedIncomingSnapshot(target.chapterIndex, target.pageIndex)) {
+            return;
+        }
+        Bitmap preparedBitmap = capturePreparedIncomingSnapshot(target.chapterIndex, target.pageIndex);
+        if (preparedBitmap == null) {
+            preparedIncomingSnapshotChapterIndex = -1;
+            preparedIncomingSnapshotPageIndex = -1;
+            return;
+        }
+        incomingPageSnapshotBitmap = preparedBitmap;
+        preparedIncomingSnapshotChapterIndex = target.chapterIndex;
+        preparedIncomingSnapshotPageIndex = target.pageIndex;
+    }
+
+    private Bitmap capturePreparedIncomingSnapshot(int chapterIndex, int pageIndex) {
+        if (pageIncoming == null) {
+            return null;
+        }
+        int previousVisibility = pageIncoming.getVisibility();
+        float previousAlpha = pageIncoming.getAlpha();
+        bindPage(pageTitleIncoming, pageBodyIncoming, chapterIndex, pageIndex);
+        resetAnimatedPage(pageIncoming);
+        if (pageCurrent != null) {
+            pageCurrent.bringToFront();
+        }
+        pageIncoming.setVisibility(View.VISIBLE);
+        if (!layoutPageLayerForSnapshot(pageIncoming)) {
+            pageIncoming.setAlpha(previousAlpha);
+            pageIncoming.setVisibility(previousVisibility);
+            return null;
+        }
+        Bitmap bitmap = screenshotPageLayer(pageIncoming, incomingPageSnapshotBitmap);
+        pageIncoming.setAlpha(previousAlpha);
+        pageIncoming.setVisibility(previousVisibility);
+        resetAnimatedPage(pageIncoming);
+        if (pageCurrent != null) {
+            pageCurrent.bringToFront();
+        }
+        return bitmap;
+    }
+
+    private boolean layoutPageLayerForSnapshot(View source) {
+        int width = snapshotDimensionFor(source, true);
+        int height = snapshotDimensionFor(source, false);
+        if (width <= 0 || height <= 0) {
+            return false;
+        }
+        int widthSpec = View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY);
+        int heightSpec = View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY);
+        source.measure(widthSpec, heightSpec);
+        source.layout(0, 0, width, height);
+        return true;
+    }
+
+    private int snapshotDimensionFor(View source, boolean width) {
+        if (source == null) {
+            return 0;
+        }
+        int currentValue = width ? source.getWidth() : source.getHeight();
+        if (currentValue > 0) {
+            return currentValue;
+        }
+        if (pageCurrent != null) {
+            int currentPageValue = width ? pageCurrent.getWidth() : pageCurrent.getHeight();
+            if (currentPageValue > 0) {
+                return currentPageValue;
+            }
+        }
+        if (pageStage == null) {
+            return 0;
+        }
+        return width
+                ? Math.max(0, pageStage.getWidth() - pageStage.getPaddingLeft() - pageStage.getPaddingRight())
+                : Math.max(0, pageStage.getHeight() - pageStage.getPaddingTop() - pageStage.getPaddingBottom());
+    }
+
+    private boolean hasPreparedCurrentSnapshot(int chapterIndex, int pageIndex) {
+        return hasPreparedSnapshot(
+                currentPageSnapshotBitmap,
+                pageCurrent,
+                preparedCurrentSnapshotChapterIndex,
+                preparedCurrentSnapshotPageIndex,
+                chapterIndex,
+                pageIndex
+        );
+    }
+
+    private boolean hasPreparedIncomingSnapshot(int chapterIndex, int pageIndex) {
+        return hasPreparedSnapshot(
+                incomingPageSnapshotBitmap,
+                pageIncoming,
+                preparedIncomingSnapshotChapterIndex,
+                preparedIncomingSnapshotPageIndex,
+                chapterIndex,
+                pageIndex
+        );
+    }
+
+    private boolean hasPreparedSnapshot(Bitmap bitmap, View source, int preparedChapterIndex, int preparedPageIndex, int chapterIndex, int pageIndex) {
+        if (bitmap == null
+                || bitmap.isRecycled()
+                || source == null
+                || preparedChapterIndex != chapterIndex
+                || preparedPageIndex != pageIndex) {
+            return false;
+        }
+        int expectedWidth = snapshotDimensionFor(source, true);
+        int expectedHeight = snapshotDimensionFor(source, false);
+        return expectedWidth > 0
+                && expectedHeight > 0
+                && bitmap.getWidth() == expectedWidth
+                && bitmap.getHeight() == expectedHeight;
+    }
+
+    private void invalidatePreparedPagingSnapshots() {
+        preparedCurrentSnapshotChapterIndex = -1;
+        preparedCurrentSnapshotPageIndex = -1;
+        preparedIncomingSnapshotChapterIndex = -1;
+        preparedIncomingSnapshotPageIndex = -1;
+        if (pageStage != null) {
+            pageStage.removeCallbacks(pagingSnapshotWarmupRunnable);
+        }
+    }
+
+    private void promoteIncomingSnapshotToCurrent(int chapterIndex, int pageIndex) {
+        if (!hasPreparedIncomingSnapshot(chapterIndex, pageIndex)) {
+            preparedCurrentSnapshotChapterIndex = -1;
+            preparedCurrentSnapshotPageIndex = -1;
+            return;
+        }
+        Bitmap previousCurrentBitmap = currentPageSnapshotBitmap;
+        currentPageSnapshotBitmap = incomingPageSnapshotBitmap;
+        incomingPageSnapshotBitmap = previousCurrentBitmap;
+        preparedCurrentSnapshotChapterIndex = chapterIndex;
+        preparedCurrentSnapshotPageIndex = pageIndex;
+        preparedIncomingSnapshotChapterIndex = -1;
+        preparedIncomingSnapshotPageIndex = -1;
     }
 
     private void drawSnapshotBaseLayer(Canvas canvas, View source) {
@@ -2613,6 +3120,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     }
 
     private void recyclePagingSnapshots() {
+        invalidatePreparedPagingSnapshots();
         if (currentPageSnapshotBitmap != null && !currentPageSnapshotBitmap.isRecycled()) {
             currentPageSnapshotBitmap.recycle();
         }
@@ -2857,6 +3365,9 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     }
 
     private void setControlsVisible(boolean visible) {
+        if (visible) {
+            pendingTapPagingDelta = 0;
+        }
         if (controlsVisible == visible) {
             if (visible) {
                 scheduleAutoHide();

@@ -1,11 +1,13 @@
 package com.metahumanz.pacilread.reader;
 
+import android.util.Log;
 import com.metahumanz.pacilread.model.ReplacementRuleRecord;
 
 import java.util.List;
 import java.util.regex.Pattern;
 
 public final class ReplacementEngine {
+    private static final String TAG = "ReplacementEngine";
     private ReplacementEngine() {
     }
 
@@ -25,7 +27,8 @@ public final class ReplacementEngine {
                 } else {
                     result = result.replace(rule.pattern, replacement);
                 }
-            } catch (Exception ignore) {
+            } catch (Exception e) {
+                Log.w(TAG, "规则执行失败: pattern=" + rule.pattern + ", error=" + e.getMessage());
             }
         }
         return result;

@@ -391,6 +391,7 @@ public class SimulationPageTurnView extends View {
         } else {
             canvas.clipPath(path1, Region.Op.INTERSECT);
         }
+        canvas.drawColor(pageBackgroundColor);
         canvas.drawBitmap(bitmap, 0f, 0f, null);
         canvas.rotate(degrees, bezierStart1.x, bezierStart1.y);
         backShadowDrawable.setBounds(leftX, Math.round(bezierStart1.y), rightX, Math.round(maxLength + bezierStart1.y));
@@ -414,6 +415,7 @@ public class SimulationPageTurnView extends View {
         } else {
             canvas.clipPath(path0, Region.Op.XOR);
         }
+        canvas.drawColor(pageBackgroundColor);
         canvas.drawBitmap(bitmap, 0f, 0f, null);
         canvas.restore();
     }

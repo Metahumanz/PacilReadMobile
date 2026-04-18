@@ -35,6 +35,8 @@ public class SettingsActivity extends ThemedActivity {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private static final String[] APP_THEME_KEYS = new String[]{"system", "light", "dark"};
     private static final String[] READER_THEME_KEYS = new String[]{"follow_app", "system", "light", "dark"};
+    private static final String[] VOLUME_KEY_ACTION_KEYS = new String[]{"system", "page_up", "page_down"};
+    private static final String[] VOLUME_KEY_ACTION_LABELS = new String[]{"系统音量", "上一页", "下一页"};
 
     private ReaderDatabaseHelper databaseHelper;
     private SettingsStore settingsStore;
@@ -55,6 +57,8 @@ public class SettingsActivity extends ThemedActivity {
     private EditText mimoApiKeyInput;
     private Spinner appThemeSpinner;
     private Spinner readerUiThemeSpinner;
+    private Spinner volumeKeyUpActionSpinner;
+    private Spinner volumeKeyDownActionSpinner;
     private SeekBar glassOpacitySeekBar;
     private TextView glassOpacityText;
     private Button testButton;
@@ -93,6 +97,8 @@ public class SettingsActivity extends ThemedActivity {
         mimoApiKeyInput = findViewById(R.id.input_mimo_api_key);
         appThemeSpinner = findViewById(R.id.spinner_app_theme_mode);
         readerUiThemeSpinner = findViewById(R.id.spinner_reader_ui_theme_mode);
+        volumeKeyUpActionSpinner = findViewById(R.id.spinner_volume_key_up_action);
+        volumeKeyDownActionSpinner = findViewById(R.id.spinner_volume_key_down_action);
         glassOpacitySeekBar = findViewById(R.id.seek_glass_opacity);
         glassOpacityText = findViewById(R.id.text_glass_opacity);
         statusText = findViewById(R.id.text_status);
@@ -169,6 +175,12 @@ public class SettingsActivity extends ThemedActivity {
         mimoApiKeyInput.setText(settingsStore.getTtsMimoApiKey());
         appThemeSpinner.setSelection(indexOf(APP_THEME_KEYS, settingsStore.getAppThemeMode(), 0));
         readerUiThemeSpinner.setSelection(indexOf(READER_THEME_KEYS, settingsStore.getReaderUiThemeMode(), 0));
+        if (volumeKeyUpActionSpinner != null) {
+            volumeKeyUpActionSpinner.setSelection(indexOf(VOLUME_KEY_ACTION_KEYS, settingsStore.getVolumeKeyUpAction(), 1));
+        }
+        if (volumeKeyDownActionSpinner != null) {
+            volumeKeyDownActionSpinner.setSelection(indexOf(VOLUME_KEY_ACTION_KEYS, settingsStore.getVolumeKeyDownAction(), 2));
+        }
         glassOpacitySeekBar.setProgress(settingsStore.getGlassOpacityPercent() - 20);
         updateGlassOpacityLabel(settingsStore.getGlassOpacityPercent());
         updateWebDavSyncButtons();
@@ -192,6 +204,12 @@ public class SettingsActivity extends ThemedActivity {
         settingsStore.setTtsMimoApiKey(mimoApiKeyInput.getText().toString());
         settingsStore.setAppThemeMode(APP_THEME_KEYS[appThemeSpinner.getSelectedItemPosition()]);
         settingsStore.setReaderUiThemeMode(READER_THEME_KEYS[readerUiThemeSpinner.getSelectedItemPosition()]);
+        if (volumeKeyUpActionSpinner != null) {
+            settingsStore.setVolumeKeyUpAction(VOLUME_KEY_ACTION_KEYS[volumeKeyUpActionSpinner.getSelectedItemPosition()]);
+        }
+        if (volumeKeyDownActionSpinner != null) {
+            settingsStore.setVolumeKeyDownAction(VOLUME_KEY_ACTION_KEYS[volumeKeyDownActionSpinner.getSelectedItemPosition()]);
+        }
         settingsStore.setGlassOpacityPercent(glassOpacitySeekBar.getProgress() + 20);
         settingsStore.setWebDavSyncBookshelfEnabled(webDavSyncBookshelfButton.isSelected());
         settingsStore.setWebDavSyncFilesEnabled(webDavSyncFilesButton.isSelected());
@@ -233,6 +251,26 @@ public class SettingsActivity extends ThemedActivity {
         };
         appThemeSpinner.setOnItemSelectedListener(autoSaveSpinnerListener);
         readerUiThemeSpinner.setOnItemSelectedListener(autoSaveSpinnerListener);
+        if (volumeKeyUpActionSpinner != null) {
+            ArrayAdapter<String> volumeKeyUpAdapter = new ArrayAdapter<>(
+                    this,
+                    R.layout.item_spinner_selected,
+                    VOLUME_KEY_ACTION_LABELS
+            );
+            volumeKeyUpAdapter.setDropDownViewResource(R.layout.item_spinner_dropdown);
+            volumeKeyUpActionSpinner.setAdapter(volumeKeyUpAdapter);
+            volumeKeyUpActionSpinner.setOnItemSelectedListener(autoSaveSpinnerListener);
+        }
+        if (volumeKeyDownActionSpinner != null) {
+            ArrayAdapter<String> volumeKeyDownAdapter = new ArrayAdapter<>(
+                    this,
+                    R.layout.item_spinner_selected,
+                    VOLUME_KEY_ACTION_LABELS
+            );
+            volumeKeyDownAdapter.setDropDownViewResource(R.layout.item_spinner_dropdown);
+            volumeKeyDownActionSpinner.setAdapter(volumeKeyDownAdapter);
+            volumeKeyDownActionSpinner.setOnItemSelectedListener(autoSaveSpinnerListener);
+        }
     }
 
     private void setupGlassOpacityControl() {
