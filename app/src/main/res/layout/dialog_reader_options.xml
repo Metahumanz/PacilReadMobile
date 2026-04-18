@@ -58,7 +58,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="进度调节"
+            android:text="滑条控制"
             android:textColor="@color/on_surface"
             android:textStyle="bold" />
 
@@ -131,7 +131,7 @@
             android:textColor="@color/on_surface"
             android:textStyle="bold" />
 
-        <LinearLayout
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"

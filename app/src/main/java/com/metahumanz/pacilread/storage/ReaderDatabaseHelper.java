@@ -49,38 +49,22 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     @Override
     public void onCreate(SQLiteDatabase db) {
         createAllTables(db);
+        ensureSchema(db);
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        if (oldVersion < 2) {
-            try {
-                db.execSQL("ALTER TABLE books ADD COLUMN cover_path TEXT");
-            } catch (Exception ignore) {
-            }
-            try {
-                db.execSQL("ALTER TABLE books ADD COLUMN book_type TEXT NOT NULL DEFAULT 'text'");
-            } catch (Exception ignore) {
-            }
-            db.execSQL("CREATE TABLE IF NOT EXISTS custom_themes (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                    "name TEXT NOT NULL UNIQUE," +
-                    "config_json TEXT NOT NULL," +
-                    "updated_at INTEGER NOT NULL" +
-                    ")");
-        }
-        if (oldVersion < 3) {
-            db.execSQL("CREATE TABLE IF NOT EXISTS custom_themes (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                    "name TEXT NOT NULL UNIQUE," +
-                    "config_json TEXT NOT NULL," +
-                    "updated_at INTEGER NOT NULL" +
-                    ")");
-        }
+        ensureSchema(db);
+    }
+
+    @Override
+    public void onOpen(SQLiteDatabase db) {
+        super.onOpen(db);
+        ensureSchema(db);
     }
 
     private void createAllTables(SQLiteDatabase db) {
-        db.execSQL("CREATE TABLE books (" +
+        db.execSQL("CREATE TABLE IF NOT EXISTS books (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT," +
                 "title TEXT NOT NULL," +
                 "author TEXT," +
@@ -93,7 +77,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 "pinned INTEGER NOT NULL DEFAULT 0" +
                 ")");
 
-        db.execSQL("CREATE TABLE chapters (" +
+        db.execSQL("CREATE TABLE IF NOT EXISTS chapters (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT," +
                 "book_id INTEGER NOT NULL," +
                 "title TEXT NOT NULL," +
@@ -103,7 +87,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 "FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE" +
                 ")");
 
-        db.execSQL("CREATE TABLE replacement_rules (" +
+        db.execSQL("CREATE TABLE IF NOT EXISTS replacement_rules (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT," +
                 "pattern TEXT NOT NULL," +
                 "replacement TEXT NOT NULL," +
@@ -113,12 +97,52 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 "active INTEGER NOT NULL DEFAULT 1" +
                 ")");
 
-        db.execSQL("CREATE TABLE custom_themes (" +
+        db.execSQL("CREATE TABLE IF NOT EXISTS custom_themes (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT," +
                 "name TEXT NOT NULL UNIQUE," +
                 "config_json TEXT NOT NULL," +
                 "updated_at INTEGER NOT NULL" +
                 ")");
+    }
+
+    private void ensureSchema(SQLiteDatabase db) {
+        createAllTables(db);
+        ensureColumn(db, "books", "cover_path", "cover_path TEXT");
+        ensureColumn(db, "books", "book_type", "book_type TEXT NOT NULL DEFAULT 'text'");
+        ensureColumn(db, "books", "progress_index", "progress_index INTEGER NOT NULL DEFAULT 0");
+        ensureColumn(db, "books", "progress_offset", "progress_offset INTEGER NOT NULL DEFAULT 0");
+        ensureColumn(db, "books", "last_read_at", "last_read_at INTEGER NOT NULL DEFAULT 0");
+        ensureColumn(db, "books", "pinned", "pinned INTEGER NOT NULL DEFAULT 0");
+
+        ensureColumn(db, "chapters", "body_html", "body_html TEXT NOT NULL DEFAULT ''");
+        ensureColumn(db, "chapters", "body_text", "body_text TEXT NOT NULL DEFAULT ''");
+        ensureColumn(db, "chapters", "order_index", "order_index INTEGER NOT NULL DEFAULT 0");
+
+        ensureColumn(db, "replacement_rules", "scope", "scope TEXT NOT NULL DEFAULT 'global'");
+        ensureColumn(db, "replacement_rules", "book_id", "book_id INTEGER");
+        ensureColumn(db, "replacement_rules", "is_regex", "is_regex INTEGER NOT NULL DEFAULT 0");
+        ensureColumn(db, "replacement_rules", "active", "active INTEGER NOT NULL DEFAULT 1");
+
+        ensureColumn(db, "custom_themes", "config_json", "config_json TEXT NOT NULL DEFAULT '{}'");
+        ensureColumn(db, "custom_themes", "updated_at", "updated_at INTEGER NOT NULL DEFAULT 0");
+    }
+
+    private void ensureColumn(SQLiteDatabase db, String tableName, String columnName, String definition) {
+        if (hasColumn(db, tableName, columnName)) {
+            return;
+        }
+        db.execSQL("ALTER TABLE " + tableName + " ADD COLUMN " + definition);
+    }
+
+    private boolean hasColumn(SQLiteDatabase db, String tableName, String columnName) {
+        try (Cursor cursor = db.rawQuery("PRAGMA table_info(" + tableName + ")", null)) {
+            while (cursor.moveToNext()) {
+                if (columnName.equalsIgnoreCase(cursor.getString(cursor.getColumnIndexOrThrow("name")))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     public synchronized long insertImportedBook(ImportedBook importedBook) {

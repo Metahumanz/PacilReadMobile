@@ -13,13 +13,17 @@ public final class ReaderPaginator {
     }
 
     public static List<PageSlice> paginate(CharSequence source, TextPaint paint, int width, int height, float lineSpacingExtra) {
+        return paginate(source, paint, width, height, height, lineSpacingExtra);
+    }
+
+    public static List<PageSlice> paginate(CharSequence source, TextPaint paint, int width, int firstPageHeight, int regularPageHeight, float lineSpacingExtra) {
         List<PageSlice> pages = new ArrayList<>();
         if (source == null) {
             pages.add(new PageSlice(0, 0, ""));
             return pages;
         }
         String text = source.toString();
-        if (text.isEmpty() || width <= 0 || height <= 0) {
+        if (text.isEmpty() || width <= 0 || firstPageHeight <= 0 || regularPageHeight <= 0) {
             pages.add(new PageSlice(0, text.length(), text));
             return pages;
         }
@@ -33,9 +37,10 @@ public final class ReaderPaginator {
 
         int startLine = 0;
         while (startLine < lineCount) {
+            int pageHeight = pages.isEmpty() ? firstPageHeight : regularPageHeight;
             int endLine = startLine;
             while (endLine + 1 < lineCount
-                    && layout.getLineBottom(endLine + 1) - layout.getLineTop(startLine) <= height) {
+                    && layout.getLineBottom(endLine + 1) - layout.getLineTop(startLine) <= pageHeight) {
                 endLine++;
             }
             int start = layout.getLineStart(startLine);

@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.MotionEvent;
 import android.view.View;
@@ -45,6 +46,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends ThemedActivity {
+    private static final String TAG = "PacilReadMain";
     public static final String EXTRA_START_SECTION = "start_section";
     public static final String START_SECTION_BOOKSHELF = "bookshelf";
     public static final String START_SECTION_PREVIEW = "preview";
@@ -787,12 +789,17 @@ public class MainActivity extends ThemedActivity {
 
     private void refreshBooks() {
         executor.execute(() -> {
-            List<BookRecord> books = databaseHelper.getBooks();
-            runOnUiThread(() -> {
-                allBooks.clear();
-                allBooks.addAll(books);
-                applyFilter(currentQuery());
-            });
+            try {
+                List<BookRecord> books = databaseHelper.getBooks();
+                runOnUiThread(() -> {
+                    allBooks.clear();
+                    allBooks.addAll(books);
+                    applyFilter(currentQuery());
+                });
+            } catch (Exception error) {
+                Log.e(TAG, "Failed to refresh bookshelf", error);
+                runOnUiThread(() -> showToast("加载书架失败: " + readableError(error)));
+            }
         });
     }
 
@@ -1028,9 +1035,13 @@ public class MainActivity extends ThemedActivity {
 
     private void maybeAutoOpenLastBook() {
         executor.execute(() -> {
-            long bookId = databaseHelper.getMostRecentBookId();
-            if (bookId > 0) {
-                runOnUiThread(() -> openBook(bookId));
+            try {
+                long bookId = databaseHelper.getMostRecentBookId();
+                if (bookId > 0) {
+                    runOnUiThread(() -> openBook(bookId));
+                }
+            } catch (Exception error) {
+                Log.e(TAG, "Failed to resolve last opened book", error);
             }
         });
     }
@@ -1060,6 +1071,13 @@ public class MainActivity extends ThemedActivity {
 
     private String normalizeQuery(String query) {
         return query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String readableError(Throwable error) {
+        if (error == null || error.getMessage() == null || error.getMessage().isBlank()) {
+            return "未知错误";
+        }
+        return error.getMessage();
     }
 
     private String labelForAppTheme(String value) {

@@ -347,7 +347,7 @@ public class SettingsStore {
     }
 
     public String getHudBottomRight() {
-        return normalizeHudSlot(preferences.getString(KEY_HUD_BOTTOM_RIGHT, "progress"));
+        return normalizeHudSlot(preferences.getString(KEY_HUD_BOTTOM_RIGHT, "page_and_progress"));
     }
 
     public void setHudBottomRight(String value) {
@@ -449,11 +449,18 @@ public class SettingsStore {
     }
 
     private static String normalizeHudSlot(String value) {
+        if ("progress".equals(value)) {
+            return "book_progress";
+        }
         if ("title".equals(value)
                 || "chapter".equals(value)
-                || "progress".equals(value)
+                || "title_chapter".equals(value)
                 || "time".equals(value)
-                || "battery".equals(value)) {
+                || "battery".equals(value)
+                || "chapter_page".equals(value)
+                || "book_progress".equals(value)
+                || "page_and_progress".equals(value)
+                || "time_and_battery".equals(value)) {
             return value;
         }
         return "none";
