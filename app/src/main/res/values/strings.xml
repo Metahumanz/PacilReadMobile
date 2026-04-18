@@ -12,7 +12,7 @@
     <string name="reader_back">返回</string>
     <string name="reader_toc">目录</string>
     <string name="reader_search">搜索</string>
-    <string name="reader_style">样式</string>
+    <string name="reader_style">排版</string>
     <string name="reader_tts">朗读</string>
     <string name="reader_auto_page">自动</string>
     <string name="reader_sync">云同步</string>

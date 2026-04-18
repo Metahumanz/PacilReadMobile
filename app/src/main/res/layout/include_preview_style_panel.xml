@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_card"
+    android:elevation="4dp"
+    android:orientation="vertical"
+    android:padding="18dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-medium"
+        android:text="排版设置"
+        android:textColor="@color/on_surface"
+        android:textSize="18sp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="这里的调整会即时作用到下面的阅读样张，并同步到正式阅读页。"
+        android:textColor="@color/on_surface_muted"
+        android:textSize="12sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="界面明暗"
+        android:textColor="@color/on_surface"
+        android:textStyle="bold" />
+
+    <Spinner
+        android:id="@+id/preview_style_spinner_ui_theme_mode"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_input"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="阅读预设"
+        android:textColor="@color/on_surface"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/preview_style_button_theme_paper"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_outline_button"
+            android:text="纸控"
+            android:textAllCaps="false"
+            android:textColor="@color/on_surface" />
+
+        <Button
+            android:id="@+id/preview_style_button_theme_forest"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_outline_button"
+            android:text="护眼"
+            android:textAllCaps="false"
+            android:textColor="@color/on_surface" />
+
+        <Button
+            android:id="@+id/preview_style_button_theme_night"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/bg_outline_button"
+            android:text="夜航"
+            android:textAllCaps="false"
+            android:textColor="@color/on_surface" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="字体"
+        android:textColor="@color/on_surface"
+        android:textStyle="bold" />
+
+    <Spinner
+        android:id="@+id/preview_style_spinner_font_family"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_input"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="字号"
+        android:textColor="@color/on_surface"
+        android:textStyle="bold" />
+
+    <SeekBar
+        android:id="@+id/preview_style_seek_font"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="50" />
+
+    <TextView
+        android:id="@+id/preview_style_text_font"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/on_surface_muted" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="字重"
+        android:textColor="@color/on_surface"
+        android:textStyle="bold" />
+
+    <SeekBar
+        android:id="@+id/preview_style_seek_font_weight"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="2" />
+
+    <TextView
+        android:id="@+id/preview_style_text_font_weight"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/on_surface_muted" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="行距"
+        android:textColor="@color/on_surface"
+        android:textStyle="bold" />
+
+    <SeekBar
+        android:id="@+id/preview_style_seek_line_spacing"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="28" />
+
+    <TextView
+        android:id="@+id/preview_style_text_line_spacing"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/on_surface_muted" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="左右边距"
+        android:textColor="@color/on_surface"
+        android:textStyle="bold" />
+
+    <SeekBar
+        android:id="@+id/preview_style_seek_side_padding"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="40" />
+
+    <TextView
+        android:id="@+id/preview_style_text_side_padding"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/on_surface_muted" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="上下边距"
+        android:textColor="@color/on_surface"
+        android:textStyle="bold" />
+
+    <SeekBar
+        android:id="@+id/preview_style_seek_vertical_padding"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="64" />
+
+    <TextView
+        android:id="@+id/preview_style_text_vertical_padding"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/on_surface_muted" />
+
+    <CheckBox
+        android:id="@+id/preview_style_check_keep_screen_on"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="阅读时保持屏幕常亮"
+        android:textColor="@color/on_surface" />
+
+    <CheckBox
+        android:id="@+id/preview_style_check_show_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="章节首页显示标题"
+        android:textColor="@color/on_surface" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="背景图"
+        android:textColor="@color/on_surface"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/preview_style_button_pick_background"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_outline_button"
+            android:text="选择背景"
+            android:textAllCaps="false"
+            android:textColor="@color/primary" />
+
+        <Button
+            android:id="@+id/preview_style_button_clear_background"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/bg_outline_button"
+            android:text="恢复预设"
+            android:textAllCaps="false"
+            android:textColor="@color/primary" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/preview_style_text_background"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textColor="@color/on_surface_muted"
+        android:textSize="12sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="自定义主题"
+        android:textColor="@color/on_surface"
+        android:textStyle="bold" />
+
+    <Button
+        android:id="@+id/preview_style_button_save_theme"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_outline_button"
+        android:text="保存当前主题"
+        android:textAllCaps="false"
+        android:textColor="@color/primary" />
+
+    <LinearLayout
+        android:id="@+id/preview_style_custom_theme_list"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="vertical" />
+
+</LinearLayout>

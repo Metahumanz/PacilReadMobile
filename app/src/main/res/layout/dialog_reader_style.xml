@@ -86,6 +86,50 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
+            android:text="字体"
+            android:textColor="@color/on_surface"
+            android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/style_spinner_font_family"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="字色"
+            android:textColor="@color/on_surface"
+            android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/style_spinner_text_color"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp" />
+
+        <TextView
+            android:id="@+id/style_text_text_color"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:padding="12dp"
+            android:text="字色预览"
+            android:textColor="@color/on_surface_muted" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
             android:text="字号"
             android:textColor="@color/on_surface"
             android:textStyle="bold" />
@@ -98,6 +142,26 @@
 
         <TextView
             android:id="@+id/style_text_font"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/on_surface_muted" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="字重"
+            android:textColor="@color/on_surface"
+            android:textStyle="bold" />
+
+        <SeekBar
+            android:id="@+id/style_seek_font_weight"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="2" />
+
+        <TextView
+            android:id="@+id/style_text_font_weight"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="@color/on_surface_muted" />

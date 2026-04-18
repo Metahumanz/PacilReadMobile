@@ -6,17 +6,22 @@ import android.os.Build;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.ViewGroup;
 import android.widget.TextView;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class AppDrawerController {
+    private static final float DRAWER_WIDTH_RATIO = 0.84f;
+    private static final int DRAWER_MIN_WIDTH_DP = 300;
+    private static final int DRAWER_MAX_WIDTH_DP = 420;
     private static final int EDGE_ACTIVATION_MIN_DP = 112;
     private static final int EDGE_ACTIVATION_MAX_DP = 156;
     private static final int EDGE_EXCLUSION_DP = 156;
     private static final int OPEN_DRAWER_DRAG_EXTRA_DP = 72;
-    private static final float OPEN_THRESHOLD_RATIO = 0.62f;
+    private static final float OPEN_THRESHOLD_RATIO = 0.34f;
+    private static final float CLOSE_THRESHOLD_RATIO = 0.22f;
     private static final float FLING_VELOCITY_THRESHOLD = 0.55f;
     public static final int SECTION_NONE = -1;
     public static final int SECTION_BOOKSHELF = 0;
@@ -52,6 +57,7 @@ public class AppDrawerController {
     private long drawerLastEventTime = 0L;
     private float drawerVelocityX = 0f;
     private boolean pendingChildTouchCancel = false;
+    private boolean drawerGestureStartedOpen = false;
 
     public AppDrawerController(Activity activity, View rootView, NavigationListener navigationListener) {
         this.activity = activity;
@@ -89,15 +95,20 @@ public class AppDrawerController {
         });
 
         drawerPanel.post(() -> {
+            updateDrawerPanelWidth();
             setDrawerOffset(-drawerPanel.getWidth());
             drawerPanel.setVisibility(View.INVISIBLE);
             drawerScrim.setVisibility(View.GONE);
             drawerScrim.setAlpha(0f);
         });
         if (rootView != null) {
-            rootView.post(this::updateDrawerGestureExclusion);
+            rootView.post(() -> {
+                updateDrawerPanelWidth();
+                syncDrawerOffsetToCurrentState();
+                updateDrawerGestureExclusion();
+            });
             rootView.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
-                    updateDrawerGestureExclusion()
+                    handleRootLayoutChanged()
             );
         }
         updateNavigationState();
@@ -141,6 +152,7 @@ public class AppDrawerController {
                 drawerGestureCandidate = shouldStartDrawerGesture(x);
                 drawerDragging = false;
                 drawerVelocityX = 0f;
+                drawerGestureStartedOpen = isDrawerVisible();
                 if (drawerGestureCandidate) {
                     drawerDownX = x;
                     drawerDownY = y;
@@ -170,7 +182,7 @@ public class AppDrawerController {
                     }
                     drawerDragging = true;
                     pendingChildTouchCancel = true;
-                    prepareDrawerForGesture();
+                    prepareDrawerForInteraction(false);
                 }
                 float targetOffset = clamp(drawerBaseOffset + deltaX, -drawerPanel.getWidth(), 0f);
                 setDrawerOffset(targetOffset);
@@ -189,9 +201,11 @@ public class AppDrawerController {
                 if (drawerGestureCandidate && isDrawerVisible() && x > drawerPanel.getWidth()) {
                     closeDrawer();
                     drawerGestureCandidate = false;
+                    drawerGestureStartedOpen = false;
                     return true;
                 }
                 drawerGestureCandidate = false;
+                drawerGestureStartedOpen = false;
                 return false;
             default:
                 return false;
@@ -254,13 +268,24 @@ public class AppDrawerController {
 
     private void finishDrawerGesture() {
         float offset = drawerPanel.getTranslationX();
-        float openThreshold = -drawerPanel.getWidth() * (1f - OPEN_THRESHOLD_RATIO);
-        boolean shouldOpen = offset > openThreshold || drawerVelocityX > FLING_VELOCITY_THRESHOLD;
-        if (drawerVelocityX < -FLING_VELOCITY_THRESHOLD) {
-            shouldOpen = false;
+        float panelWidth = Math.max(drawerPanel.getWidth(), 1);
+        boolean shouldOpen;
+        if (drawerGestureStartedOpen) {
+            float closeThreshold = -panelWidth * CLOSE_THRESHOLD_RATIO;
+            shouldOpen = !(offset <= closeThreshold || drawerVelocityX < -FLING_VELOCITY_THRESHOLD);
+            if (drawerVelocityX > FLING_VELOCITY_THRESHOLD) {
+                shouldOpen = true;
+            }
+        } else {
+            float openThreshold = -panelWidth * (1f - OPEN_THRESHOLD_RATIO);
+            shouldOpen = offset > openThreshold || drawerVelocityX > FLING_VELOCITY_THRESHOLD;
+            if (drawerVelocityX < -FLING_VELOCITY_THRESHOLD) {
+                shouldOpen = false;
+            }
         }
         drawerGestureCandidate = false;
         drawerDragging = false;
+        drawerGestureStartedOpen = false;
         if (shouldOpen) {
             openDrawer();
         } else {
@@ -269,12 +294,14 @@ public class AppDrawerController {
     }
 
     private void animateDrawerTo(float targetOffset, long durationMs) {
-        prepareDrawerForGesture();
+        prepareDrawerForInteraction(true);
         drawerPanel.animate().cancel();
         drawerScrim.animate().cancel();
-        float progress = 1f - (-targetOffset / drawerPanel.getWidth());
+        float progress = drawerProgressForOffset(targetOffset);
         drawerPanel.animate()
                 .translationX(targetOffset)
+                .alpha(drawerPanelAlpha(progress))
+                .scaleY(drawerPanelScaleY(progress))
                 .setDuration(durationMs)
                 .withEndAction(() -> {
                     if (targetOffset <= -drawerPanel.getWidth()) {
@@ -293,21 +320,19 @@ public class AppDrawerController {
                 .start();
     }
 
-    private void prepareDrawerForGesture() {
-        drawerPanel.setVisibility(View.VISIBLE);
-        drawerScrim.setVisibility(View.VISIBLE);
+    private void prepareDrawerForInteraction(boolean forceVisible) {
+        drawerScrim.bringToFront();
+        drawerPanel.bringToFront();
         drawerPanel.animate().cancel();
         drawerScrim.animate().cancel();
+        float panelWidth = Math.max(drawerPanel.getWidth(), 1);
+        float currentOffset = clamp(drawerPanel.getTranslationX(), -panelWidth, 0f);
+        applyDrawerOffsetState(currentOffset, forceVisible);
     }
 
     private void setDrawerOffset(float offset) {
         float clamped = clamp(offset, -drawerPanel.getWidth(), 0f);
-        float progress = 1f - (-clamped / drawerPanel.getWidth());
-        drawerPanel.setVisibility(progress <= 0f ? View.INVISIBLE : View.VISIBLE);
-        drawerPanel.setTranslationX(clamped);
-        drawerScrim.setVisibility(progress <= 0f ? View.GONE : View.VISIBLE);
-        drawerScrim.setAlpha(progress);
-        drawerOpen = progress > 0.95f;
+        applyDrawerOffsetState(clamped, false);
     }
 
     private float clamp(float value, float min, float max) {
@@ -326,6 +351,101 @@ public class AppDrawerController {
 
     private int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private void applyDrawerOffsetState(float offset, boolean keepVisible) {
+        if (drawerPanel == null || drawerScrim == null) {
+            return;
+        }
+        float panelWidth = Math.max(drawerPanel.getWidth(), 1f);
+        float clampedOffset = clamp(offset, -panelWidth, 0f);
+        float progress = drawerProgressForOffset(clampedOffset);
+        float scrimAlpha = drawerScrimAlpha(progress);
+        boolean showPanel = keepVisible || progress > 0.001f;
+        boolean showScrim = keepVisible || scrimAlpha > 0f;
+
+        drawerPanel.setPivotX(0f);
+        drawerPanel.setPivotY(drawerPanel.getHeight() * 0.5f);
+        drawerPanel.setVisibility(showPanel ? View.VISIBLE : View.INVISIBLE);
+        drawerPanel.setTranslationX(clampedOffset);
+        drawerPanel.setAlpha(showPanel ? drawerPanelAlpha(progress) : 0f);
+        drawerPanel.setScaleY(drawerPanelScaleY(progress));
+
+        drawerScrim.setVisibility(showScrim ? View.VISIBLE : View.GONE);
+        drawerScrim.setAlpha(showScrim ? scrimAlpha : 0f);
+        drawerOpen = progress > 0.95f;
+    }
+
+    private float drawerProgressForOffset(float offset) {
+        float panelWidth = Math.max(drawerPanel.getWidth(), 1f);
+        float clampedOffset = clamp(offset, -panelWidth, 0f);
+        return 1f - (-clampedOffset / panelWidth);
+    }
+
+    private float drawerPanelAlpha(float progress) {
+        float safeProgress = Math.max(0f, Math.min(1f, progress));
+        if (safeProgress <= 0f) {
+            return 0f;
+        }
+        float easedProgress = 1f - (float) Math.pow(1f - safeProgress, 1.18f);
+        return 0.74f + 0.26f * easedProgress;
+    }
+
+    private float drawerPanelScaleY(float progress) {
+        float safeProgress = Math.max(0f, Math.min(1f, progress));
+        if (safeProgress <= 0f) {
+            return 0.986f;
+        }
+        float easedProgress = 1f - (float) Math.pow(1f - safeProgress, 1.08f);
+        return 0.986f + 0.014f * easedProgress;
+    }
+
+    private float drawerScrimAlpha(float progress) {
+        float safeProgress = Math.max(0f, Math.min(1f, progress));
+        if (safeProgress <= 0.04f) {
+            return 0f;
+        }
+        float easedProgress = (safeProgress - 0.04f) / 0.96f;
+        easedProgress = (float) Math.pow(easedProgress, 1.35f);
+        return Math.min(0.92f, easedProgress);
+    }
+
+    private void handleRootLayoutChanged() {
+        updateDrawerPanelWidth();
+        syncDrawerOffsetToCurrentState();
+        updateDrawerGestureExclusion();
+    }
+
+    private void updateDrawerPanelWidth() {
+        if (drawerPanel == null) {
+            return;
+        }
+        int containerWidth = rootView != null ? rootView.getWidth() : 0;
+        if (containerWidth <= 0) {
+            return;
+        }
+        int desiredWidth = clamp(
+                Math.round(containerWidth * DRAWER_WIDTH_RATIO),
+                dp(DRAWER_MIN_WIDTH_DP),
+                dp(DRAWER_MAX_WIDTH_DP)
+        );
+        ViewGroup.LayoutParams layoutParams = drawerPanel.getLayoutParams();
+        if (layoutParams == null || layoutParams.width == desiredWidth) {
+            return;
+        }
+        layoutParams.width = desiredWidth;
+        drawerPanel.setLayoutParams(layoutParams);
+    }
+
+    private void syncDrawerOffsetToCurrentState() {
+        if (drawerPanel == null || drawerPanel.getWidth() == 0) {
+            return;
+        }
+        if (drawerDragging) {
+            setDrawerOffset(drawerPanel.getTranslationX());
+            return;
+        }
+        setDrawerOffset(drawerOpen ? 0f : -drawerPanel.getWidth());
     }
 
     private void updateDrawerGestureExclusion() {

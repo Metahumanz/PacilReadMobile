@@ -25,6 +25,9 @@ public class SettingsStore {
     private static final String KEY_WEB_DAV_SYNC_THEMES = "webdav_sync_themes";
     private static final String KEY_WEB_DAV_SYNC_BACKGROUNDS = "webdav_sync_backgrounds";
     private static final String KEY_FONT_SIZE = "font_size_sp";
+    private static final String KEY_FONT_FAMILY = "font_family";
+    private static final String KEY_FONT_WEIGHT = "font_weight";
+    private static final String KEY_TEXT_COLOR = "reader_text_color";
     private static final String KEY_LINE_SPACING = "line_spacing_extra";
     private static final String KEY_SIDE_PADDING = "side_padding_dp";
     private static final String KEY_VERTICAL_PADDING = "vertical_padding_dp";
@@ -165,6 +168,30 @@ public class SettingsStore {
 
     public void setFontSizeSp(float value) {
         preferences.edit().putFloat(KEY_FONT_SIZE, clamp(value, 12f, 34f)).apply();
+    }
+
+    public String getReaderFontFamily() {
+        return normalizeReaderFontFamily(preferences.getString(KEY_FONT_FAMILY, "serif"));
+    }
+
+    public void setReaderFontFamily(String value) {
+        preferences.edit().putString(KEY_FONT_FAMILY, normalizeReaderFontFamily(value)).apply();
+    }
+
+    public int getReaderFontWeight() {
+        return normalizeReaderFontWeight(preferences.getInt(KEY_FONT_WEIGHT, 400));
+    }
+
+    public void setReaderFontWeight(int value) {
+        preferences.edit().putInt(KEY_FONT_WEIGHT, normalizeReaderFontWeight(value)).apply();
+    }
+
+    public String getReaderTextColor() {
+        return normalizeReaderTextColor(preferences.getString(KEY_TEXT_COLOR, "theme_default"));
+    }
+
+    public void setReaderTextColor(String value) {
+        preferences.edit().putString(KEY_TEXT_COLOR, normalizeReaderTextColor(value)).apply();
     }
 
     public float getLineSpacingExtraSp() {
@@ -433,6 +460,40 @@ public class SettingsStore {
             return value;
         }
         return "follow_app";
+    }
+
+    private static String normalizeReaderFontFamily(String value) {
+        if ("serif".equals(value)
+                || "sans-serif".equals(value)
+                || "monospace".equals(value)
+                || "system_default".equals(value)
+                || "system-ui".equals(value)) {
+            return "system-ui".equals(value) ? "system_default" : value;
+        }
+        return "serif";
+    }
+
+    private static int normalizeReaderFontWeight(int value) {
+        if (value <= 325) {
+            return 250;
+        }
+        if (value >= 550) {
+            return 700;
+        }
+        return 400;
+    }
+
+    private static String normalizeReaderTextColor(String value) {
+        if ("ink_brown".equals(value)
+                || "graphite".equals(value)
+                || "warm_gray".equals(value)
+                || "jade_ink".equals(value)
+                || "forest_ink".equals(value)
+                || "moon_white".equals(value)
+                || "theme_default".equals(value)) {
+            return value;
+        }
+        return "theme_default";
     }
 
     private static String normalizeFlipMode(String value) {

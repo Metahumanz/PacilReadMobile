@@ -12,6 +12,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class JustifiedPageTextView extends TextView {
+    private static final float JUSTIFY_MIN_FILL_RATIO = 0.9f;
+    private static final float JUSTIFY_MAX_RESIDUAL_EM = 2.2f;
+
     private boolean fullJustifyEnabled = true;
 
     public JustifiedPageTextView(Context context) {
@@ -73,8 +76,9 @@ public class JustifiedPageTextView extends TextView {
             }
             float lineLeft = layout.getLineLeft(lineIndex);
             float baseline = layout.getLineBaseline(lineIndex);
-            if (shouldJustify(layout, lineIndex, drawLine, paragraphEnd)) {
-                drawJustifiedLine(canvas, drawLine, lineLeft, baseline, availableWidth, paint);
+            float lineAvailableWidth = Math.max(0f, availableWidth - Math.max(0f, lineLeft));
+            if (shouldJustify(drawLine, paragraphEnd, lineAvailableWidth, paint)) {
+                drawJustifiedLine(canvas, drawLine, lineLeft, baseline, lineAvailableWidth, paint);
             } else {
                 canvas.drawText(drawLine, lineLeft, baseline, paint);
             }
@@ -82,14 +86,25 @@ public class JustifiedPageTextView extends TextView {
         canvas.restoreToCount(saveCount);
     }
 
-    private boolean shouldJustify(Layout layout, int lineIndex, String lineText, boolean paragraphEnd) {
+    private boolean shouldJustify(String lineText, boolean paragraphEnd, float availableWidth, TextPaint paint) {
         if (paragraphEnd) {
             return false;
         }
-        return lineText.trim().length() > 1;
+        String trimmedLine = lineText.trim();
+        if (trimmedLine.length() <= 1 || availableWidth <= 0f) {
+            return false;
+        }
+        float naturalWidth = paint.measureText(lineText);
+        float residualWidth = availableWidth - naturalWidth;
+        if (residualWidth <= 0.5f) {
+            return true;
+        }
+        float fillRatio = naturalWidth / availableWidth;
+        float residualLimit = Math.max(paint.getTextSize() * JUSTIFY_MAX_RESIDUAL_EM, 1f);
+        return fillRatio >= JUSTIFY_MIN_FILL_RATIO && residualWidth <= residualLimit;
     }
 
-    private void drawJustifiedLine(Canvas canvas, String lineText, float startX, float baseline, int availableWidth, TextPaint paint) {
+    private void drawJustifiedLine(Canvas canvas, String lineText, float startX, float baseline, float availableWidth, TextPaint paint) {
         float x = startX;
         int indentEnd = 0;
         while (indentEnd < lineText.length()) {

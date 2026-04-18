@@ -14,16 +14,18 @@
 
         <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="196dp">
+            android:layout_height="196dp"
+            android:background="@drawable/bg_book_cover"
+            android:clipToOutline="true"
+            android:outlineProvider="background">
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="@drawable/bg_soft_button"
                 android:gravity="center"
                 android:text="+"
-                android:textColor="@color/primary"
-                android:textSize="40sp"
+                android:textColor="@android:color/white"
+                android:textSize="42sp"
                 android:textStyle="bold" />
 
             <TextView

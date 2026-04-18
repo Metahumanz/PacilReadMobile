@@ -399,11 +399,11 @@
                             android:textSize="18sp" />
 
                         <!-- Flat reader preview area -->
-                        <FrameLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="360dp"
-                            android:layout_marginTop="14dp"
-                            android:background="@drawable/bg_reader_stage">
+                            <FrameLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="360dp"
+                                android:layout_marginTop="14dp"
+                                android:background="@drawable/bg_reader_stage">
 
                             <ImageView
                                 android:id="@+id/image_preview_reader_background"
@@ -411,54 +411,50 @@
                                 android:layout_height="match_parent"
                                 android:scaleType="centerCrop" />
 
-                            <View
-                                android:id="@+id/view_preview_reader_scrim"
-                                android:layout_width="match_parent"
-                                android:layout_height="match_parent"
-                                android:background="@color/overlay_light" />
+                                <View
+                                    android:id="@+id/view_preview_reader_scrim"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:background="@color/overlay_light" />
 
-                            <!-- Reader text area -->
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="match_parent"
-                                android:orientation="vertical"
-                                android:padding="18dp">
+                                <!-- Reader text area -->
+                                <LinearLayout
+                                    android:id="@+id/layout_preview_reader_page"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:orientation="vertical"
+                                    android:padding="18dp">
 
                                 <TextView
-                                    android:id="@+id/text_preview_reader_heading"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    android:text="前言"
-                                    android:textColor="@color/on_surface"
-                                    android:textSize="18sp"
-                                    android:textStyle="bold" />
+                                        android:id="@+id/text_preview_reader_heading"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:includeFontPadding="false"
+                                        android:text="前言"
+                                        android:textColor="@color/on_surface"
+                                        android:textSize="18sp"
+                                        android:textStyle="bold" />
 
-                                <TextView
-                                    android:id="@+id/text_preview_reader_body"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="0dp"
-                                    android:layout_marginTop="14dp"
-                                    android:layout_weight="1"
+                                    <com.metahumanz.pacilread.reader.JustifiedPageTextView
+                                        android:id="@+id/text_preview_reader_body"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="0dp"
+                                        android:layout_marginTop="14dp"
+                                        android:layout_weight="1"
                                     android:lineSpacingExtra="5sp"
-                                    android:textColor="@color/on_surface"
-                                    android:textSize="14sp" />
-                            </LinearLayout>
-                        </FrameLayout>
+                                        android:textColor="@color/on_surface"
+                                        android:textSize="14sp" />
+                                </LinearLayout>
+                            </FrameLayout>
+                        </LinearLayout>
 
-                        <Button
-                            android:id="@+id/button_preview_open_settings"
+                        <include
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="14dp"
-                            android:background="@drawable/bg_outline_button"
-                            android:fontFamily="sans-serif-medium"
-                            android:minHeight="44dp"
-                            android:text="进入设置调排版"
-                            android:textAllCaps="false"
-                            android:textColor="@color/on_surface" />
+                            layout="@layout/include_preview_style_panel" />
                     </LinearLayout>
-                </LinearLayout>
-            </ScrollView>
+                </ScrollView>
 
             <!-- ===== Section: Settings (embedded) ===== -->
             <ScrollView

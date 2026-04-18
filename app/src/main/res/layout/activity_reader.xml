@@ -34,6 +34,7 @@
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
                 android:fontFamily="serif"
+                android:includeFontPadding="false"
                 android:maxLines="2"
                 android:textColor="@color/on_surface"
                 android:textSize="20sp"
@@ -70,6 +71,7 @@
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
                 android:fontFamily="serif"
+                android:includeFontPadding="false"
                 android:maxLines="2"
                 android:textColor="@color/on_surface"
                 android:textSize="20sp"
@@ -88,11 +90,51 @@
                 android:textSize="19sp" />
         </LinearLayout>
 
+        <ImageView
+            android:id="@+id/page_snapshot_current"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:scaleType="fitXY"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@+id/page_snapshot_incoming"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:scaleType="fitXY"
+            android:visibility="gone" />
+
+        <com.metahumanz.pacilread.reader.SimulationPageTurnView
+            android:id="@+id/page_simulation_turn"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
+
         <View
             android:id="@+id/view_page_shadow"
             android:layout_width="48dp"
             android:layout_height="match_parent"
             android:background="@drawable/bg_reader_page_shadow"
+            android:layout_gravity="start"
+            android:visibility="gone" />
+
+        <View
+            android:id="@+id/view_page_fold_shadow"
+            android:layout_width="132dp"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_reader_page_fold_shadow"
+            android:layout_gravity="start"
+            android:visibility="gone" />
+
+        <View
+            android:id="@+id/view_page_fold_highlight"
+            android:layout_width="72dp"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_reader_page_fold_highlight"
+            android:layout_gravity="start"
             android:visibility="gone" />
     </FrameLayout>
 
@@ -230,7 +272,7 @@
         android:layout_marginLeft="10dp"
         android:layout_marginTop="10dp"
         android:layout_marginRight="10dp"
-        android:background="@drawable/bg_menu_panel"
+        android:background="@drawable/bg_reader_menu_panel_solid"
         android:elevation="10dp"
         android:orientation="vertical"
         android:padding="14dp"
@@ -246,7 +288,7 @@
                 android:id="@+id/button_back"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_reader_menu_button"
+                android:background="@drawable/bg_reader_menu_button_solid"
                 android:fontFamily="sans-serif-medium"
                 android:minHeight="42dp"
                 android:minWidth="0dp"
@@ -310,7 +352,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="8dp"
-                    android:background="@drawable/bg_reader_menu_button"
+                    android:background="@drawable/bg_reader_menu_button_solid"
                     android:fontFamily="sans-serif-medium"
                     android:minHeight="40dp"
                     android:minWidth="0dp"
@@ -328,7 +370,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="8dp"
-                    android:background="@drawable/bg_reader_menu_button"
+                    android:background="@drawable/bg_reader_menu_button_solid"
                     android:fontFamily="sans-serif-medium"
                     android:minHeight="40dp"
                     android:minWidth="0dp"
@@ -346,7 +388,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="8dp"
-                    android:background="@drawable/bg_reader_menu_button"
+                    android:background="@drawable/bg_reader_menu_button_solid"
                     android:fontFamily="sans-serif-medium"
                     android:minHeight="40dp"
                     android:minWidth="0dp"
@@ -364,7 +406,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="8dp"
-                    android:background="@drawable/bg_reader_menu_button"
+                    android:background="@drawable/bg_reader_menu_button_solid"
                     android:fontFamily="sans-serif-medium"
                     android:minHeight="40dp"
                     android:minWidth="0dp"
@@ -382,7 +424,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="8dp"
-                    android:background="@drawable/bg_reader_menu_button"
+                    android:background="@drawable/bg_reader_menu_button_solid"
                     android:fontFamily="sans-serif-medium"
                     android:minHeight="40dp"
                     android:minWidth="0dp"
@@ -399,7 +441,7 @@
                     android:id="@+id/button_theme_toggle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:background="@drawable/bg_reader_menu_button"
+                    android:background="@drawable/bg_reader_menu_button_solid"
                     android:fontFamily="sans-serif-medium"
                     android:minHeight="40dp"
                     android:minWidth="0dp"
@@ -425,7 +467,7 @@
         android:layout_marginLeft="10dp"
         android:layout_marginRight="10dp"
         android:layout_marginBottom="148dp"
-        android:background="@drawable/bg_menu_panel"
+        android:background="@drawable/bg_reader_menu_panel_solid"
         android:elevation="8dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
@@ -439,7 +481,7 @@
             android:id="@+id/button_toc"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_reader_menu_button"
+            android:background="@drawable/bg_reader_menu_button_solid"
             android:fontFamily="sans-serif-medium"
             android:minHeight="40dp"
             android:minWidth="0dp"
@@ -490,7 +532,7 @@
             android:id="@+id/button_reader_options"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_reader_menu_button"
+            android:background="@drawable/bg_reader_menu_button_solid"
             android:fontFamily="sans-serif-medium"
             android:minHeight="40dp"
             android:minWidth="0dp"
@@ -512,7 +554,7 @@
         android:layout_marginLeft="10dp"
         android:layout_marginRight="10dp"
         android:layout_marginBottom="8dp"
-        android:background="@drawable/bg_menu_panel"
+        android:background="@drawable/bg_reader_menu_panel_solid"
         android:elevation="10dp"
         android:orientation="vertical"
         android:padding="14dp"
@@ -529,7 +571,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="10dp"
-                android:background="@drawable/bg_reader_menu_button"
+                android:background="@drawable/bg_reader_menu_button_solid"
                 android:fontFamily="sans-serif-medium"
                 android:minHeight="42dp"
                 android:minWidth="0dp"
@@ -554,7 +596,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="10dp"
-                android:background="@drawable/bg_reader_menu_button"
+                android:background="@drawable/bg_reader_menu_button_solid"
                 android:fontFamily="sans-serif-medium"
                 android:minHeight="42dp"
                 android:minWidth="0dp"
