@@ -15,7 +15,7 @@ PacilRead 的纯原生 Android 版本，包名为 `com.metahumanz.pacilread`。
 - 自定义主题与背景图
 - 多种翻页动画
 - 自动翻页
-- Android 原生 TTS / 小米 MiMo 听书
+- Android 原生 TTS / 小米 MiMo / 微软 Edge 听书
 - WebDAV 进度同步
 - WebDAV 全量 / 增量备份恢复
 - 浅色 / 深色资源适配
@@ -25,6 +25,15 @@ PacilRead 的纯原生 Android 版本，包名为 `com.metahumanz.pacilread`。
 - JDK 17
 - Android SDK
 - Windows 命令行环境
+
+JDK 建议优先通过 `JAVA_HOME` 配置；如果没有配置，仓库根目录的 `pack.bat` 会自动尝试探测以下位置：
+
+- `C:\Program Files\Java\jdk-17*`
+- `C:\Program Files\Microsoft\jdk-17*`
+- `C:\Program Files\Java\jdk*`
+- `C:\Program Files\Microsoft\jdk*`
+- `C:\Program Files\Android\Android Studio\jbr`
+- `PATH` 里的 `java.exe`
 
 Android SDK 路径请按本地环境自行配置，`local.properties` 不纳入版本控制。
 
@@ -108,9 +117,11 @@ sdk.dir=C\:\\Android\\SDK
 
 ## 听书说明
 
-- 阅读页听书面板支持 `本地系统 TTS` 和 `小米 MiMo` 两种引擎。
-- 使用 MiMo 时，可以在阅读页听书面板里直接填写 API Key，也可以在设置页提前保存。
-- MiMo 相关实现主类为 `com.metahumanz.pacilread.tts.MimoTtsClient`。
+- 阅读页听书面板支持 `本地系统 TTS`、`小米 MiMo` 和 `微软 Edge` 三种引擎。
+- **本地系统 TTS**：使用 Android 设备自带的语音合成服务，无需联网。
+- **小米 MiMo**：需要配置 API Key。可以在阅读页听书面板或设置页中填写。实现类为 `com.metahumanz.pacilread.tts.MimoTtsClient`。
+- **微软 Edge**：基于微软 Azure 语音服务，提供自然流畅的云端语音。无需额外配置，但需要网络连接。实现类为 `com.metahumanz.pacilread.tts.EdgeTtsClient`。
+- **分句逻辑**：所有引擎均采用与 Win11 版一致的分句正则，确保跨平台听书节奏统一。
 
 ## 项目结构
 
