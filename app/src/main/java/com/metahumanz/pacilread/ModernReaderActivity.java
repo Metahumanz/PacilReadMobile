@@ -119,8 +119,6 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     private final LruCache<Integer, String> processedChapterLruCache = new LruCache<>(100);
     private final Map<Integer, Integer> processedChapterLengthCache = new HashMap<>();
     private final Map<Integer, List<PageSlice>> chapterPageCache = new HashMap<>();
-    // 使用 LruCache 优化内存占用，限制缓存条目数
-    private final LruCache<Integer, String> processedChapterLruCache = new LruCache<>(100);
 
     private ReaderDatabaseHelper databaseHelper;
     private SettingsStore settingsStore;
@@ -2508,7 +2506,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             }
         });
         
-        edgeTtsClient.synthesize(groupText, settingsStore.getTtsVoice(), settingsStore.getTtsRate(), "+0Hz", new EdgeTtsClient.TtsCallback() {
+        edgeTtsClient.synthesize(groupText, "zh-CN-XiaoxiaoNeural", settingsStore.getTtsRate(), "+0Hz", new EdgeTtsClient.TtsCallback() {
             @Override
             public void onAudioChunk(byte[] chunk) {
                 opusDecoder.feed(chunk);

@@ -28,10 +28,12 @@ public final class PdfChapterParser {
                     stripper.setEndPage(i + 1);
                     String text = stripper.getText(document);
                     if (text != null && !text.trim().isEmpty()) {
-                        ImportedBook.ChapterSeed seed = new ImportedBook.ChapterSeed();
-                        seed.title = "第 " + (i + 1) + " 页";
-                        seed.bodyText = text;
-                        seed.orderIndex = i;
+                        ImportedBook.ChapterSeed seed = new ImportedBook.ChapterSeed(
+                                "第 " + (i + 1) + " 页",
+                                null,
+                                text,
+                                i
+                        );
                         chapters.add(seed);
                     }
                 }

@@ -33,6 +33,10 @@ public class EdgeTtsClient {
     private WebSocket webSocket;
     private final OkHttpClient client;
     private TtsCallback callback;
+    private String currentText;
+    private String currentVoice;
+    private float currentRate;
+    private String currentPitch;
 
     public interface TtsCallback {
         void onAudioChunk(byte[] chunk);
@@ -49,6 +53,10 @@ public class EdgeTtsClient {
 
     public void synthesize(String text, String voice, float rate, String pitch, TtsCallback callback) {
         this.callback = callback;
+        this.currentText = text;
+        this.currentVoice = voice;
+        this.currentRate = rate;
+        this.currentPitch = pitch;
         try {
             String connId = UUID.randomUUID().toString().replace("-", "");
             String gecToken = generateSecMsGec();
@@ -128,13 +136,13 @@ public class EdgeTtsClient {
 
             // 2. Send SSML
             String reqId = UUID.randomUUID().toString().replace("-", "");
-            String rateStr = rate >= 1.0f ? "+" + ((int)((rate - 1.0f) * 100)) + "%" : ((int)((rate - 1.0f) * 100)) + "%";
+            String rateStr = currentRate >= 1.0f ? "+" + ((int)((currentRate - 1.0f) * 100)) + "%" : ((int)((currentRate - 1.0f) * 100)) + "%";
             if (rateStr.equals("+0%")) rateStr = "+0.00%";
             
             String ssml = "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'>" +
-                    "<voice name='" + voice + "'>" +
-                    "<prosody rate='" + rateStr + "' pitch='" + (pitch != null ? pitch : "+0Hz") + "'>" +
-                    text + "</prosody></voice></speak>";
+                    "<voice name='" + currentVoice + "'>" +
+                    "<prosody rate='" + rateStr + "' pitch='" + (currentPitch != null ? currentPitch : "+0Hz") + "'>" +
+                    currentText + "</prosody></voice></speak>";
             
             String ssmlMsg = "X-RequestId:" + reqId +
                     "\r\nContent-Type:application/ssml+xml\r\n" +

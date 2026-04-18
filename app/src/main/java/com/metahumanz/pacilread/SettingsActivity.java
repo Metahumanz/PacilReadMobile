@@ -364,7 +364,7 @@ public class SettingsActivity extends ThemedActivity {
         statusText.setText("正在导入书籍...");
         executor.execute(() -> {
             try {
-                long bookId = databaseHelper.insertImportedBook(importService.importFromUri(uri));
+                long bookId = databaseHelper.insertImportedBook(importService.importFromUri(uri, false));
                 runOnUiThread(() -> {
                     setBusy(false);
                     statusText.setText("书籍已导入");
