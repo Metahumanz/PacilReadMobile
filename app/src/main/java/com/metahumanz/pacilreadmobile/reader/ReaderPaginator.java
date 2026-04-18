@@ -1,4 +1,4 @@
-package com.metahumanz.pacilread.reader;
+package com.metahumanz.pacilreadmobile.reader;
 
 import android.os.Build;
 import android.text.Layout;

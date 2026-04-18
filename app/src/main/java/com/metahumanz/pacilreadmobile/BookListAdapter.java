@@ -1,4 +1,4 @@
-package com.metahumanz.pacilread;
+package com.metahumanz.pacilreadmobile;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -10,7 +10,7 @@ import android.widget.BaseAdapter;
 import android.widget.ImageView;
 import android.widget.TextView;
 
-import com.metahumanz.pacilread.model.BookRecord;
+import com.metahumanz.pacilreadmobile.model.BookRecord;
 
 import java.io.File;
 import java.text.DateFormat;

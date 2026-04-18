@@ -1,4 +1,4 @@
-package com.metahumanz.pacilread.importer;
+package com.metahumanz.pacilreadmobile.importer;
 
 import android.content.ContentResolver;
 import android.content.Context;
@@ -7,7 +7,7 @@ import android.net.Uri;
 import android.provider.OpenableColumns;
 
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader;
-import com.metahumanz.pacilread.model.ImportedBook;
+import com.metahumanz.pacilreadmobile.model.ImportedBook;
 
 import java.io.File;
 import java.io.FileOutputStream;

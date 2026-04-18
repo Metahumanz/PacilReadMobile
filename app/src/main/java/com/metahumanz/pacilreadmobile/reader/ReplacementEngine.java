@@ -1,6 +1,6 @@
-package com.metahumanz.pacilread.reader;
+package com.metahumanz.pacilreadmobile.reader;
 
-import com.metahumanz.pacilread.model.ReplacementRuleRecord;
+import com.metahumanz.pacilreadmobile.model.ReplacementRuleRecord;
 
 import java.util.List;
 import java.util.regex.Pattern;

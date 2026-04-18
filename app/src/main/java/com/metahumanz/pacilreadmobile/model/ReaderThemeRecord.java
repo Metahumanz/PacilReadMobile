@@ -1,4 +1,4 @@
-package com.metahumanz.pacilread.model;
+package com.metahumanz.pacilreadmobile.model;
 
 public class ReaderThemeRecord {
     public long id;

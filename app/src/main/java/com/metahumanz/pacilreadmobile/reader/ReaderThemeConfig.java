@@ -1,6 +1,6 @@
-package com.metahumanz.pacilread.reader;
+package com.metahumanz.pacilreadmobile.reader;
 
-import com.metahumanz.pacilread.storage.SettingsStore;
+import com.metahumanz.pacilreadmobile.storage.SettingsStore;
 
 import org.json.JSONObject;
 

@@ -39,7 +39,7 @@
                 android:textSize="20sp"
                 android:textStyle="bold" />
 
-            <com.metahumanz.pacilread.reader.JustifiedPageTextView
+            <com.metahumanz.pacilreadmobile.reader.JustifiedPageTextView
                 android:id="@+id/text_page_body_current"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
@@ -75,7 +75,7 @@
                 android:textSize="20sp"
                 android:textStyle="bold" />
 
-            <com.metahumanz.pacilread.reader.JustifiedPageTextView
+            <com.metahumanz.pacilreadmobile.reader.JustifiedPageTextView
                 android:id="@+id/text_page_body_incoming"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"

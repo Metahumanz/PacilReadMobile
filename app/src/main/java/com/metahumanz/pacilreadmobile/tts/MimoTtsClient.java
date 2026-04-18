@@ -1,4 +1,4 @@
-package com.metahumanz.pacilread.tts;
+package com.metahumanz.pacilreadmobile.tts;
 
 import android.media.AudioAttributes;
 import android.media.AudioFormat;

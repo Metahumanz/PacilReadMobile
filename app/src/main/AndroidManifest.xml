@@ -11,14 +11,14 @@
         android:supportsRtl="true"
         android:theme="@style/PacilReadTheme">
         <activity
-            android:name=".SettingsActivity"
+            android:name="com.metahumanz.pacilreadmobile.SettingsActivity"
             android:exported="false" />
         <activity
-            android:name=".ReaderActivity"
+            android:name="com.metahumanz.pacilreadmobile.ReaderActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
         <activity
-            android:name=".MainActivity"
+            android:name="com.metahumanz.pacilreadmobile.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

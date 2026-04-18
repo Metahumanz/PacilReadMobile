@@ -1,4 +1,4 @@
-package com.metahumanz.pacilread.storage;
+package com.metahumanz.pacilreadmobile.storage;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -19,6 +19,11 @@ public class SettingsStore {
     private static final String KEY_WEB_DAV_PASSWORD = "webdav_password";
     private static final String KEY_WEB_DAV_LAST_FULL = "webdav_last_full";
     private static final String KEY_WEB_DAV_LAST_LITE = "webdav_last_lite";
+    private static final String KEY_WEB_DAV_SYNC_BOOKSHELF = "webdav_sync_bookshelf";
+    private static final String KEY_WEB_DAV_SYNC_FILES = "webdav_sync_files";
+    private static final String KEY_WEB_DAV_SYNC_UI_SETTINGS = "webdav_sync_ui_settings";
+    private static final String KEY_WEB_DAV_SYNC_THEMES = "webdav_sync_themes";
+    private static final String KEY_WEB_DAV_SYNC_BACKGROUNDS = "webdav_sync_backgrounds";
     private static final String KEY_FONT_SIZE = "font_size_sp";
     private static final String KEY_LINE_SPACING = "line_spacing_extra";
     private static final String KEY_SIDE_PADDING = "side_padding_dp";
@@ -75,7 +80,7 @@ public class SettingsStore {
     }
 
     public String getWebDavDir() {
-        return preferences.getString(KEY_WEB_DAV_DIR, "");
+        return normalizeDirectory(preferences.getString(KEY_WEB_DAV_DIR, "Books"));
     }
 
     public void setWebDavDir(String value) {
@@ -112,6 +117,46 @@ public class SettingsStore {
 
     public void setWebDavLastLiteBackupAt(long value) {
         preferences.edit().putLong(KEY_WEB_DAV_LAST_LITE, value).apply();
+    }
+
+    public boolean isWebDavSyncBookshelfEnabled() {
+        return preferences.getBoolean(KEY_WEB_DAV_SYNC_BOOKSHELF, true);
+    }
+
+    public void setWebDavSyncBookshelfEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_WEB_DAV_SYNC_BOOKSHELF, enabled).apply();
+    }
+
+    public boolean isWebDavSyncFilesEnabled() {
+        return preferences.getBoolean(KEY_WEB_DAV_SYNC_FILES, true);
+    }
+
+    public void setWebDavSyncFilesEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_WEB_DAV_SYNC_FILES, enabled).apply();
+    }
+
+    public boolean isWebDavSyncUiSettingsEnabled() {
+        return preferences.getBoolean(KEY_WEB_DAV_SYNC_UI_SETTINGS, true);
+    }
+
+    public void setWebDavSyncUiSettingsEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_WEB_DAV_SYNC_UI_SETTINGS, enabled).apply();
+    }
+
+    public boolean isWebDavSyncThemesEnabled() {
+        return preferences.getBoolean(KEY_WEB_DAV_SYNC_THEMES, true);
+    }
+
+    public void setWebDavSyncThemesEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_WEB_DAV_SYNC_THEMES, enabled).apply();
+    }
+
+    public boolean isWebDavSyncBackgroundsEnabled() {
+        return preferences.getBoolean(KEY_WEB_DAV_SYNC_BACKGROUNDS, true);
+    }
+
+    public void setWebDavSyncBackgroundsEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_WEB_DAV_SYNC_BACKGROUNDS, enabled).apply();
     }
 
     public float getFontSizeSp() {
@@ -187,11 +232,11 @@ public class SettingsStore {
     }
 
     public int getAutoPageSeconds() {
-        return preferences.getInt(KEY_AUTO_PAGE_SECONDS, 12);
+        return clamp(preferences.getInt(KEY_AUTO_PAGE_SECONDS, 10), 1, 30);
     }
 
     public void setAutoPageSeconds(int value) {
-        preferences.edit().putInt(KEY_AUTO_PAGE_SECONDS, clamp(value, 3, 90)).apply();
+        preferences.edit().putInt(KEY_AUTO_PAGE_SECONDS, clamp(value, 1, 30)).apply();
     }
 
     public String getTtsEngine() {

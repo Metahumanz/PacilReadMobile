@@ -1,6 +1,6 @@
-package com.metahumanz.pacilread.importer;
+package com.metahumanz.pacilreadmobile.importer;
 
-import com.metahumanz.pacilread.model.ImportedBook;
+import com.metahumanz.pacilreadmobile.model.ImportedBook;
 import com.tom_roush.pdfbox.pdmodel.PDDocument;
 import com.tom_roush.pdfbox.text.PDFTextStripper;
 

@@ -1,4 +1,4 @@
-package com.metahumanz.pacilread.theme;
+package com.metahumanz.pacilreadmobile.theme;
 
 import android.content.Context;
 import android.content.SharedPreferences;

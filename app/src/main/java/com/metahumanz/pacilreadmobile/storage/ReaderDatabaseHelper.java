@@ -1,4 +1,4 @@
-package com.metahumanz.pacilread.storage;
+package com.metahumanz.pacilreadmobile.storage;
 
 import android.content.ContentValues;
 import android.content.Context;
@@ -6,11 +6,11 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
-import com.metahumanz.pacilread.model.BookRecord;
-import com.metahumanz.pacilread.model.ChapterRecord;
-import com.metahumanz.pacilread.model.ImportedBook;
-import com.metahumanz.pacilread.model.ReaderThemeRecord;
-import com.metahumanz.pacilread.model.ReplacementRuleRecord;
+import com.metahumanz.pacilreadmobile.model.BookRecord;
+import com.metahumanz.pacilreadmobile.model.ChapterRecord;
+import com.metahumanz.pacilreadmobile.model.ImportedBook;
+import com.metahumanz.pacilreadmobile.model.ReaderThemeRecord;
+import com.metahumanz.pacilreadmobile.model.ReplacementRuleRecord;
 
 import java.io.File;
 import java.io.FileInputStream;

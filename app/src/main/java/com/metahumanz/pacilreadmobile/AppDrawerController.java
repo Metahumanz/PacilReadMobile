@@ -1,4 +1,4 @@
-package com.metahumanz.pacilread;
+package com.metahumanz.pacilreadmobile;
 
 import android.app.Activity;
 import android.graphics.Rect;

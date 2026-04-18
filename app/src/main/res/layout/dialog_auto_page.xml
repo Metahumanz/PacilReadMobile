@@ -26,7 +26,7 @@
         android:id="@+id/auto_page_seek"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:max="87" />
+        android:max="29" />
 
     <TextView
         android:id="@+id/auto_page_value"

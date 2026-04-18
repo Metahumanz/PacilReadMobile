@@ -1,4 +1,4 @@
-package com.metahumanz.pacilread.reader;
+package com.metahumanz.pacilreadmobile.reader;
 
 public class PageSlice {
     public final int start;

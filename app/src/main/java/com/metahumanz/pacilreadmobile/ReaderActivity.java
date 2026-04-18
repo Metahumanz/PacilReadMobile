@@ -1,4 +1,4 @@
-package com.metahumanz.pacilread;
+package com.metahumanz.pacilreadmobile;
 
 public class ReaderActivity extends ModernReaderActivity {
 }

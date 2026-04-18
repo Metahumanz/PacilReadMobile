@@ -1,4 +1,4 @@
-package com.metahumanz.pacilread;
+package com.metahumanz.pacilreadmobile;
 
 import android.app.AlertDialog;
 import android.animation.Animator;
@@ -43,28 +43,27 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.metahumanz.pacilread.model.BookRecord;
-import com.metahumanz.pacilread.model.ChapterRecord;
-import com.metahumanz.pacilread.model.ReaderThemeRecord;
-import com.metahumanz.pacilread.model.ReplacementRuleRecord;
-import com.metahumanz.pacilread.reader.JustifiedPageTextView;
-import com.metahumanz.pacilread.reader.PageSlice;
-import com.metahumanz.pacilread.reader.ReaderPaginator;
-import com.metahumanz.pacilread.reader.ReaderThemeConfig;
-import com.metahumanz.pacilread.reader.ReplacementEngine;
-import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
-import com.metahumanz.pacilread.storage.SettingsStore;
-import com.metahumanz.pacilread.sync.WebDavClient;
-import com.metahumanz.pacilread.theme.ThemeModeHelper;
-import com.metahumanz.pacilread.theme.ThemedReaderActivity;
-import com.metahumanz.pacilread.tts.MimoTtsClient;
-import com.metahumanz.pacilread.ui.GlassUiHelper;
-import com.metahumanz.pacilread.util.FileAssetHelper;
+import com.metahumanz.pacilreadmobile.model.BookRecord;
+import com.metahumanz.pacilreadmobile.model.ChapterRecord;
+import com.metahumanz.pacilreadmobile.model.ReaderThemeRecord;
+import com.metahumanz.pacilreadmobile.model.ReplacementRuleRecord;
+import com.metahumanz.pacilreadmobile.reader.JustifiedPageTextView;
+import com.metahumanz.pacilreadmobile.reader.PageSlice;
+import com.metahumanz.pacilreadmobile.reader.ReaderPaginator;
+import com.metahumanz.pacilreadmobile.reader.ReaderThemeConfig;
+import com.metahumanz.pacilreadmobile.reader.ReplacementEngine;
+import com.metahumanz.pacilreadmobile.storage.ReaderDatabaseHelper;
+import com.metahumanz.pacilreadmobile.storage.SettingsStore;
+import com.metahumanz.pacilreadmobile.sync.WebDavClient;
+import com.metahumanz.pacilreadmobile.theme.ThemeModeHelper;
+import com.metahumanz.pacilreadmobile.theme.ThemedReaderActivity;
+import com.metahumanz.pacilreadmobile.tts.MimoTtsClient;
+import com.metahumanz.pacilreadmobile.ui.GlassUiHelper;
+import com.metahumanz.pacilreadmobile.util.FileAssetHelper;
 
 import org.json.JSONObject;
 
 import java.io.File;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -72,14 +71,18 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ModernReaderActivity extends ThemedReaderActivity implements TextToSpeech.OnInitListener {
     private static final int REQUEST_PICK_BACKGROUND = 2001;
+    private static final Pattern TTS_SEGMENT_PATTERN = Pattern.compile("[^ \\n\\t。！？.!?,，;；、]+[。！？.!?,，;；、]*");
+    private static final String TTS_UTTERANCE_PREFIX = "reader-tts-";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final ExecutorService ttsExecutor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final ArrayDeque<String> ttsQueue = new ArrayDeque<>();
+    private final List<SpeechUnit> ttsUnits = new ArrayList<>();
     private final List<ChapterRecord> chapters = new ArrayList<>();
     private final List<ReplacementRuleRecord> replacementRules = new ArrayList<>();
     private final Map<Integer, String> processedChapterCache = new HashMap<>();
@@ -142,6 +145,9 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     private boolean autoPageActive = false;
     private boolean ttsReady = false;
     private boolean ttsActive = false;
+    private int ttsChapterIndex = -1;
+    private int currentTtsUnitIndex = -1;
+    private int ttsSessionId = 0;
     private boolean isAnimating = false;
     private long animationToken = 0L;
     private int pagingTouchSlop;
@@ -170,11 +176,10 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             if (!autoPageActive) {
                 return;
             }
-            if (!pageDown()) {
-                stopAutoPage();
-                return;
+            if (!controlsVisible && !isAnimating && !interactivePaging) {
+                pageDown();
             }
-            mainHandler.postDelayed(this, settingsStore.getAutoPageSeconds() * 1000L);
+            scheduleNextAutoPageTick();
         }
     };
 
@@ -292,12 +297,17 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
 
                 @Override
                 public void onDone(String utteranceId) {
-                    mainHandler.post(ModernReaderActivity.this::speakNextChunk);
+                    handleSystemTtsAdvance(utteranceId);
                 }
 
                 @Override
                 public void onError(String utteranceId) {
-                    mainHandler.post(ModernReaderActivity.this::stopTts);
+                    handleSystemTtsAdvance(utteranceId);
+                }
+
+                @Override
+                public void onError(String utteranceId, int errorCode) {
+                    handleSystemTtsAdvance(utteranceId);
                 }
             });
         }
@@ -1124,54 +1134,72 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             showToast("语音引擎尚未就绪");
             return;
         }
-        ttsQueue.clear();
-        ttsQueue.addAll(splitForSpeech(remainingTextFromCurrentPosition()));
-        if (ttsQueue.isEmpty()) {
+        boolean hasCurrentUnits = rebuildTtsUnitsForChapter(currentChapterIndex, currentCharOffset());
+        if (!hasCurrentUnits && currentChapterIndex >= chapters.size() - 1) {
             showToast("当前位置没有可朗读的文本");
             return;
         }
         ttsActive = true;
-        ttsButton.setText("停止朗读");
+        ttsSessionId++;
         styleReaderMenuButton(ttsButton, true);
-        speakNextChunk();
+        if (hasCurrentUnits) {
+            playCurrentTtsUnit();
+            return;
+        }
+        advanceToNextTtsChapter();
     }
 
-    private void speakNextChunk() {
+    private void playCurrentTtsUnit() {
         if (!ttsActive) {
             return;
         }
-        if (ttsQueue.isEmpty()) {
-            if (currentChapterIndex < chapters.size() - 1) {
-                openChapter(currentChapterIndex + 1, 0, true, 1);
-                ttsQueue.addAll(splitForSpeech(getProcessedChapterText(currentChapterIndex)));
-            } else {
-                stopTts();
-                return;
-            }
-        }
-        String chunk = ttsQueue.poll();
-        if (chunk == null || chunk.isBlank()) {
-            speakNextChunk();
+        if (ttsChapterIndex < 0 || ttsChapterIndex >= chapters.size()) {
+            stopTts();
             return;
         }
+        if (isAnimating || interactivePaging) {
+            scheduleTtsPlayback(readerFlipDurationMs() + 60L);
+            return;
+        }
+        if (currentTtsUnitIndex >= ttsUnits.size()) {
+            advanceToNextTtsChapter();
+            return;
+        }
+
+        if (currentChapterIndex != ttsChapterIndex) {
+            SpeechUnit pendingUnit = ttsUnits.get(clamp(currentTtsUnitIndex, 0, Math.max(ttsUnits.size() - 1, 0)));
+            openChapter(ttsChapterIndex, pendingUnit.start, true, ttsChapterIndex >= currentChapterIndex ? 1 : -1);
+            scheduleTtsPlayback(readerFlipDurationMs() + 60L);
+            return;
+        }
+
+        List<PageSlice> pages = getPagesForChapter(ttsChapterIndex);
+        if (pages.isEmpty()) {
+            advanceToNextTtsChapter();
+            return;
+        }
+
+        PageSlice currentSlice = pages.get(clamp(currentPageIndex, 0, pages.size() - 1));
+        while (currentTtsUnitIndex < ttsUnits.size() && ttsUnits.get(currentTtsUnitIndex).end <= currentSlice.start) {
+            currentTtsUnitIndex++;
+        }
+        if (currentTtsUnitIndex >= ttsUnits.size()) {
+            advanceToNextTtsChapter();
+            return;
+        }
+
+        SpeechUnit unit = ttsUnits.get(currentTtsUnitIndex);
+        if (unit.start >= currentSlice.end) {
+            if (pageDown()) {
+                scheduleTtsPlayback(readerFlipDurationMs() + 60L);
+            } else {
+                advanceToNextTtsChapter();
+            }
+            return;
+        }
+
         if ("mimo".equals(settingsStore.getTtsEngine())) {
-            ttsExecutor.execute(() -> {
-                try {
-                    mimoTtsClient.speak(chunk, settingsStore.getTtsMimoApiKey(), settingsStore.getTtsRate());
-                    runOnUiThread(() -> {
-                        if (ttsActive) {
-                            speakNextChunk();
-                        }
-                    });
-                } catch (Exception error) {
-                    runOnUiThread(() -> {
-                        if (ttsActive) {
-                            stopTts();
-                            showToast("MiMo 听书失败: " + error.getMessage());
-                        }
-                    });
-                }
-            });
+            speakCurrentMimoGroup();
             return;
         }
         if (textToSpeech == null) {
@@ -1179,19 +1207,24 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             return;
         }
         textToSpeech.setSpeechRate(settingsStore.getTtsRate());
-        textToSpeech.speak(chunk, TextToSpeech.QUEUE_FLUSH, null, "reader-chunk");
+        int result = textToSpeech.speak(unit.text, TextToSpeech.QUEUE_FLUSH, null, TTS_UTTERANCE_PREFIX + ttsSessionId);
+        if (result != TextToSpeech.SUCCESS) {
+            advanceTtsPlayback(1);
+        }
     }
 
     private void stopTts() {
         ttsActive = false;
-        ttsQueue.clear();
+        ttsSessionId++;
+        ttsUnits.clear();
+        ttsChapterIndex = -1;
+        currentTtsUnitIndex = -1;
         if (mimoTtsClient != null) {
             mimoTtsClient.cancel();
         }
         if (textToSpeech != null) {
             textToSpeech.stop();
         }
-        ttsButton.setText(getString(R.string.reader_tts));
         styleReaderMenuButton(ttsButton, false);
     }
 
@@ -1206,8 +1239,21 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     private void stopAutoPage() {
         autoPageActive = false;
         mainHandler.removeCallbacks(autoPageRunnable);
-        autoPageButton.setText(getString(R.string.reader_auto_page));
         styleReaderMenuButton(autoPageButton, false);
+    }
+
+    private void startAutoPage() {
+        autoPageActive = true;
+        styleReaderMenuButton(autoPageButton, true);
+        scheduleNextAutoPageTick();
+    }
+
+    private void scheduleNextAutoPageTick() {
+        mainHandler.removeCallbacks(autoPageRunnable);
+        if (!autoPageActive) {
+            return;
+        }
+        mainHandler.postDelayed(autoPageRunnable, settingsStore.getAutoPageSeconds() * 1000L);
     }
 
     private void applyReaderSettings() {
@@ -1588,20 +1634,23 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         SeekBar seekBar = content.findViewById(R.id.auto_page_seek);
         TextView valueText = content.findViewById(R.id.auto_page_value);
         Button toggleButton = content.findViewById(R.id.auto_page_button_toggle);
-        seekBar.setProgress(settingsStore.getAutoPageSeconds() - 3);
+        seekBar.setProgress(settingsStore.getAutoPageSeconds() - 1);
         valueText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%d 秒", settingsStore.getAutoPageSeconds()));
-        seekBar.setOnSeekBarChangeListener(new SimpleSeekListener(() -> valueText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%d 秒", seekBar.getProgress() + 3))));
+        seekBar.setOnSeekBarChangeListener(new SimpleSeekListener(() -> {
+            int seconds = seekBar.getProgress() + 1;
+            valueText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%d 秒", seconds));
+            settingsStore.setAutoPageSeconds(seconds);
+            if (autoPageActive) {
+                scheduleNextAutoPageTick();
+            }
+        }));
         toggleButton.setText(autoPageActive ? "停止自动翻页" : "开始自动翻页");
         AlertDialog dialog = new AlertDialog.Builder(this).setView(content).create();
         toggleButton.setOnClickListener(v -> {
-            settingsStore.setAutoPageSeconds(seekBar.getProgress() + 3);
             if (autoPageActive) {
                 stopAutoPage();
             } else {
-                autoPageActive = true;
-                autoPageButton.setText("停止自动");
-                styleReaderMenuButton(autoPageButton, true);
-                mainHandler.postDelayed(autoPageRunnable, settingsStore.getAutoPageSeconds() * 1000L);
+                startAutoPage();
             }
             dialog.dismiss();
         });
@@ -1624,10 +1673,18 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         valueText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%.1f 倍", settingsStore.getTtsRate()));
         mimoKeyInput.setText(settingsStore.getTtsMimoApiKey());
         updateTtsDialogState(noteText, mimoKeyInput, engineSpinner.getSelectedItemPosition() == 1);
-        seekBar.setOnSeekBarChangeListener(new SimpleSeekListener(() -> valueText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%.1f 倍", 0.5f + (seekBar.getProgress() / 10f)))));
+        seekBar.setOnSeekBarChangeListener(new SimpleSeekListener(() -> {
+            float rate = 0.5f + (seekBar.getProgress() / 10f);
+            valueText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%.1f 倍", rate));
+            settingsStore.setTtsRate(rate);
+            if (textToSpeech != null) {
+                textToSpeech.setSpeechRate(rate);
+            }
+        }));
         engineSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                settingsStore.setTtsEngine(engineKeys[position]);
                 updateTtsDialogState(noteText, mimoKeyInput, position == 1);
             }
 
@@ -1635,12 +1692,23 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             public void onNothingSelected(android.widget.AdapterView<?> parent) {
             }
         });
+        mimoKeyInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                settingsStore.setTtsMimoApiKey(s == null ? "" : s.toString());
+            }
+        });
         toggleButton.setText(ttsActive ? "停止听书" : "开始听书");
         AlertDialog dialog = new AlertDialog.Builder(this).setView(content).create();
         toggleButton.setOnClickListener(v -> {
-            settingsStore.setTtsEngine(engineKeys[engineSpinner.getSelectedItemPosition()]);
-            settingsStore.setTtsRate(0.5f + (seekBar.getProgress() / 10f));
-            settingsStore.setTtsMimoApiKey(mimoKeyInput.getText().toString());
             if (ttsActive) {
                 stopTts();
             } else {
@@ -1799,11 +1867,6 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         return processed;
     }
 
-    private String remainingTextFromCurrentPosition() {
-        String text = getProcessedChapterText(currentChapterIndex);
-        return text.substring(clamp(currentCharOffset(), 0, text.length()));
-    }
-
     private int currentCharOffset() {
         List<PageSlice> pages = getPagesForChapter(currentChapterIndex);
         if (pages.isEmpty()) {
@@ -1812,28 +1875,163 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         return pages.get(clamp(currentPageIndex, 0, pages.size() - 1)).start;
     }
 
-    private List<String> splitForSpeech(String text) {
-        List<String> parts = new ArrayList<>();
-        if (text == null) {
-            return parts;
+    private boolean rebuildTtsUnitsForChapter(int chapterIndex, int minOffset) {
+        ttsUnits.clear();
+        if (chapters.isEmpty()) {
+            ttsChapterIndex = -1;
+            currentTtsUnitIndex = -1;
+            return false;
         }
-        String[] segments = text.trim().split("(?<=[。！？!?；;\\n])");
-        StringBuilder builder = new StringBuilder();
-        for (String segment : segments) {
-            String trimmed = segment.trim();
-            if (trimmed.isEmpty()) {
+        ttsChapterIndex = clamp(chapterIndex, 0, chapters.size() - 1);
+        Matcher matcher = TTS_SEGMENT_PATTERN.matcher(getProcessedChapterText(ttsChapterIndex));
+        while (matcher.find()) {
+            String segment = matcher.group();
+            if (segment == null || segment.trim().isEmpty()) {
                 continue;
             }
-            if (builder.length() + trimmed.length() > 180 && builder.length() > 0) {
-                parts.add(builder.toString().trim());
-                builder.setLength(0);
+            ttsUnits.add(new SpeechUnit(matcher.start(), matcher.end(), segment));
+        }
+        currentTtsUnitIndex = 0;
+        while (currentTtsUnitIndex < ttsUnits.size() && ttsUnits.get(currentTtsUnitIndex).end <= minOffset) {
+            currentTtsUnitIndex++;
+        }
+        return currentTtsUnitIndex < ttsUnits.size();
+    }
+
+    private void handleSystemTtsAdvance(String utteranceId) {
+        int sessionId = parseTtsSessionId(utteranceId);
+        mainHandler.post(() -> {
+            if (!ttsActive || sessionId != ttsSessionId) {
+                return;
             }
-            builder.append(trimmed).append(' ');
+            advanceTtsPlayback(1);
+        });
+    }
+
+    private int parseTtsSessionId(String utteranceId) {
+        if (utteranceId == null || !utteranceId.startsWith(TTS_UTTERANCE_PREFIX)) {
+            return -1;
         }
-        if (builder.length() > 0) {
-            parts.add(builder.toString().trim());
+        try {
+            return Integer.parseInt(utteranceId.substring(TTS_UTTERANCE_PREFIX.length()));
+        } catch (NumberFormatException error) {
+            return -1;
         }
-        return parts;
+    }
+
+    private void advanceTtsPlayback(int consumedUnits) {
+        if (!ttsActive) {
+            return;
+        }
+        currentTtsUnitIndex += Math.max(consumedUnits, 0);
+        playCurrentTtsUnit();
+    }
+
+    private void scheduleTtsPlayback(long delayMillis) {
+        int sessionId = ttsSessionId;
+        mainHandler.postDelayed(() -> {
+            if (!ttsActive || sessionId != ttsSessionId) {
+                return;
+            }
+            playCurrentTtsUnit();
+        }, Math.max(delayMillis, 20L));
+    }
+
+    private void advanceToNextTtsChapter() {
+        if (!ttsActive) {
+            return;
+        }
+        if (ttsChapterIndex >= chapters.size() - 1) {
+            stopTts();
+            return;
+        }
+        int nextChapterIndex = ttsChapterIndex + 1;
+        boolean chapterTurning = currentChapterIndex == ttsChapterIndex;
+        if (chapterTurning) {
+            if (!pageDown()) {
+                stopTts();
+                return;
+            }
+        } else {
+            openChapter(nextChapterIndex, 0, true, 1);
+        }
+        int sessionId = ttsSessionId;
+        mainHandler.postDelayed(() -> {
+            if (!ttsActive || sessionId != ttsSessionId) {
+                return;
+            }
+            rebuildTtsUnitsForChapter(nextChapterIndex, 0);
+            playCurrentTtsUnit();
+        }, readerFlipDurationMs() * 2L + 60L);
+    }
+
+    private void speakCurrentMimoGroup() {
+        if (currentTtsUnitIndex < 0 || currentTtsUnitIndex >= ttsUnits.size()) {
+            advanceToNextTtsChapter();
+            return;
+        }
+        int groupCount = 1;
+        StringBuilder builder = new StringBuilder(ttsUnits.get(currentTtsUnitIndex).text);
+        while (currentTtsUnitIndex + groupCount < ttsUnits.size()
+                && !endsWithFullSentence(ttsUnits.get(currentTtsUnitIndex + groupCount - 1).text)) {
+            builder.append(ttsUnits.get(currentTtsUnitIndex + groupCount).text);
+            groupCount++;
+        }
+        String groupText = builder.toString().trim();
+        if (groupText.isEmpty()) {
+            advanceTtsPlayback(groupCount);
+            return;
+        }
+        int sessionId = ttsSessionId;
+        int consumedUnits = groupCount;
+        ttsExecutor.execute(() -> {
+            try {
+                mimoTtsClient.speak(groupText, settingsStore.getTtsMimoApiKey(), settingsStore.getTtsRate());
+                runOnUiThread(() -> {
+                    if (!ttsActive || sessionId != ttsSessionId) {
+                        return;
+                    }
+                    advanceTtsPlayback(consumedUnits);
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    if (!ttsActive || sessionId != ttsSessionId) {
+                        return;
+                    }
+                    stopTts();
+                    showToast("MiMo 听书失败: " + error.getMessage());
+                });
+            }
+        });
+    }
+
+    private boolean endsWithFullSentence(String text) {
+        if (text == null) {
+            return false;
+        }
+        String trimmed = text.trim();
+        if (trimmed.isEmpty()) {
+            return false;
+        }
+        char lastChar = trimmed.charAt(trimmed.length() - 1);
+        return lastChar == '。' || lastChar == '！' || lastChar == '？' || lastChar == '!' || lastChar == '?';
+    }
+
+    private long readerFlipDurationMs() {
+        if (settingsStore == null) {
+            return 240L;
+        }
+        String mode = settingsStore.getFlipMode();
+        if ("none".equals(mode)) {
+            return 0L;
+        }
+        if ("cover".equals(mode)) {
+            return 260L;
+        }
+        if ("simulation".equals(mode) || "scroll".equals(mode)) {
+            return 240L;
+        }
+        return 220L;
     }
 
     private boolean ensurePageAreaReady(Runnable action) {
@@ -2159,6 +2357,18 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         private PageTarget(int chapterIndex, int pageIndex) {
             this.chapterIndex = chapterIndex;
             this.pageIndex = pageIndex;
+        }
+    }
+
+    private static class SpeechUnit {
+        final int start;
+        final int end;
+        final String text;
+
+        private SpeechUnit(int start, int end, String text) {
+            this.start = start;
+            this.end = end;
+            this.text = text;
         }
     }
 

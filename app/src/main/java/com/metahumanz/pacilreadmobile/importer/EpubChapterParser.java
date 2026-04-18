@@ -1,7 +1,7 @@
-package com.metahumanz.pacilread.importer;
+package com.metahumanz.pacilreadmobile.importer;
 
-import com.metahumanz.pacilread.model.ImportedBook;
-import com.metahumanz.pacilread.util.HtmlUtils;
+import com.metahumanz.pacilreadmobile.model.ImportedBook;
+import com.metahumanz.pacilreadmobile.util.HtmlUtils;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;

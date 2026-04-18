@@ -1,3 +1,4 @@
 {
-  "java.import.gradle.java.home": "C:\\Program Files\\Java\\jdk-17.0.2"
+  "java.import.gradle.java.home": "C:\\Program Files\\Java\\jdk-17.0.2",
+  "java.configuration.updateBuildConfiguration": "automatic"
 }

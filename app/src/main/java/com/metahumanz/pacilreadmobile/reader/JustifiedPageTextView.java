@@ -1,4 +1,4 @@
-package com.metahumanz.pacilread.reader;
+package com.metahumanz.pacilreadmobile.reader;
 
 import android.content.Context;
 import android.graphics.Canvas;

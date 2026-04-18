@@ -1,10 +1,10 @@
-package com.metahumanz.pacilread.sync;
+package com.metahumanz.pacilreadmobile.sync;
 
 import android.util.Base64;
 
-import com.metahumanz.pacilread.model.BookRecord;
-import com.metahumanz.pacilread.model.ChapterRecord;
-import com.metahumanz.pacilread.storage.SettingsStore;
+import com.metahumanz.pacilreadmobile.model.BookRecord;
+import com.metahumanz.pacilreadmobile.model.ChapterRecord;
+import com.metahumanz.pacilreadmobile.storage.SettingsStore;
 
 import org.json.JSONObject;
 

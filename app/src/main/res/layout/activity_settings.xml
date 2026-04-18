@@ -320,6 +320,113 @@
                     android:textSize="14sp" />
 
                 <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="同步内容选择"
+                    android:textColor="@color/on_surface"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:id="@+id/layout_webdav_sync_options"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/button_webdav_sync_bookshelf"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="8dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_outline_button"
+                            android:minHeight="40dp"
+                            android:text="书架内容"
+                            android:textAllCaps="false"
+                            android:textColor="@color/on_surface"
+                            android:textSize="12sp" />
+
+                        <Button
+                            android:id="@+id/button_webdav_sync_files"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="8dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_outline_button"
+                            android:minHeight="40dp"
+                            android:text="书籍文件"
+                            android:textAllCaps="false"
+                            android:textColor="@color/on_surface"
+                            android:textSize="12sp" />
+
+                        <Button
+                            android:id="@+id/button_webdav_sync_ui"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_outline_button"
+                            android:minHeight="40dp"
+                            android:text="界面设置"
+                            android:textAllCaps="false"
+                            android:textColor="@color/on_surface"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/button_webdav_sync_themes"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="8dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_outline_button"
+                            android:minHeight="40dp"
+                            android:text="阅读主题"
+                            android:textAllCaps="false"
+                            android:textColor="@color/on_surface"
+                            android:textSize="12sp" />
+
+                        <Button
+                            android:id="@+id/button_webdav_sync_backgrounds"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="8dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_outline_button"
+                            android:minHeight="40dp"
+                            android:text="背景图片"
+                            android:textAllCaps="false"
+                            android:textColor="@color/on_surface"
+                            android:textSize="12sp" />
+
+                        <View
+                            android:layout_width="0dp"
+                            android:layout_height="0dp"
+                            android:layout_weight="1" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="这些开关影响手动备份/恢复范围；阅读进度仍会按单本 JSON 自动桥接。"
+                    android:textColor="@color/on_surface_muted"
+                    android:textSize="12sp" />
+
+                <TextView
                     android:id="@+id/text_status"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

@@ -1,4 +1,4 @@
-package com.metahumanz.pacilread;
+package com.metahumanz.pacilreadmobile;
 
 import android.app.AlertDialog;
 import android.content.Context;
@@ -28,14 +28,14 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.metahumanz.pacilread.importer.BookImportService;
-import com.metahumanz.pacilread.model.BookRecord;
-import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
-import com.metahumanz.pacilread.storage.SettingsStore;
-import com.metahumanz.pacilread.sync.WebDavBackupManager;
-import com.metahumanz.pacilread.sync.WebDavClient;
-import com.metahumanz.pacilread.theme.ThemedActivity;
-import com.metahumanz.pacilread.util.FileAssetHelper;
+import com.metahumanz.pacilreadmobile.importer.BookImportService;
+import com.metahumanz.pacilreadmobile.model.BookRecord;
+import com.metahumanz.pacilreadmobile.storage.ReaderDatabaseHelper;
+import com.metahumanz.pacilreadmobile.storage.SettingsStore;
+import com.metahumanz.pacilreadmobile.sync.WebDavBackupManager;
+import com.metahumanz.pacilreadmobile.sync.WebDavClient;
+import com.metahumanz.pacilreadmobile.theme.ThemedActivity;
+import com.metahumanz.pacilreadmobile.util.FileAssetHelper;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -120,6 +120,12 @@ public class MainActivity extends ThemedActivity {
     private Button fullRestoreButton;
     private Button liteBackupButton;
     private Button liteRestoreButton;
+    private Button webDavSyncBookshelfButton;
+    private Button webDavSyncFilesButton;
+    private Button webDavSyncUiButton;
+    private Button webDavSyncThemesButton;
+    private Button webDavSyncBackgroundsButton;
+    private View webDavSyncOptionsLayout;
 
     private long pendingCoverBookId = -1L;
     private int currentSection = SECTION_BOOKSHELF;
@@ -271,6 +277,12 @@ public class MainActivity extends ThemedActivity {
         fullRestoreButton = findViewById(R.id.button_full_restore);
         liteBackupButton = findViewById(R.id.button_lite_backup);
         liteRestoreButton = findViewById(R.id.button_lite_restore);
+        webDavSyncOptionsLayout = findViewById(R.id.layout_webdav_sync_options);
+        webDavSyncBookshelfButton = findViewById(R.id.button_webdav_sync_bookshelf);
+        webDavSyncFilesButton = findViewById(R.id.button_webdav_sync_files);
+        webDavSyncUiButton = findViewById(R.id.button_webdav_sync_ui);
+        webDavSyncThemesButton = findViewById(R.id.button_webdav_sync_themes);
+        webDavSyncBackgroundsButton = findViewById(R.id.button_webdav_sync_backgrounds);
     }
 
     // ==================== Adapters ====================
@@ -371,8 +383,9 @@ public class MainActivity extends ThemedActivity {
         testButton.setOnClickListener(v -> testWebDav());
         fullBackupButton.setOnClickListener(v -> runWebDavAction("正在执行全量备份...", listener -> backupManager.fullBackup(listener)));
         liteBackupButton.setOnClickListener(v -> runWebDavAction("正在执行增量备份...", listener -> backupManager.incrementalBackup(listener)));
-        fullRestoreButton.setOnClickListener(v -> confirmRestore("全量恢复会覆盖当前本地数据库和设置，确定继续吗？", listener -> backupManager.fullRestore(listener)));
-        liteRestoreButton.setOnClickListener(v -> confirmRestore("增量恢复会合并云端基础数据并补全缺失资源，确定继续吗？", listener -> backupManager.incrementalRestore(listener)));
+        fullRestoreButton.setOnClickListener(v -> confirmRestore("确定要从云端恢复吗？这将替换您当前的本地书架与设置。", listener -> backupManager.fullRestore(listener)));
+        liteRestoreButton.setOnClickListener(v -> confirmRestore("确定要从云端增量恢复吗？这将覆盖您的书架列表与设置，但不会删除现有的本地缓存章节。", listener -> backupManager.incrementalRestore(listener)));
+        setupWebDavSyncButtons();
 
         // Auto-save listeners
         TextWatcher autoSaveTextWatcher = new TextWatcher() {
@@ -388,6 +401,14 @@ public class MainActivity extends ThemedActivity {
 
         autoOpenCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsInputChanged(true));
         webDavEnabledCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsInputChanged(true));
+    }
+
+    private void setupWebDavSyncButtons() {
+        webDavSyncBookshelfButton.setOnClickListener(v -> toggleWebDavSyncButton(webDavSyncBookshelfButton));
+        webDavSyncFilesButton.setOnClickListener(v -> toggleWebDavSyncButton(webDavSyncFilesButton));
+        webDavSyncUiButton.setOnClickListener(v -> toggleWebDavSyncButton(webDavSyncUiButton));
+        webDavSyncThemesButton.setOnClickListener(v -> toggleWebDavSyncButton(webDavSyncThemesButton));
+        webDavSyncBackgroundsButton.setOnClickListener(v -> toggleWebDavSyncButton(webDavSyncBackgroundsButton));
     }
 
     private void setupThemeSpinners() {
@@ -443,6 +464,7 @@ public class MainActivity extends ThemedActivity {
         readerUiThemeSpinner.setSelection(indexOf(READER_THEME_KEYS, settingsStore.getReaderUiThemeMode(), 0));
         glassOpacitySeekBar.setProgress(settingsStore.getGlassOpacityPercent() - 20);
         updateGlassOpacityLabel(settingsStore.getGlassOpacityPercent());
+        updateWebDavSyncButtons();
         bindingSettingsValues = false;
         refreshSettingsStatusSummary();
         updatePreviewPanels();
@@ -471,6 +493,11 @@ public class MainActivity extends ThemedActivity {
         settingsStore.setAppThemeMode(APP_THEME_KEYS[appThemeSpinner.getSelectedItemPosition()]);
         settingsStore.setReaderUiThemeMode(READER_THEME_KEYS[readerUiThemeSpinner.getSelectedItemPosition()]);
         settingsStore.setGlassOpacityPercent(glassOpacitySeekBar.getProgress() + 20);
+        settingsStore.setWebDavSyncBookshelfEnabled(webDavSyncBookshelfButton.isSelected());
+        settingsStore.setWebDavSyncFilesEnabled(webDavSyncFilesButton.isSelected());
+        settingsStore.setWebDavSyncUiSettingsEnabled(webDavSyncUiButton.isSelected());
+        settingsStore.setWebDavSyncThemesEnabled(webDavSyncThemesButton.isSelected());
+        settingsStore.setWebDavSyncBackgroundsEnabled(webDavSyncBackgroundsButton.isSelected());
         refreshSettingsStatusSummary();
         updatePreviewPanels();
         updateDrawerStatus();
@@ -488,7 +515,12 @@ public class MainActivity extends ThemedActivity {
         if (settingsStatusText == null || settingsBusy) {
             return;
         }
-        settingsStatusText.setText(settingsStore.isWebDavEnabled() ? "已启用自动进度同步" : "当前未启用云同步");
+        updateWebDavSyncOptionsVisibility();
+        if (!settingsStore.isWebDavEnabled()) {
+            settingsStatusText.setText("当前未启用云同步");
+            return;
+        }
+        settingsStatusText.setText("已启用自动进度同步\n手动备份范围：" + buildWebDavScopeSummary());
     }
 
     private void testWebDav() {
@@ -552,10 +584,65 @@ public class MainActivity extends ThemedActivity {
         fullRestoreButton.setEnabled(!busy);
         liteBackupButton.setEnabled(!busy);
         liteRestoreButton.setEnabled(!busy);
+        webDavSyncBookshelfButton.setEnabled(!busy);
+        webDavSyncFilesButton.setEnabled(!busy);
+        webDavSyncUiButton.setEnabled(!busy);
+        webDavSyncThemesButton.setEnabled(!busy);
+        webDavSyncBackgroundsButton.setEnabled(!busy);
     }
 
     private void updateGlassOpacityLabel(int opacityPercent) {
         glassOpacityText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "阅读菜单与弹窗当前不透明度 %d%%", opacityPercent));
+    }
+
+    private void toggleWebDavSyncButton(Button button) {
+        button.setSelected(!button.isSelected());
+        styleWebDavSyncButton(button, button.isSelected());
+        handleSettingsInputChanged(true);
+    }
+
+    private void updateWebDavSyncButtons() {
+        styleWebDavSyncButton(webDavSyncBookshelfButton, settingsStore.isWebDavSyncBookshelfEnabled());
+        styleWebDavSyncButton(webDavSyncFilesButton, settingsStore.isWebDavSyncFilesEnabled());
+        styleWebDavSyncButton(webDavSyncUiButton, settingsStore.isWebDavSyncUiSettingsEnabled());
+        styleWebDavSyncButton(webDavSyncThemesButton, settingsStore.isWebDavSyncThemesEnabled());
+        styleWebDavSyncButton(webDavSyncBackgroundsButton, settingsStore.isWebDavSyncBackgroundsEnabled());
+    }
+
+    private void styleWebDavSyncButton(Button button, boolean selected) {
+        if (button == null) {
+            return;
+        }
+        button.setSelected(selected);
+        button.setBackgroundResource(selected ? R.drawable.bg_primary_button : R.drawable.bg_outline_button);
+        button.setTextColor(getColor(selected ? android.R.color.white : R.color.on_surface));
+    }
+
+    private void updateWebDavSyncOptionsVisibility() {
+        if (webDavSyncOptionsLayout == null) {
+            return;
+        }
+        webDavSyncOptionsLayout.setVisibility(webDavEnabledCheck != null && webDavEnabledCheck.isChecked() ? View.VISIBLE : View.GONE);
+    }
+
+    private String buildWebDavScopeSummary() {
+        List<String> items = new ArrayList<>();
+        if (settingsStore.isWebDavSyncBookshelfEnabled()) {
+            items.add("书架内容");
+        }
+        if (settingsStore.isWebDavSyncFilesEnabled()) {
+            items.add("书籍文件");
+        }
+        if (settingsStore.isWebDavSyncUiSettingsEnabled()) {
+            items.add("界面设置");
+        }
+        if (settingsStore.isWebDavSyncThemesEnabled()) {
+            items.add("阅读主题");
+        }
+        if (settingsStore.isWebDavSyncBackgroundsEnabled()) {
+            items.add("背景图片");
+        }
+        return items.isEmpty() ? "未选择" : String.join(" / ", items);
     }
 
     private interface BackgroundAction {

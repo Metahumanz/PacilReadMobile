@@ -1,4 +1,4 @@
-package com.metahumanz.pacilread.importer;
+package com.metahumanz.pacilreadmobile.importer;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
