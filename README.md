@@ -36,6 +36,14 @@ sdk.dir=C\:\\Android\\SDK
 
 如果你的 SDK 在别的位置，把路径改成自己的即可。
 
+如果你是在这台 Windows 机器上直接使用仓库根目录的 `pack.bat`，脚本会优先尝试自动探测以下位置并生成 `local.properties`：
+
+- `ANDROID_HOME`
+- `ANDROID_SDK_ROOT`
+- `C:\Android\Sdk`
+- `C:\Android\SDK`
+- `%LOCALAPPDATA%\Android\Sdk`
+
 ## 开发
 
 ### 常用命令
@@ -76,6 +84,7 @@ sdk.dir=C\:\\Android\\SDK
 .\pack.bat release
 .\pack.bat bundle
 .\pack.bat install
+.\pack.bat clean
 ```
 
 对应关系：
@@ -84,6 +93,7 @@ sdk.dir=C\:\\Android\\SDK
 - `release` -> `assembleRelease`
 - `bundle` -> `bundleRelease`
 - `install` -> `installDebug`
+- `clean` -> `clean`
 
 ### 构建产物
 
@@ -100,10 +110,10 @@ sdk.dir=C\:\\Android\\SDK
 
 - 阅读页听书面板支持 `本地系统 TTS` 和 `小米 MiMo` 两种引擎。
 - 使用 MiMo 时，可以在阅读页听书面板里直接填写 API Key，也可以在设置页提前保存。
-- MiMo 相关实现位于 `app/src/main/java/com/metahumanz/pacilreadmobile/tts/MimoTtsClient.java`。
+- MiMo 相关实现主类为 `com.metahumanz.pacilread.tts.MimoTtsClient`。
 
 ## 项目结构
 
 - `app/` Android 应用主模块
-- `app/src/main/java/com/metahumanz/pacilreadmobile/` Java 源码
+- `app/src/main/java/` Java 源码根目录，主包声明统一为 `com.metahumanz.pacilread`
 - `app/src/main/res/` 资源文件
