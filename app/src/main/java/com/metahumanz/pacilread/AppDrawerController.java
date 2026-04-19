@@ -223,7 +223,7 @@ public class AppDrawerController {
             return;
         }
         drawerOpen = true;
-        animateDrawerTo(0f, 280L);
+        animateDrawerTo(0f, 320L);
     }
 
     public void closeDrawer() {

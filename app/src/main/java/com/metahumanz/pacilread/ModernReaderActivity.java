@@ -185,6 +185,8 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     private boolean ttsActive = false;
     private int ttsChapterIndex = -1;
     private int currentTtsUnitIndex = -1;
+    private int ttsHighlightStart = -1;
+    private int ttsHighlightEnd = -1;
     private int ttsSessionId = 0;
     private boolean isAnimating = false;
     private long animationToken = 0L;
@@ -1465,6 +1467,11 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             return;
         }
 
+        // Update highlight state
+        ttsHighlightStart = unit.start;
+        ttsHighlightEnd = unit.end;
+        updateTtsHighlight();
+
         if ("mimo".equals(settingsStore.getTtsEngine())) {
             speakCurrentMimoGroup();
             return;
@@ -1565,6 +1572,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         pageBodyIncoming.setLineSpacing(settingsStore.getLineSpacingExtraSp(), 1f);
         pageBodyCurrent.setFullJustifyEnabled(true);
         pageBodyIncoming.setFullJustifyEnabled(true);
+        updateTtsHighlight();
         int sidePadding = dp(settingsStore.getSidePaddingDp());
         int verticalPadding = dp(settingsStore.getVerticalPaddingDp());
         ((ViewGroup) pageCurrent).setPadding(sidePadding, verticalPadding, sidePadding, verticalPadding);
@@ -3486,6 +3494,15 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
 
     private void showToast(String text) {
         Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
+    }
+
+    private void updateTtsHighlight() {
+        if (ttsHighlightStart >= 0 && ttsHighlightEnd > ttsHighlightStart) {
+            pageBodyCurrent.setHighlightRange(ttsHighlightStart, ttsHighlightEnd);
+        } else {
+            pageBodyCurrent.clearHighlight();
+        }
+        pageBodyCurrent.invalidate();
     }
 
     private String readableError(Throwable error) {

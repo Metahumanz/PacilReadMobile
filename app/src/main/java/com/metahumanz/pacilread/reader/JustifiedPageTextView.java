@@ -2,6 +2,7 @@ package com.metahumanz.pacilread.reader;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.os.Build;
 import android.text.Layout;
 import android.text.TextPaint;
@@ -16,6 +17,9 @@ public class JustifiedPageTextView extends TextView {
     private static final float JUSTIFY_MAX_RESIDUAL_EM = 2.2f;
 
     private boolean fullJustifyEnabled = true;
+    private int highlightStart = -1;
+    private int highlightEnd = -1;
+    private final Paint highlightPaint = new Paint();
 
     public JustifiedPageTextView(Context context) {
         super(context);
@@ -38,6 +42,8 @@ public class JustifiedPageTextView extends TextView {
             setBreakStrategy(Layout.BREAK_STRATEGY_HIGH_QUALITY);
             setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NORMAL);
         }
+        highlightPaint.setColor(0x40FFC107); // Semi-transparent amber
+        highlightPaint.setStyle(Paint.Style.FILL);
     }
 
     public void setFullJustifyEnabled(boolean enabled) {
@@ -45,6 +51,18 @@ public class JustifiedPageTextView extends TextView {
             return;
         }
         fullJustifyEnabled = enabled;
+        invalidate();
+    }
+
+    public void setHighlightRange(int start, int end) {
+        this.highlightStart = start;
+        this.highlightEnd = end;
+        invalidate();
+    }
+
+    public void clearHighlight() {
+        this.highlightStart = -1;
+        this.highlightEnd = -1;
         invalidate();
     }
 
@@ -77,6 +95,20 @@ public class JustifiedPageTextView extends TextView {
             float lineLeft = layout.getLineLeft(lineIndex);
             float baseline = layout.getLineBaseline(lineIndex);
             float lineAvailableWidth = Math.max(0f, availableWidth - Math.max(0f, lineLeft));
+
+            // Draw highlight background if needed
+            if (highlightStart >= 0 && highlightEnd > highlightStart) {
+                int lineHighlightStart = Math.max(highlightStart, start);
+                int lineHighlightEnd = Math.min(highlightEnd, end);
+                if (lineHighlightStart < lineHighlightEnd) {
+                    float startX = lineLeft + paint.measureText(text, start, lineHighlightStart);
+                    float endX = startX + paint.measureText(text, lineHighlightStart, lineHighlightEnd);
+                    float top = baseline - paint.ascent() - 4;
+                    float bottom = baseline - paint.descent() + 4;
+                    canvas.drawRect(startX, top, endX, bottom, highlightPaint);
+                }
+            }
+
             if (shouldJustify(drawLine, paragraphEnd, lineAvailableWidth, paint)) {
                 drawJustifiedLine(canvas, drawLine, lineLeft, baseline, lineAvailableWidth, paint);
             } else {
