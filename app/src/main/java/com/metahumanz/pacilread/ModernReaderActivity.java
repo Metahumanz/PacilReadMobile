@@ -19,8 +19,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.speech.tts.TextToSpeech;
-import android.speech.tts.UtteranceProgressListener;
 import android.text.Editable;
 import android.text.Layout;
 import android.text.StaticLayout;
@@ -73,9 +71,7 @@ import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.sync.WebDavClient;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.theme.ThemedReaderActivity;
-import com.metahumanz.pacilread.tts.EdgeTtsClient;
 import com.metahumanz.pacilread.tts.MimoTtsClient;
-import com.metahumanz.pacilread.tts.OpusDecoder;
 import com.metahumanz.pacilread.ui.GlassUiHelper;
 import com.metahumanz.pacilread.util.FileAssetHelper;
 
@@ -92,13 +88,12 @@ import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class ModernReaderActivity extends ThemedReaderActivity implements TextToSpeech.OnInitListener {
+public class ModernReaderActivity extends ThemedReaderActivity {
     private static final String TAG = "PacilReadReader";
     private static final int CHAPTER_TITLE_BODY_MARGIN_DP = 16;
     private static final int REQUEST_PICK_BACKGROUND = 2001;
     // 与 Win11 版完全一致的分句正则：[^ \n\t。！？.!?,，;；、]+[。！？.!?,，;；、]*
     private static final Pattern TTS_SEGMENT_PATTERN = Pattern.compile("[^ \\n\\t。！？.!?,，;；、]+[。！？.!?,，;；、]*");
-    private static final String TTS_UTTERANCE_PREFIX = "reader-tts-";
     private static final DecelerateInterpolator PAGE_SLIDE_INTERPOLATOR = new DecelerateInterpolator(1.35f);
     private static final AccelerateDecelerateInterpolator PAGE_TURN_INTERPOLATOR = new AccelerateDecelerateInterpolator();
     private static final int MAX_PENDING_TAP_PAGE_STEPS = 2;
@@ -124,9 +119,6 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     private SettingsStore settingsStore;
     private WebDavClient webDavClient;
     private MimoTtsClient mimoTtsClient;
-    private EdgeTtsClient edgeTtsClient;
-    private OpusDecoder opusDecoder;
-    private android.media.AudioTrack audioTrack;
 
 
     private View readerRoot;
@@ -181,7 +173,6 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     private int systemInsetRight = 0;
     private boolean controlsVisible = false;
     private boolean autoPageActive = false;
-    private boolean ttsReady = false;
     private boolean ttsActive = false;
     private int ttsChapterIndex = -1;
     private int currentTtsUnitIndex = -1;
@@ -214,7 +205,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
     private int pendingTapPagingDelta = 0;
 
     private GestureDetector gestureDetector;
-    private TextToSpeech textToSpeech;
+
     private Bitmap currentPageSnapshotBitmap;
     private Bitmap incomingPageSnapshotBitmap;
     private final Canvas pagingSnapshotCanvas = new Canvas();
@@ -251,8 +242,6 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         settingsStore = new SettingsStore(this);
         webDavClient = new WebDavClient(settingsStore);
         mimoTtsClient = new MimoTtsClient();
-        edgeTtsClient = new EdgeTtsClient();
-        opusDecoder = new OpusDecoder();
         pagingTouchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
         bookId = getIntent().getLongExtra("book_id", -1L);
         if (savedInstanceState != null) {
@@ -266,8 +255,6 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         applyEdgeToEdgeInsets();
         setupGestures();
         setupControls();
-
-        textToSpeech = new TextToSpeech(this, this);
 
         // 记录会话开始
         sessionStartTime = System.currentTimeMillis();
@@ -330,10 +317,6 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         if (mimoTtsClient != null) {
             mimoTtsClient.cancel();
         }
-        if (textToSpeech != null) {
-            textToSpeech.stop();
-            textToSpeech.shutdown();
-        }
         recyclePagingSnapshots();
     }
 
@@ -375,34 +358,7 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         }
     }
 
-    @Override
-    public void onInit(int status) {
-        if (status == TextToSpeech.SUCCESS) {
-            ttsReady = true;
-            textToSpeech.setLanguage(Locale.SIMPLIFIED_CHINESE);
-            textToSpeech.setSpeechRate(settingsStore.getTtsRate());
-            textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                @Override
-                public void onStart(String utteranceId) {
-                }
 
-                @Override
-                public void onDone(String utteranceId) {
-                    handleSystemTtsAdvance(utteranceId);
-                }
-
-                @Override
-                public void onError(String utteranceId) {
-                    handleSystemTtsAdvance(utteranceId);
-                }
-
-                @Override
-                public void onError(String utteranceId, int errorCode) {
-                    handleSystemTtsAdvance(utteranceId);
-                }
-            });
-        }
-    }
 
     private void bindViews() {
         readerRoot = findViewById(R.id.reader_root);
@@ -1394,13 +1350,8 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             stopTts();
             return;
         }
-        String engine = settingsStore.getTtsEngine();
-        if ("mimo".equals(engine) && settingsStore.getTtsMimoApiKey().isBlank()) {
+        if (settingsStore.getTtsMimoApiKey().isBlank()) {
             showToast("请先填写 MiMo API Key");
-            return;
-        }
-        if (!"mimo".equals(engine) && (!ttsReady || textToSpeech == null)) {
-            showToast("语音引擎尚未就绪");
             return;
         }
         boolean hasCurrentUnits = rebuildTtsUnitsForChapter(currentChapterIndex, currentCharOffset());
@@ -1467,24 +1418,13 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             return;
         }
 
-        // Update highlight state
-        ttsHighlightStart = unit.start;
-        ttsHighlightEnd = unit.end;
+        // Update highlight state — convert chapter-level offsets to page-local offsets
+        PageSlice highlightSlice = pages.get(clamp(currentPageIndex, 0, pages.size() - 1));
+        ttsHighlightStart = unit.start - highlightSlice.start;
+        ttsHighlightEnd = unit.end - highlightSlice.start;
         updateTtsHighlight();
 
-        if ("mimo".equals(settingsStore.getTtsEngine())) {
-            speakCurrentMimoGroup();
-            return;
-        }
-        if (textToSpeech == null) {
-            stopTts();
-            return;
-        }
-        textToSpeech.setSpeechRate(settingsStore.getTtsRate());
-        int result = textToSpeech.speak(unit.text, TextToSpeech.QUEUE_FLUSH, null, TTS_UTTERANCE_PREFIX + ttsSessionId);
-        if (result != TextToSpeech.SUCCESS) {
-            advanceTtsPlayback(1);
-        }
+        speakCurrentMimoGroup();
     }
 
     private void stopTts() {
@@ -1496,20 +1436,9 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         if (mimoTtsClient != null) {
             mimoTtsClient.cancel();
         }
-        if (edgeTtsClient != null) {
-            edgeTtsClient.cancel();
-        }
-        if (opusDecoder != null) {
-            opusDecoder.stop();
-        }
-        if (audioTrack != null) {
-            audioTrack.stop();
-            audioTrack.release();
-            audioTrack = null;
-        }
-        if (textToSpeech != null) {
-            textToSpeech.stop();
-        }
+        ttsHighlightStart = -1;
+        ttsHighlightEnd = -1;
+        updateTtsHighlight();
         styleReaderMenuButton(ttsButton, false);
     }
 
@@ -2058,40 +1987,20 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
 
     private void showTtsDialog() {
         View content = LayoutInflater.from(this).inflate(R.layout.dialog_tts, null, false);
-        Spinner engineSpinner = content.findViewById(R.id.tts_spinner_engine);
         SeekBar seekBar = content.findViewById(R.id.tts_seek_rate);
         TextView valueText = content.findViewById(R.id.tts_text_rate);
         EditText mimoKeyInput = content.findViewById(R.id.tts_input_mimo_api_key);
         TextView noteText = content.findViewById(R.id.tts_text_note);
         Button toggleButton = content.findViewById(R.id.tts_button_toggle);
-        String[] engineKeys = new String[]{"system", "mimo", "edge"};
-        ArrayAdapter<String> engineAdapter = buildSpinnerAdapter(new String[]{"本地系统 TTS", "小米 MiMo", "微软 Edge"});
-        engineSpinner.setAdapter(engineAdapter);
-        engineSpinner.setSelection(indexOf(engineKeys, settingsStore.getTtsEngine(), 0));
         seekBar.setProgress(clamp(Math.round((settingsStore.getTtsRate() - 0.5f) * 10f), 0, 15));
         valueText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%.1f 倍", settingsStore.getTtsRate()));
         mimoKeyInput.setText(settingsStore.getTtsMimoApiKey());
-        updateTtsDialogState(noteText, mimoKeyInput, engineSpinner.getSelectedItemPosition() == 1);
+        noteText.setText("MiMo 模式会调用小米云端 TTS，模型固定为 mimo-v2-tts / mimo_default。");
         seekBar.setOnSeekBarChangeListener(new SimpleSeekListener(() -> {
             float rate = 0.5f + (seekBar.getProgress() / 10f);
             valueText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%.1f 倍", rate));
             settingsStore.setTtsRate(rate);
-            if (textToSpeech != null) {
-                textToSpeech.setSpeechRate(rate);
-            }
         }));
-        engineSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
-                settingsStore.setTtsEngine(engineKeys[position]);
-                updateTtsDialogState(noteText, mimoKeyInput, position == 1);
-                // If switching to Edge, we might want to show a note about network usage or voice selection
-            }
-
-            @Override
-            public void onNothingSelected(android.widget.AdapterView<?> parent) {
-            }
-        });
         mimoKeyInput.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
@@ -2117,13 +2026,6 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             dialog.dismiss();
         });
         showStyledDialog(dialog);
-    }
-
-    private void updateTtsDialogState(TextView noteText, EditText mimoKeyInput, boolean usingMimo) {
-        mimoKeyInput.setEnabled(usingMimo);
-        noteText.setText(usingMimo
-                ? "MiMo 模式会调用小米云端 TTS，模型固定为 mimo-v2-tts / mimo_default。"
-                : "系统模式使用 Android 原生 TTS 引擎。");
     }
 
     private ArrayAdapter<String> buildSpinnerAdapter(String[] items) {
@@ -2381,27 +2283,6 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         return currentTtsUnitIndex < ttsUnits.size();
     }
 
-    private void handleSystemTtsAdvance(String utteranceId) {
-        int sessionId = parseTtsSessionId(utteranceId);
-        mainHandler.post(() -> {
-            if (!ttsActive || sessionId != ttsSessionId) {
-                return;
-            }
-            advanceTtsPlayback(1);
-        });
-    }
-
-    private int parseTtsSessionId(String utteranceId) {
-        if (utteranceId == null || !utteranceId.startsWith(TTS_UTTERANCE_PREFIX)) {
-            return -1;
-        }
-        try {
-            return Integer.parseInt(utteranceId.substring(TTS_UTTERANCE_PREFIX.length()));
-        } catch (NumberFormatException error) {
-            return -1;
-        }
-    }
-
     private void advanceTtsPlayback(int consumedUnits) {
         if (!ttsActive) {
             return;
@@ -2453,97 +2334,9 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
             advanceToNextTtsChapter();
             return;
         }
-
-        // TTS 引擎切换逻辑补全
-        String engine = settingsStore.getTtsEngine();
-        if ("mimo".equals(engine)) {
-            speakWithMimo();
-        } else if ("edge".equals(engine)) {
-            speakWithEdge();
-        } else {
-            speakWithSystemTts();
-        }
+        speakWithMimo();
     }
 
-    private void speakWithEdge() {
-        int groupCount = 1;
-        StringBuilder builder = new StringBuilder(ttsUnits.get(currentTtsUnitIndex).text);
-        while (currentTtsUnitIndex + groupCount < ttsUnits.size()
-                && !endsWithFullSentence(ttsUnits.get(currentTtsUnitIndex + groupCount - 1).text)) {
-            builder.append(ttsUnits.get(currentTtsUnitIndex + groupCount).text);
-            groupCount++;
-        }
-        String groupText = builder.toString().trim();
-        if (groupText.isEmpty()) {
-            advanceTtsPlayback(groupCount);
-            return;
-        }
-
-        int sessionId = ttsSessionId;
-        int consumedUnits = groupCount;
-        
-        // Initialize AudioTrack for PCM playback (24kHz, Mono, 16-bit)
-        if (audioTrack == null || audioTrack.getState() != android.media.AudioTrack.STATE_INITIALIZED) {
-            int minBufferSize = android.media.AudioTrack.getMinBufferSize(24000, 
-                    android.media.AudioFormat.CHANNEL_OUT_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT);
-            audioTrack = new android.media.AudioTrack(
-                    android.media.AudioManager.STREAM_MUSIC,
-                    24000,
-                    android.media.AudioFormat.CHANNEL_OUT_MONO,
-                    android.media.AudioFormat.ENCODING_PCM_16BIT,
-                    Math.max(minBufferSize, 4096),
-                    android.media.AudioTrack.MODE_STREAM
-            );
-            audioTrack.play();
-        }
-
-        opusDecoder.start(new OpusDecoder.Callback() {
-            @Override
-            public void onPcmData(byte[] pcm, int sampleRate, int channels) {
-                if (audioTrack != null && audioTrack.getPlayState() == android.media.AudioTrack.PLAYSTATE_PLAYING) {
-                    audioTrack.write(pcm, 0, pcm.length);
-                }
-            }
-
-            @Override
-            public void onError(Exception e) {
-                runOnUiThread(() -> {
-                    stopTts();
-                    showToast("Edge TTS 解码失败: " + e.getMessage());
-                });
-            }
-        });
-        
-        edgeTtsClient.synthesize(groupText, "zh-CN-XiaoxiaoNeural", settingsStore.getTtsRate(), "+0Hz", new EdgeTtsClient.TtsCallback() {
-            @Override
-            public void onAudioChunk(byte[] chunk) {
-                opusDecoder.feed(chunk);
-            }
-
-            @Override
-            public void onDone() {
-                opusDecoder.stop();
-                runOnUiThread(() -> {
-                    if (!ttsActive || sessionId != ttsSessionId) {
-                        return;
-                    }
-                    advanceTtsPlayback(consumedUnits);
-                });
-            }
-
-            @Override
-            public void onError(Exception e) {
-                opusDecoder.stop();
-                runOnUiThread(() -> {
-                    if (!ttsActive || sessionId != ttsSessionId) {
-                        return;
-                    }
-                    stopTts();
-                    showToast("Edge TTS 失败: " + e.getMessage());
-                });
-            }
-        });
-    }
 
     private void speakWithMimo() {
         int groupCount = 1;
@@ -2581,16 +2374,6 @@ public class ModernReaderActivity extends ThemedReaderActivity implements TextTo
         });
     }
 
-    private void speakWithSystemTts() {
-        if (!ttsReady || textToSpeech == null) {
-            advanceToNextTtsChapter();
-            return;
-        }
-        SpeechUnit unit = ttsUnits.get(currentTtsUnitIndex);
-        HashMap<String, String> params = new HashMap<>();
-        params.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, TTS_UTTERANCE_PREFIX + currentTtsUnitIndex);
-        textToSpeech.speak(unit.text, TextToSpeech.QUEUE_ADD, params);
-    }
 
     private boolean endsWithFullSentence(String text) {
         if (text == null) {

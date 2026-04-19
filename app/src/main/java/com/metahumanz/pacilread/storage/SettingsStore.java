@@ -269,12 +269,11 @@ public class SettingsStore {
     }
 
     public String getTtsEngine() {
-        String value = preferences.getString(KEY_TTS_ENGINE, "system");
-        return "mimo".equals(value) ? "mimo" : "system";
+        return "mimo";
     }
 
     public void setTtsEngine(String value) {
-        preferences.edit().putString(KEY_TTS_ENGINE, "mimo".equals(value) ? "mimo" : "system").apply();
+        // Always use mimo, ignore other values
     }
 
     public float getTtsRate() {

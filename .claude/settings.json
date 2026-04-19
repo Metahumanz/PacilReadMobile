@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(./gradlew.bat assembleDebug --no-daemon --console plain)"
+      "Bash(./gradlew.bat assembleDebug --no-daemon --console plain)",
+      "Bash(./gradlew.bat compileDebugJavaWithJavac --no-daemon --console plain)",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }

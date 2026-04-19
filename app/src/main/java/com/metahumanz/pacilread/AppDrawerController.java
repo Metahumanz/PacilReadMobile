@@ -49,6 +49,7 @@ public class AppDrawerController {
 
     private int currentSection = SECTION_NONE;
     private boolean drawerOpen = false;
+    private boolean drawerAnimating = false;
     private boolean drawerGestureCandidate = false;
     private boolean drawerDragging = false;
     private float drawerDownX = 0f;
@@ -222,7 +223,6 @@ public class AppDrawerController {
             drawerPanel.post(this::openDrawer);
             return;
         }
-        drawerOpen = true;
         animateDrawerTo(0f, 320L);
     }
 
@@ -230,7 +230,6 @@ public class AppDrawerController {
         if (drawerPanel == null || drawerPanel.getWidth() == 0) {
             return;
         }
-        drawerOpen = false;
         animateDrawerTo(-drawerPanel.getWidth(), 240L);
     }
 
@@ -299,19 +298,29 @@ public class AppDrawerController {
     }
 
     private void animateDrawerTo(float targetOffset, long durationMs) {
-        prepareDrawerForInteraction(true);
+        // Cancel any ongoing animations
         drawerPanel.animate().cancel();
         drawerScrim.animate().cancel();
+
         final long animationToken = ++drawerAnimationToken;
+        drawerAnimating = true;
         float startOffset = clamp(drawerPanel.getTranslationX(), -drawerPanel.getWidth(), 0f);
         float panelWidth = Math.max(drawerPanel.getWidth(), 1f);
         float remainingRatio = Math.abs(targetOffset - startOffset) / panelWidth;
+        
         if (remainingRatio <= 0.015f) {
+            float progress = drawerProgressForOffset(targetOffset);
+            drawerOpen = progress > 0.95f;
+            drawerAnimating = false;
             applyDrawerOffsetState(targetOffset, false);
             return;
         }
-        float progress = drawerProgressForOffset(targetOffset);
-        float scrimAlpha = drawerScrimAlpha(progress);
+        
+        // Calculate target states
+        float targetProgress = drawerProgressForOffset(targetOffset);
+        float targetScrimAlpha = drawerScrimAlpha(targetProgress);
+        float targetPanelAlpha = drawerPanelAlpha(targetProgress);
+        float targetPanelScaleY = drawerPanelScaleY(targetProgress);
         
         // Use different interpolators for open and close actions
         boolean isOpening = targetOffset == 0f;
@@ -319,28 +328,70 @@ public class AppDrawerController {
                 ? new DecelerateInterpolator(1.3f) 
                 : new android.view.animation.AccelerateInterpolator(1.2f);
 
+        // Prepare views for animation without causing visual jumps
+        if (isOpening) {
+            // When opening: ensure panel is visible, scrim will fade in from 0
+            drawerPanel.setVisibility(View.VISIBLE);
+            // Only set scrim visibility/alpha if needed to avoid flicker
+            if (drawerScrim.getVisibility() != View.VISIBLE) {
+                drawerScrim.setVisibility(View.VISIBLE);
+                drawerScrim.setAlpha(0f);
+            }
+        } else {
+            // When closing: ensure both are visible so they can animate out
+            drawerPanel.setVisibility(View.VISIBLE);
+            if (drawerScrim.getVisibility() != View.VISIBLE) {
+                drawerScrim.setVisibility(View.VISIBLE);
+                // Set scrim to current progress alpha so animation starts from correct value
+                float currentProgress = drawerProgressForOffset(startOffset);
+                drawerScrim.setAlpha(drawerScrimAlpha(currentProgress));
+            }
+        }
+
+        // Bring to front for proper layering
+        drawerScrim.bringToFront();
+        drawerPanel.bringToFront();
+
+        // Animate panel
         drawerPanel.animate()
                 .translationX(targetOffset)
-                .alpha(drawerPanelAlpha(progress))
-                .scaleY(drawerPanelScaleY(progress))
+                .alpha(targetPanelAlpha)
+                .scaleY(targetPanelScaleY)
                 .setDuration(durationMs)
                 .setInterpolator(interpolator)
                 .withEndAction(() -> {
                     if (animationToken != drawerAnimationToken) {
                         return;
                     }
-                    applyDrawerOffsetState(targetOffset, false);
+                    drawerOpen = targetProgress > 0.95f;
+                    drawerAnimating = false;
+                    if (!drawerOpen) {
+                        drawerPanel.setVisibility(View.INVISIBLE);
+                    }
                 })
                 .start();
+        
+        // Animate scrim - let it smoothly transition without interference
         drawerScrim.animate()
-                .alpha(scrimAlpha)
+                .alpha(targetScrimAlpha)
                 .setDuration(durationMs)
                 .setInterpolator(isOpening ? new DecelerateInterpolator(1.3f) : new android.view.animation.AccelerateInterpolator(1.2f))
+                .withEndAction(() -> {
+                    if (animationToken != drawerAnimationToken) {
+                        return;
+                    }
+                    // Only change visibility when fully closed to avoid flicker
+                    if (!isOpening && targetScrimAlpha <= 0.01f) {
+                        drawerScrim.setVisibility(View.GONE);
+                    }
+                    // When open, scrim stays VISIBLE (already set before animation)
+                })
                 .start();
     }
-
+    
     private void prepareDrawerForInteraction(boolean forceVisible) {
         drawerAnimationToken++;
+        drawerAnimating = false;
         drawerScrim.bringToFront();
         drawerPanel.bringToFront();
         drawerPanel.animate().cancel();
@@ -348,6 +399,12 @@ public class AppDrawerController {
         float panelWidth = Math.max(drawerPanel.getWidth(), 1);
         float currentOffset = clamp(drawerPanel.getTranslationX(), -panelWidth, 0f);
         applyDrawerOffsetState(currentOffset, forceVisible);
+        
+        // Ensure scrim is properly initialized for animation
+        if (forceVisible && drawerScrim.getVisibility() != View.VISIBLE) {
+            drawerScrim.setVisibility(View.VISIBLE);
+            drawerScrim.setAlpha(0f); // Start from transparent for smooth animation
+        }
     }
 
     private void setDrawerOffset(float offset) {
@@ -391,8 +448,20 @@ public class AppDrawerController {
         drawerPanel.setAlpha(showPanel ? drawerPanelAlpha(progress) : 0f);
         drawerPanel.setScaleY(drawerPanelScaleY(progress));
 
-        drawerScrim.setVisibility(showScrim ? View.VISIBLE : View.GONE);
-        drawerScrim.setAlpha(showScrim ? scrimAlpha : 0f);
+        // Ensure proper visibility handling for scrim
+        if (showScrim) {
+            drawerScrim.setVisibility(View.VISIBLE);
+            drawerScrim.setAlpha(scrimAlpha);
+        } else {
+            // Only hide scrim when alpha is truly zero to avoid flickering
+            if (scrimAlpha <= 0.01f) {
+                drawerScrim.setVisibility(View.GONE);
+                drawerScrim.setAlpha(0f);
+            } else {
+                drawerScrim.setVisibility(View.VISIBLE);
+                drawerScrim.setAlpha(scrimAlpha);
+            }
+        }
         drawerOpen = progress > 0.95f;
     }
 
@@ -461,8 +530,7 @@ public class AppDrawerController {
         if (drawerPanel == null || drawerPanel.getWidth() == 0) {
             return;
         }
-        if (drawerDragging) {
-            setDrawerOffset(drawerPanel.getTranslationX());
+        if (drawerDragging || drawerAnimating) {
             return;
         }
         setDrawerOffset(drawerOpen ? 0f : -drawerPanel.getWidth());
