@@ -169,7 +169,7 @@ public class SettingsStore {
     }
 
     public void setFontSizeSp(float value) {
-        preferences.edit().putFloat(KEY_FONT_SIZE, clamp(value, 12f, 34f)).apply();
+        preferences.edit().putFloat(KEY_FONT_SIZE, clamp(value, 12f, 64f)).apply();
     }
 
     public String getReaderFontFamily() {

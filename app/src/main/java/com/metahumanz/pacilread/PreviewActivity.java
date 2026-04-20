@@ -384,6 +384,7 @@ public class PreviewActivity extends ThemedActivity {
                     applyButton.setAllCaps(false);
                     applyButton.setBackgroundResource(R.drawable.bg_outline_button);
                     applyButton.setTextColor(getColor(R.color.primary));
+                    applyButton.setPadding(dp(16), dp(8), dp(16), dp(8));
                     GlassUiHelper.applyToView(this, applyButton, settingsStore.getGlassOpacityPercent());
                     LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
                     row.addView(applyButton, ap);
@@ -391,6 +392,7 @@ public class PreviewActivity extends ThemedActivity {
                     deleteButton.setText("删除");
                     deleteButton.setAllCaps(false);
                     deleteButton.setBackgroundResource(R.drawable.bg_danger_button);
+                    deleteButton.setPadding(dp(12), dp(8), dp(12), dp(8));
                     LinearLayout.LayoutParams dp2 = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
                     dp2.leftMargin = dp(8);
                     row.addView(deleteButton, dp2);

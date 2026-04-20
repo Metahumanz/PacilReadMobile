@@ -182,7 +182,7 @@
                     android:numColumns="auto_fit"
                     android:overScrollMode="never"
                     android:paddingBottom="6dp"
-                    android:scrollbarStyle="outsideOverlay"
+                    android:scrollbars="none"
                     android:stretchMode="columnWidth"
                     android:verticalSpacing="8dp" />
 
@@ -196,7 +196,7 @@
                     android:listSelector="@android:color/transparent"
                     android:overScrollMode="never"
                     android:paddingBottom="6dp"
-                    android:scrollbarStyle="outsideOverlay"
+                    android:scrollbars="none"
                     android:visibility="gone" />
 
                 <LinearLayout

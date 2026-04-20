@@ -37,7 +37,7 @@ public class JustifiedPageTextView extends TextView {
     }
 
     private void init() {
-        setIncludeFontPadding(false);
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             setBreakStrategy(Layout.BREAK_STRATEGY_HIGH_QUALITY);
             setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NORMAL);
