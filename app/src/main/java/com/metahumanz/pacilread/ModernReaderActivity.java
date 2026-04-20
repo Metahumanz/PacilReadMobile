@@ -1586,8 +1586,31 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         pageBodyIncoming.setTextSize(settingsStore.getFontSizeSp());
         pageBodyCurrent.setLineSpacing(settingsStore.getLineSpacingExtraSp(), 1f);
         pageBodyIncoming.setLineSpacing(settingsStore.getLineSpacingExtraSp(), 1f);
+        pageBodyCurrent.setLetterSpacing(settingsStore.getLetterSpacing());
+        pageBodyIncoming.setLetterSpacing(settingsStore.getLetterSpacing());
         pageBodyCurrent.setFullJustifyEnabled(true);
         pageBodyIncoming.setFullJustifyEnabled(true);
+        
+        // Apply first line indent
+        int indentPx = dp(settingsStore.getFirstLineIndentDp());
+        pageBodyCurrent.setPadding(
+            ((ViewGroup) pageCurrent).getPaddingLeft() + indentPx,
+            ((ViewGroup) pageCurrent).getPaddingTop(),
+            ((ViewGroup) pageCurrent).getPaddingRight(),
+            ((ViewGroup) pageCurrent).getPaddingBottom()
+        );
+        pageBodyIncoming.setPadding(
+            ((ViewGroup) pageIncoming).getPaddingLeft() + indentPx,
+            ((ViewGroup) pageIncoming).getPaddingTop(),
+            ((ViewGroup) pageIncoming).getPaddingRight(),
+            ((ViewGroup) pageIncoming).getPaddingBottom()
+        );
+        
+        // Apply chapter title alignment
+        String alignment = settingsStore.getChapterTitleAlignment();
+        pageTitleCurrent.setGravity("center".equals(alignment) ? android.view.Gravity.CENTER : android.view.Gravity.LEFT);
+        pageTitleIncoming.setGravity("center".equals(alignment) ? android.view.Gravity.CENTER : android.view.Gravity.LEFT);
+        
         invalidatePreparedPagingSnapshots();
         updateTtsHighlight();
         int sidePadding = dp(settingsStore.getSidePaddingDp());
@@ -1605,22 +1628,6 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         updateReaderHud();
         updateHudDisplay();
         invalidatePreparedPagingSnapshots();
-        schedulePagingSnapshotWarmup();
-    }
-
-    private void recordSessionStats() {
-        if (sessionStartTime == 0 || book == null) return;
-        long durationMs = System.currentTimeMillis() - sessionStartTime;
-        if (durationMs < 5000) return; // 少于 5 秒不记录
-        
-        int durationSeconds = (int) (durationMs / 1000);
-        int currentOffset = currentCharOffset();
-        int charCount = Math.max(0, currentOffset - sessionStartOffset);
-        
-        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
-        String date = sdf.format(new java.util.Date());
-        
-        executor.execute(() -> databaseHelper.recordReadingStats(date, durationSeconds, charCount));
     }
 
     private void updateHudDisplay() {
@@ -1805,12 +1812,18 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         SeekBar lineSeek = content.findViewById(R.id.style_seek_line_spacing);
         SeekBar sideSeek = content.findViewById(R.id.style_seek_side_padding);
         SeekBar verticalSeek = content.findViewById(R.id.style_seek_vertical_padding);
+        SeekBar letterSpacingSeek = content.findViewById(R.id.style_seek_letter_spacing);
+        SeekBar firstLineIndentSeek = content.findViewById(R.id.style_seek_first_line_indent);
+        SeekBar backgroundBlurSeek = content.findViewById(R.id.style_seek_background_blur);
         TextView textColorValue = content.findViewById(R.id.style_text_text_color);
         TextView fontValue = content.findViewById(R.id.style_text_font);
         TextView fontWeightValue = content.findViewById(R.id.style_text_font_weight);
         TextView lineValue = content.findViewById(R.id.style_text_line_spacing);
         TextView sideValue = content.findViewById(R.id.style_text_side_padding);
         TextView verticalValue = content.findViewById(R.id.style_text_vertical_padding);
+        TextView letterSpacingValue = content.findViewById(R.id.style_text_letter_spacing);
+        TextView firstLineIndentValue = content.findViewById(R.id.style_text_first_line_indent);
+        TextView backgroundBlurValue = content.findViewById(R.id.style_text_background_blur);
         Spinner uiThemeSpinner = content.findViewById(R.id.style_spinner_ui_theme_mode);
         CheckBox keepScreenOn = content.findViewById(R.id.style_check_keep_screen_on);
         CheckBox showTitleCheck = content.findViewById(R.id.style_check_show_title);
@@ -1819,6 +1832,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         Button paperThemeButton = content.findViewById(R.id.style_button_theme_paper);
         Button forestThemeButton = content.findViewById(R.id.style_button_theme_forest);
         Button nightThemeButton = content.findViewById(R.id.style_button_theme_night);
+        Button titleLeftButton = content.findViewById(R.id.style_button_title_left);
+        Button titleCenterButton = content.findViewById(R.id.style_button_title_center);
+        Button customColorButton = content.findViewById(R.id.style_button_custom_color);
         String[] uiThemeKeys = new String[]{"follow_app", "system", "light", "dark"};
         ArrayAdapter<String> uiThemeAdapter = buildSpinnerAdapter(new String[]{"跟随应用", "跟随系统", "浅色", "深色"});
         ArrayAdapter<String> fontFamilyAdapter = buildSpinnerAdapter(READER_FONT_FAMILY_LABELS);
@@ -1833,35 +1849,27 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         lineSeek.setProgress(Math.round(settingsStore.getLineSpacingExtraSp()));
         sideSeek.setProgress(settingsStore.getSidePaddingDp() - 8);
         verticalSeek.setProgress(settingsStore.getVerticalPaddingDp() - 8);
+        letterSpacingSeek.setProgress(Math.round(settingsStore.getLetterSpacing() * 10f));
+        firstLineIndentSeek.setProgress(settingsStore.getFirstLineIndentDp());
+        backgroundBlurSeek.setProgress(settingsStore.getBackgroundBlurPercent());
         keepScreenOn.setChecked(settingsStore.isKeepScreenOn());
         showTitleCheck.setChecked(settingsStore.isChapterTitleVisible());
         backgroundText.setText(currentBackgroundLabel());
         uiThemeSpinner.setSelection(indexOf(uiThemeKeys, settingsStore.getReaderUiThemeMode(), 0), false);
         final String[] selectedReaderTheme = new String[]{settingsStore.getReaderTheme()};
         updateReaderThemeButtons(paperThemeButton, forestThemeButton, nightThemeButton, selectedReaderTheme[0]);
+        String chapterTitleAlignment = settingsStore.getChapterTitleAlignment();
+        styleThemeButton(titleLeftButton, "left".equals(chapterTitleAlignment));
+        styleThemeButton(titleCenterButton, "center".equals(chapterTitleAlignment));
+        updateLetterSpacingLabel(letterSpacingValue, letterSpacingSeek);
+        updateFirstLineIndentLabel(firstLineIndentValue, firstLineIndentSeek);
+        updateBackgroundBlurLabel(backgroundBlurValue, backgroundBlurSeek);
         Runnable refreshTextColorPreview = () -> updateTextColorPreview(
                 textColorValue,
                 READER_TEXT_COLOR_KEYS[textColorSpinner.getSelectedItemPosition()],
                 ReaderThemePalette.from(selectedReaderTheme[0])
         );
         refreshTextColorPreview.run();
-
-        Runnable autoApply = () -> {
-            int anchorOffset = currentCharOffset();
-            String previousResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(this);
-            settingsStore.setFontSizeSp(fontSeek.getProgress() + 12f);
-            settingsStore.setReaderFontFamily(READER_FONT_FAMILY_KEYS[fontFamilySpinner.getSelectedItemPosition()]);
-            settingsStore.setReaderFontWeight(fontWeightValueForProgress(fontWeightSeek.getProgress()));
-            settingsStore.setReaderTextColor(READER_TEXT_COLOR_KEYS[textColorSpinner.getSelectedItemPosition()]);
-            settingsStore.setLineSpacingExtraSp(lineSeek.getProgress());
-            settingsStore.setSidePaddingDp(sideSeek.getProgress() + 8);
-            settingsStore.setVerticalPaddingDp(verticalSeek.getProgress() + 8);
-            settingsStore.setKeepScreenOn(keepScreenOn.isChecked());
-            settingsStore.setChapterTitleVisible(showTitleCheck.isChecked());
-            settingsStore.setReaderUiThemeMode(uiThemeKeys[uiThemeSpinner.getSelectedItemPosition()]);
-            settingsStore.setReaderTheme(selectedReaderTheme[0]);
-            refreshTextColorPreview.run();
-            String nextResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(this);
             clearPageCache();
             if (!previousResolvedUiMode.equals(nextResolvedUiMode)) {
                 recreate();
@@ -1906,6 +1914,28 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         lineSeek.setOnSeekBarChangeListener(listener);
         sideSeek.setOnSeekBarChangeListener(listener);
         verticalSeek.setOnSeekBarChangeListener(listener);
+        
+        SeekBar.OnSeekBarChangeListener simpleListener = new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (seekBar == letterSpacingSeek) {
+                    updateLetterSpacingLabel(letterSpacingValue, letterSpacingSeek);
+                } else if (seekBar == firstLineIndentSeek) {
+                    updateFirstLineIndentLabel(firstLineIndentValue, firstLineIndentSeek);
+                } else if (seekBar == backgroundBlurSeek) {
+                    updateBackgroundBlurLabel(backgroundBlurValue, backgroundBlurSeek);
+                }
+                if (fromUser) {
+                    autoApply.run();
+                }
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                autoApply.run();
+            }
+        };
+        letterSpacingSeek.setOnSeekBarChangeListener(simpleListener);
+        firstLineIndentSeek.setOnSeekBarChangeListener(simpleListener);
+        backgroundBlurSeek.setOnSeekBarChangeListener(simpleListener);
 
         keepScreenOn.setOnCheckedChangeListener((v, isChecked) -> autoApply.run());
         showTitleCheck.setOnCheckedChangeListener((v, isChecked) -> autoApply.run());
@@ -1930,6 +1960,24 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
         });
 
+        titleLeftButton.setOnClickListener(v -> {
+            settingsStore.setChapterTitleAlignment("left");
+            styleThemeButton(titleLeftButton, true);
+            styleThemeButton(titleCenterButton, false);
+            autoApply.run();
+        });
+        titleCenterButton.setOnClickListener(v -> {
+            settingsStore.setChapterTitleAlignment("center");
+            styleThemeButton(titleLeftButton, false);
+            styleThemeButton(titleCenterButton, true);
+            autoApply.run();
+        });
+        
+        customColorButton.setOnClickListener(v -> showCustomColorPickerDialog(() -> {
+            refreshTextColorPreview.run();
+            autoApply.run();
+        }));
+
         AlertDialog dialog = new AlertDialog.Builder(this).setView(content).create();
         renderThemeRows(customThemeList, dialog);
         content.findViewById(R.id.style_button_pick_background).setOnClickListener(v -> openBackgroundPicker());
@@ -1945,13 +1993,6 @@ public class ModernReaderActivity extends ThemedReaderActivity {
 
     private void showReaderOptionsDialog() {
         View content = LayoutInflater.from(this).inflate(R.layout.dialog_reader_options, null, false);
-        EditText titleInput = content.findViewById(R.id.options_input_title);
-        EditText authorInput = content.findViewById(R.id.options_input_author);
-        Spinner flipSpinner = content.findViewById(R.id.options_spinner_flip_mode);
-        Button sliderBookButton = content.findViewById(R.id.options_button_slider_book);
-        Button sliderChapterButton = content.findViewById(R.id.options_button_slider_chapter);
-        CheckBox showTitleCheck = content.findViewById(R.id.options_check_show_title);
-
         Spinner tLSpinner = content.findViewById(R.id.options_spinner_hud_tl);
         Spinner tCSpinner = content.findViewById(R.id.options_spinner_hud_tc);
         Spinner tRSpinner = content.findViewById(R.id.options_spinner_hud_tr);
@@ -2206,6 +2247,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             if (builtInRes != 0) {
                 readerBackgroundImage.setImageResource(builtInRes);
                 readerBackgroundImage.setVisibility(View.VISIBLE);
+                applyBackgroundBlur();
             } else {
                 readerBackgroundImage.setImageDrawable(null);
                 readerBackgroundImage.setVisibility(View.GONE);
@@ -2218,6 +2260,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             if (builtInRes != 0) {
                 readerBackgroundImage.setImageResource(builtInRes);
                 readerBackgroundImage.setVisibility(View.VISIBLE);
+                applyBackgroundBlur();
             } else {
                 readerBackgroundImage.setImageDrawable(null);
                 readerBackgroundImage.setVisibility(View.GONE);
@@ -2226,6 +2269,29 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         }
         readerBackgroundImage.setImageBitmap(bitmap);
         readerBackgroundImage.setVisibility(View.VISIBLE);
+        applyBackgroundBlur();
+    }
+
+    private void applyBackgroundBlur() {
+        int blurPercent = settingsStore.getBackgroundBlurPercent();
+        if (blurPercent <= 0) {
+            readerBackgroundImage.setAlpha(1.0f);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                readerBackgroundImage.setRenderEffect(null);
+            }
+            return;
+        }
+        
+        float alpha = 1.0f - (blurPercent / 100f * 0.5f); // 最多降低50%透明度
+        readerBackgroundImage.setAlpha(alpha);
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            float radius = blurPercent / 100f * 25f; // 最大模糊半径25px
+            android.graphics.RenderEffect blurEffect = android.graphics.RenderEffect.createBlurEffect(
+                radius, radius, android.graphics.Shader.TileMode.CLAMP
+            );
+            readerBackgroundImage.setRenderEffect(blurEffect);
+        }
     }
 
     private void openBackgroundPicker() {
@@ -2295,15 +2361,6 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         int safetyBuffer = Math.max(dp(2), Math.round(pageBodyCurrent.getPaint().getFontSpacing() * 0.08f));
         return measureView.getMeasuredHeight() + dp(CHAPTER_TITLE_BODY_MARGIN_DP) + safetyBuffer;
     }
-
-    private String getProcessedChapterText(int chapterIndex) {
-        String cached = processedChapterLruCache.get(chapterIndex);
-        if (cached != null) {
-            return cached;
-        }
-        ChapterRecord chapter = chapters.get(chapterIndex);
-        // 懒加载：如果正文为空，则从数据库获取
-        if (chapter.bodyText == null || chapter.bodyText.isEmpty()) {
             ChapterRecord fullChapter = databaseHelper.getChapterContent(chapter.id);
             if (fullChapter != null) {
                 chapter.bodyText = fullChapter.bodyText;
@@ -2535,49 +2592,41 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                     LinearLayout.LayoutParams deleteParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
                     deleteParams.leftMargin = dp(8);
                     row.addView(deleteButton, deleteParams);
-                    applyButton.setOnClickListener(v -> {
-                        try {
-                            int anchorOffset = currentCharOffset();
-                            String previousResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(this);
-                            
-                            // Capture old layout-affecting settings
-                            String oldFontFamily = settingsStore.getReaderFontFamily();
-                            int oldFontWeight = settingsStore.getReaderFontWeight();
-                            float oldFontSize = settingsStore.getFontSizeSp();
-                            float oldLineSpacing = settingsStore.getLineSpacingExtraSp();
-                            int oldSidePadding = settingsStore.getSidePaddingDp();
-                            int oldVerticalPadding = settingsStore.getVerticalPaddingDp();
-                            
-                            ReaderThemeConfig.apply(settingsStore, new JSONObject(theme.configJson));
-                            clearPageCache();
-                            
-                            String nextResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(this);
-                            if (!previousResolvedUiMode.equals(nextResolvedUiMode)) {
-                                recreate();
-                                return;
-                            }
-                            
-                            applyReaderSettings();
-                            
-                            // Check if layout-affecting settings changed
-                            boolean layoutChanged = !oldFontFamily.equals(settingsStore.getReaderFontFamily())
-                                    || oldFontWeight != settingsStore.getReaderFontWeight()
-                                    || oldFontSize != settingsStore.getFontSizeSp()
-                                    || oldLineSpacing != settingsStore.getLineSpacingExtraSp()
-                                    || oldSidePadding != settingsStore.getSidePaddingDp()
-                                    || oldVerticalPadding != settingsStore.getVerticalPaddingDp();
-                            
-                            if (layoutChanged) {
-                                openChapter(currentChapterIndex, anchorOffset, false, 0);
-                            } else {
-                                // Hot swap! Just update the current UI states
-                                invalidatePreparedPagingSnapshots();
-                                updateUiAfterPageChange();
-                            }
-                        } catch (Exception ignore) {
-                            showToast("主题配置损坏");
+                    Runnable refreshTextColorPreview = () -> updateTextColorPreview(
+                            textColorValue,
+                            READER_TEXT_COLOR_KEYS[textColorSpinner.getSelectedItemPosition()],
+                            ReaderThemePalette.from(selectedReaderTheme[0])
+                    );
+                    refreshTextColorPreview.run();
+
+                    Runnable autoApply = () -> {
+                        int anchorOffset = currentCharOffset();
+                        String previousResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(this);
+                        settingsStore.setFontSizeSp(fontSeek.getProgress() + 12f);
+                        settingsStore.setReaderFontFamily(READER_FONT_FAMILY_KEYS[fontFamilySpinner.getSelectedItemPosition()]);
+                        settingsStore.setReaderFontWeight(fontWeightValueForProgress(fontWeightSeek.getProgress()));
+                        settingsStore.setReaderTextColor(READER_TEXT_COLOR_KEYS[textColorSpinner.getSelectedItemPosition()]);
+                        settingsStore.setLineSpacingExtraSp(lineSeek.getProgress());
+                        settingsStore.setSidePaddingDp(sideSeek.getProgress() + 8);
+                        settingsStore.setVerticalPaddingDp(verticalSeek.getProgress() + 8);
+                        settingsStore.setLetterSpacing(letterSpacingSeek.getProgress() / 10f);
+                        settingsStore.setFirstLineIndentDp(firstLineIndentSeek.getProgress());
+                        settingsStore.setBackgroundBlurPercent(backgroundBlurSeek.getProgress());
+                        settingsStore.setKeepScreenOn(keepScreenOn.isChecked());
+                        settingsStore.setChapterTitleVisible(showTitleCheck.isChecked());
+                        settingsStore.setReaderUiThemeMode(uiThemeKeys[uiThemeSpinner.getSelectedItemPosition()]);
+                        settingsStore.setReaderTheme(selectedReaderTheme[0]);
+                        refreshTextColorPreview.run();
+                        String nextResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(this);
+                        clearPageCache();
+                        if (!previousResolvedUiMode.equals(nextResolvedUiMode)) {
+                            recreate();
+                            return;
                         }
-                    });
+                        applyReaderSettings();
+                        openChapter(currentChapterIndex, anchorOffset, false, 0);
+                    };
+                    applyButton.setOnClickListener(v -> autoApply.run());
                     deleteButton.setOnClickListener(v -> executor.execute(() -> {
                         databaseHelper.deleteCustomTheme(theme.id);
                         runOnUiThread(() -> renderThemeRows(container, dialog));
@@ -2607,6 +2656,71 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                     });
                 })
                 .show();
+    }
+
+    private void showCustomColorPickerDialog(Runnable onApply) {
+        View content = LayoutInflater.from(this).inflate(R.layout.dialog_color_picker, null, false);
+        SeekBar redSeek = content.findViewById(R.id.color_seek_red);
+        SeekBar greenSeek = content.findViewById(R.id.color_seek_green);
+        SeekBar blueSeek = content.findViewById(R.id.color_seek_blue);
+        TextView redText = content.findViewById(R.id.color_text_red);
+        TextView greenText = content.findViewById(R.id.color_text_green);
+        TextView blueText = content.findViewById(R.id.color_text_blue);
+        View colorPreview = content.findViewById(R.id.color_preview);
+        Button applyButton = content.findViewById(R.id.color_button_apply);
+
+        // Parse current custom color or use default
+        String customColor = settingsStore.getCustomTextColor();
+        int currentColor = 0xFF374151; // Default graphite
+        if (customColor != null && !customColor.isEmpty()) {
+            try {
+                currentColor = android.graphics.Color.parseColor(customColor);
+            } catch (Exception e) {
+                // Use default
+            }
+        }
+
+        redSeek.setProgress(android.graphics.Color.red(currentColor));
+        greenSeek.setProgress(android.graphics.Color.green(currentColor));
+        blueSeek.setProgress(android.graphics.Color.blue(currentColor));
+
+        Runnable updatePreview = () -> {
+            int r = redSeek.getProgress();
+            int g = greenSeek.getProgress();
+            int b = blueSeek.getProgress();
+            int color = android.graphics.Color.rgb(r, g, b);
+            redText.setText("R: " + r);
+            greenText.setText("G: " + g);
+            blueText.setText("B: " + b);
+            colorPreview.setBackgroundColor(color);
+        };
+        updatePreview.run();
+
+        SeekBar.OnSeekBarChangeListener colorListener = new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                updatePreview.run();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        };
+        redSeek.setOnSeekBarChangeListener(colorListener);
+        greenSeek.setOnSeekBarChangeListener(colorListener);
+        blueSeek.setOnSeekBarChangeListener(colorListener);
+
+        AlertDialog dialog = new AlertDialog.Builder(this).setView(content).create();
+        applyButton.setOnClickListener(v -> {
+            int r = redSeek.getProgress();
+            int g = greenSeek.getProgress();
+            int b = blueSeek.getProgress();
+            String hexColor = String.format("#%02X%02X%02X", r, g, b);
+            settingsStore.setCustomTextColor(hexColor);
+            settingsStore.setReaderTextColor("custom");
+            dialog.dismiss();
+            if (onApply != null) {
+                onApply.run();
+            }
+        });
+        showStyledDialog(dialog);
     }
 
     private void clearPageCache() {
@@ -2661,6 +2775,17 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     }
 
     private int resolveReaderTextColorValue(String colorKey, ReaderThemePalette palette) {
+        if ("custom".equals(colorKey)) {
+            String customColor = settingsStore.getCustomTextColor();
+            if (customColor != null && !customColor.isEmpty()) {
+                try {
+                    return android.graphics.Color.parseColor(customColor);
+                } catch (Exception e) {
+                    // Fall through to default
+                }
+            }
+            return palette.textColor;
+        }
         if ("ink_brown".equals(colorKey)) {
             return 0xFF5A4330;
         }
@@ -2692,37 +2817,20 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         preview.setBackgroundColor(palette.pageColor);
     }
 
+    private void updateLetterSpacingLabel(TextView label, SeekBar seekBar) {
+        float spacing = seekBar.getProgress() / 10f;
+        label.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%.1f", spacing));
+    }
+
+    private void updateFirstLineIndentLabel(TextView label, SeekBar seekBar) {
+        label.setText(seekBar.getProgress() + " 字符");
+    }
+
+    private void updateBackgroundBlurLabel(TextView label, SeekBar seekBar) {
+        label.setText(seekBar.getProgress() + "%");
+    }
+
     private Typeface buildReaderTypeface(String familyKey, int weight) {
-        Typeface familyTypeface;
-        switch (familyKey) {
-            case "sans-serif":
-                familyTypeface = Typeface.SANS_SERIF;
-                break;
-            case "monospace":
-                familyTypeface = Typeface.MONOSPACE;
-                break;
-            default:
-                familyTypeface = Typeface.DEFAULT;
-                break;
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            return Typeface.create(familyTypeface, weight, false);
-        }
-        return Typeface.create(familyTypeface, weight >= 600 ? Typeface.BOLD : Typeface.NORMAL);
-    }
-
-    private void updateReaderThemeButtons(Button paperButton, Button forestButton, Button nightButton, String selectedTheme) {
-        styleThemeButton(paperButton, "paper".equals(selectedTheme));
-        styleThemeButton(forestButton, "forest".equals(selectedTheme));
-        styleThemeButton(nightButton, "night".equals(selectedTheme));
-    }
-
-    private void styleThemeButton(Button button, boolean active) {
-        button.setBackgroundResource(active ? R.drawable.bg_primary_button : R.drawable.bg_outline_button);
-        button.setTag(R.id.tag_glass_background, !active);
-        button.setTextColor(active ? getColor(android.R.color.white) : themeColor(R.color.on_surface));
-        GlassUiHelper.applyToView(this, button, settingsStore.getGlassOpacityPercent());
-    }
 
     private void styleReaderMenuButton(Button button, boolean active) {
         button.setBackgroundResource(active ? R.drawable.bg_reader_menu_button_active : R.drawable.bg_reader_menu_button_solid);

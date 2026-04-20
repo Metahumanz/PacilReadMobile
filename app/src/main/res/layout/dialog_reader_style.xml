@@ -2,7 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@color/card">
+    android:background="@drawable/bg_dialog">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -144,6 +144,19 @@
             android:text="字色预览"
             android:textColor="@color/on_surface_muted" />
 
+        <Button
+            android:id="@+id/style_button_custom_color"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_outline_button"
+            android:minHeight="44dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:text="自定义字色（RGB）"
+            android:textAllCaps="false"
+            android:textColor="@color/primary" />
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -240,6 +253,108 @@
 
         <TextView
             android:id="@+id/style_text_vertical_padding"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/on_surface_muted" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="字间距"
+            android:textColor="@color/on_surface"
+            android:textStyle="bold" />
+
+        <SeekBar
+            android:id="@+id/style_seek_letter_spacing"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100" />
+
+        <TextView
+            android:id="@+id/style_text_letter_spacing"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/on_surface_muted" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="首行缩进"
+            android:textColor="@color/on_surface"
+            android:textStyle="bold" />
+
+        <SeekBar
+            android:id="@+id/style_seek_first_line_indent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="8" />
+
+        <TextView
+            android:id="@+id/style_text_first_line_indent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/on_surface_muted" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="章节标题对齐"
+            android:textColor="@color/on_surface"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/style_button_title_left"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_outline_button"
+                android:minHeight="44dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:text="靠左"
+                android:textAllCaps="false"
+                android:textColor="@color/on_surface" />
+
+            <Button
+                android:id="@+id/style_button_title_center"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_outline_button"
+                android:minHeight="44dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:text="居中"
+                android:textAllCaps="false"
+                android:textColor="@color/on_surface" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="背景模糊"
+            android:textColor="@color/on_surface"
+            android:textStyle="bold" />
+
+        <SeekBar
+            android:id="@+id/style_seek_background_blur"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100" />
+
+        <TextView
+            android:id="@+id/style_text_background_blur"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="@color/on_surface_muted" />

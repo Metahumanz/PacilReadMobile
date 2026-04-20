@@ -9,7 +9,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="听书设置"
+        android:text="自定义字色"
         android:textColor="@color/on_surface"
         android:textSize="20sp"
         android:textStyle="bold" />
@@ -18,35 +18,18 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="引擎"
-        android:textColor="@color/on_surface"
-        android:textStyle="bold" />
-
-        <Spinner
-            android:id="@+id/tts_spinner_engine"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/bg_input"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="语速"
+        android:text="红色 (R)"
         android:textColor="@color/on_surface"
         android:textStyle="bold" />
 
     <SeekBar
-        android:id="@+id/tts_seek_rate"
+        android:id="@+id/color_seek_red"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:max="15" />
+        android:max="255" />
 
     <TextView
-        android:id="@+id/tts_text_rate"
+        android:id="@+id/color_text_red"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textColor="@color/on_surface_muted" />
@@ -55,37 +38,55 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="MiMo API Key"
+        android:text="绿色 (G)"
         android:textColor="@color/on_surface"
         android:textStyle="bold" />
 
-    <EditText
-        android:id="@+id/tts_input_mimo_api_key"
+    <SeekBar
+        android:id="@+id/color_seek_green"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:background="@drawable/bg_input"
-        android:hint="仅 MiMo 引擎需要"
-        android:inputType="textPassword"
-        android:padding="12dp"
-        android:textColor="@color/on_surface"
-        android:textColorHint="@color/on_surface_muted" />
+        android:max="255" />
 
     <TextView
-        android:id="@+id/tts_text_note"
+        android:id="@+id/color_text_green"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/on_surface_muted" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="蓝色 (B)"
+        android:textColor="@color/on_surface"
+        android:textStyle="bold" />
+
+    <SeekBar
+        android:id="@+id/color_seek_blue"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:text="当前版本使用 Android 原生 TTS 引擎。"
-        android:textColor="@color/on_surface_muted"
-        android:textSize="13sp" />
+        android:max="255" />
+
+    <TextView
+        android:id="@+id/color_text_blue"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/on_surface_muted" />
+
+    <View
+        android:id="@+id/color_preview"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/bg_input" />
 
     <Button
-        android:id="@+id/tts_button_toggle"
+        android:id="@+id/color_button_apply"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="18dp"
         android:background="@drawable/bg_primary_button"
-        android:text="开始听书"
+        android:text="应用"
         android:textColor="@android:color/white" />
 </LinearLayout>

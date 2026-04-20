@@ -53,6 +53,11 @@ public class SettingsStore {
     private static final String KEY_HUD_BOTTOM_LEFT = "hud_bottom_left";
     private static final String KEY_HUD_BOTTOM_CENTER = "hud_bottom_center";
     private static final String KEY_HUD_BOTTOM_RIGHT = "hud_bottom_right";
+    private static final String KEY_LETTER_SPACING = "letter_spacing";
+    private static final String KEY_FIRST_LINE_INDENT = "first_line_indent";
+    private static final String KEY_BACKGROUND_BLUR_PERCENT = "background_blur_percent";
+    private static final String KEY_CUSTOM_TEXT_COLOR = "custom_text_color";
+    private static final String KEY_CHAPTER_TITLE_ALIGNMENT = "chapter_title_alignment";
 
     private final SharedPreferences preferences;
 
@@ -396,6 +401,47 @@ public class SettingsStore {
 
     public void setHudBottomRight(String value) {
         preferences.edit().putString(KEY_HUD_BOTTOM_RIGHT, normalizeHudSlot(value)).apply();
+    }
+
+    public float getLetterSpacing() {
+        return preferences.getFloat(KEY_LETTER_SPACING, 0f);
+    }
+
+    public void setLetterSpacing(float value) {
+        preferences.edit().putFloat(KEY_LETTER_SPACING, clamp(value, 0f, 10f)).apply();
+    }
+
+    public int getFirstLineIndentDp() {
+        return preferences.getInt(KEY_FIRST_LINE_INDENT, 2);
+    }
+
+    public void setFirstLineIndentDp(int value) {
+        preferences.edit().putInt(KEY_FIRST_LINE_INDENT, clamp(value, 0, 8)).apply();
+    }
+
+    public int getBackgroundBlurPercent() {
+        return clamp(preferences.getInt(KEY_BACKGROUND_BLUR_PERCENT, 0), 0, 100);
+    }
+
+    public void setBackgroundBlurPercent(int value) {
+        preferences.edit().putInt(KEY_BACKGROUND_BLUR_PERCENT, clamp(value, 0, 100)).apply();
+    }
+
+    public String getCustomTextColor() {
+        return preferences.getString(KEY_CUSTOM_TEXT_COLOR, "");
+    }
+
+    public void setCustomTextColor(String value) {
+        preferences.edit().putString(KEY_CUSTOM_TEXT_COLOR, value == null ? "" : value).apply();
+    }
+
+    public String getChapterTitleAlignment() {
+        String value = preferences.getString(KEY_CHAPTER_TITLE_ALIGNMENT, "left");
+        return "center".equals(value) ? "center" : "left";
+    }
+
+    public void setChapterTitleAlignment(String value) {
+        preferences.edit().putString(KEY_CHAPTER_TITLE_ALIGNMENT, "center".equals(value) ? "center" : "left").apply();
     }
 
     public String getWebDavProgressBaseUrl() {
