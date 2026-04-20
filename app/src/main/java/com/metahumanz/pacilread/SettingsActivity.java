@@ -64,7 +64,6 @@ public class SettingsActivity extends ThemedActivity {
     private SeekBar glassOpacitySeekBar;
     private TextView glassOpacityText;
     private Button testButton;
-    private Button importBooksButton;
     private Button fullBackupButton;
     private Button fullRestoreButton;
     private Button liteBackupButton;
@@ -108,7 +107,6 @@ public class SettingsActivity extends ThemedActivity {
         statusText = findViewById(R.id.text_status);
         fullBackupText = findViewById(R.id.text_backup_full);
         liteBackupText = findViewById(R.id.text_backup_lite);
-        importBooksButton = findViewById(R.id.button_import_books);
         fullBackupButton = findViewById(R.id.button_full_backup);
         fullRestoreButton = findViewById(R.id.button_full_restore);
         liteBackupButton = findViewById(R.id.button_lite_backup);
@@ -128,7 +126,6 @@ public class SettingsActivity extends ThemedActivity {
         setupWebDavSyncButtons();
         refreshBackupLabels();
 
-        importBooksButton.setOnClickListener(v -> openPicker());
         testButton.setOnClickListener(v -> testWebDav());
         fullBackupButton.setOnClickListener(v -> runWebDavAction("正在执行全量备份...", listener -> backupManager.fullBackup(listener)));
         liteBackupButton.setOnClickListener(v -> runWebDavAction("正在执行增量备份...", listener -> backupManager.incrementalBackup(listener)));
@@ -201,8 +198,8 @@ public class SettingsActivity extends ThemedActivity {
     }
 
     private void refreshBackupLabels() {
-        fullBackupText.setText("全量备份：最近一次 " + backupManager.lastFullBackupLabel());
-        liteBackupText.setText("增量备份：最近一次 " + backupManager.lastLiteBackupLabel());
+        if (fullBackupText != null) fullBackupText.setText("全量备份：最近一次 " + backupManager.lastFullBackupLabel());
+        if (liteBackupText != null) liteBackupText.setText("增量备份：最近一次 " + backupManager.lastLiteBackupLabel());
     }
 
     private void saveSettings() {
@@ -332,11 +329,11 @@ public class SettingsActivity extends ThemedActivity {
     }
 
     private void setupWebDavSyncButtons() {
-        webDavSyncBookshelfButton.setOnClickListener(v -> toggleWebDavSyncButton(webDavSyncBookshelfButton));
-        webDavSyncFilesButton.setOnClickListener(v -> toggleWebDavSyncButton(webDavSyncFilesButton));
-        webDavSyncUiButton.setOnClickListener(v -> toggleWebDavSyncButton(webDavSyncUiButton));
-        webDavSyncThemesButton.setOnClickListener(v -> toggleWebDavSyncButton(webDavSyncThemesButton));
-        webDavSyncBackgroundsButton.setOnClickListener(v -> toggleWebDavSyncButton(webDavSyncBackgroundsButton));
+        if (webDavSyncBookshelfButton != null) webDavSyncBookshelfButton.setOnClickListener(v -> toggleWebDavSyncButton(webDavSyncBookshelfButton));
+        if (webDavSyncFilesButton != null) webDavSyncFilesButton.setOnClickListener(v -> toggleWebDavSyncButton(webDavSyncFilesButton));
+        if (webDavSyncUiButton != null) webDavSyncUiButton.setOnClickListener(v -> toggleWebDavSyncButton(webDavSyncUiButton));
+        if (webDavSyncThemesButton != null) webDavSyncThemesButton.setOnClickListener(v -> toggleWebDavSyncButton(webDavSyncThemesButton));
+        if (webDavSyncBackgroundsButton != null) webDavSyncBackgroundsButton.setOnClickListener(v -> toggleWebDavSyncButton(webDavSyncBackgroundsButton));
     }
 
     private void handleSettingsChanged() {
@@ -452,7 +449,6 @@ public class SettingsActivity extends ThemedActivity {
 
     private void setBusy(boolean busy) {
         settingsBusy = busy;
-        importBooksButton.setEnabled(!busy);
         testButton.setEnabled(!busy);
         fullBackupButton.setEnabled(!busy);
         fullRestoreButton.setEnabled(!busy);

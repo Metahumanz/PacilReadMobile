@@ -264,16 +264,17 @@ public class MainActivity extends ThemedActivity {
             return;
         }
         if (requestCode == REQUEST_PICK_BOOK) {
+            List<Uri> uris = new ArrayList<>();
             if (data.getClipData() != null) {
-                // 批量导入
                 int count = data.getClipData().getItemCount();
                 for (int i = 0; i < count; i++) {
-                    Uri uri = data.getClipData().getItemAt(i).getUri();
-                    importBook(uri);
+                    uris.add(data.getClipData().getItemAt(i).getUri());
                 }
             } else if (data.getData() != null) {
-                // 单个导入
-                importBook(data.getData());
+                uris.add(data.getData());
+            }
+            if (!uris.isEmpty()) {
+                importBooks(uris);
             }
         } else if (requestCode == REQUEST_PICK_COVER && pendingCoverBookId > 0) {
             attachCover(pendingCoverBookId, data.getData());
@@ -1332,51 +1333,37 @@ public class MainActivity extends ThemedActivity {
         startActivityForResult(intent, REQUEST_PICK_COVER);
     }
 
-    private void importBook(Uri uri) {
-        // 对于 PDF 文件，询问用户是否按页拆分
-        boolean pdfSplitByPage = false;
-        String fileName = uri.getLastPathSegment();
-        if (fileName != null && fileName.toLowerCase(Locale.ROOT).endsWith(".pdf")) {
-            final boolean[] result = {false};
-            runOnUiThread(() -> {
-                new AlertDialog.Builder(this)
-                        .setTitle("PDF 导入选项")
-                        .setMessage("是否将每一页作为一个章节？\n选择“否”将尝试按标题智能拆分。")
-                        .setNegativeButton("否", (d, w) -> {
-                            result[0] = false;
-                            startImport(uri, result[0]);
-                        })
-                        .setPositiveButton("是", (d, w) -> {
-                            result[0] = true;
-                            startImport(uri, result[0]);
-                        })
-                        .show();
-            });
-            return; 
-        }
-        startImport(uri, pdfSplitByPage);
-    }
+    private void importBooks(List<Uri> uris) {
+        if (uris == null || uris.isEmpty()) return;
 
-    private void startImport(Uri uri, boolean pdfSplitByPage) {
-        showLoading("正在解析书籍...");
+        // 如果包含 PDF，我们统一询问一次，或者对 PDF 采用默认策略（不拆分）
+        // 为了批量体验，如果选了多个，我们就不弹窗询问了，直接执行
+        boolean pdfSplitByPage = false; 
+
+        showLoading("正在导入 " + uris.size() + " 本书籍...");
         executor.execute(() -> {
-            try {
-                long bookId = databaseHelper.insertImportedBook(importService.importFromUri(uri, pdfSplitByPage));
-                runOnUiThread(() -> {
-                    hideLoading();
-                    refreshBooks();
-                    showSection(SECTION_BOOKSHELF);
-                    if (drawerController != null) {
-                        drawerController.closeDrawer();
-                    }
-                    openBook(bookId);
-                });
-            } catch (Exception error) {
-                runOnUiThread(() -> {
-                    hideLoading();
-                    showToast("导入失败: " + error.getMessage());
-                });
+            int successCount = 0;
+            int failCount = 0;
+            for (Uri uri : uris) {
+                try {
+                    databaseHelper.insertImportedBook(importService.importFromUri(uri, pdfSplitByPage));
+                    successCount++;
+                } catch (Exception e) {
+                    failCount++;
+                }
             }
+            final int sCount = successCount;
+            final int fCount = failCount;
+            runOnUiThread(() -> {
+                hideLoading();
+                refreshBooks();
+                if (fCount > 0) {
+                    showToast("导入完成: 成功 " + sCount + "，失败 " + fCount);
+                } else {
+                    showToast("成功导入 " + sCount + " 本书籍");
+                }
+                showSection(SECTION_BOOKSHELF);
+            });
         });
     }
 
