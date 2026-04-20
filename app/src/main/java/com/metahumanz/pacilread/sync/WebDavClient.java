@@ -126,7 +126,7 @@ public class WebDavClient {
 
     public void uploadFile(File localFile, String remoteUrl) throws Exception {
         try (FileInputStream inputStream = new FileInputStream(localFile)) {
-            byte[] bytes = inputStream.readAllBytes();
+            byte[] bytes = readFullyBytes(inputStream);
             request(remoteUrl, "PUT", bytes, null, null);
         }
     }

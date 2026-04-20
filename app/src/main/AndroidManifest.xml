@@ -18,6 +18,17 @@
         android:supportsRtl="true"
         android:theme="@style/PacilReadTheme">
         <activity
+            android:name="com.metahumanz.pacilread.BookshelfActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name="com.metahumanz.pacilread.PreviewActivity"
+            android:exported="false" />
+        <activity
             android:name="com.metahumanz.pacilread.SettingsActivity"
             android:exported="false" />
         <activity
@@ -26,13 +37,7 @@
             android:screenOrientation="portrait" />
         <activity
             android:name="com.metahumanz.pacilread.MainActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:exported="false" />
     </application>
 
 </manifest>

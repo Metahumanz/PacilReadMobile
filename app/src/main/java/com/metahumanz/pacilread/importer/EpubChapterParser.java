@@ -232,7 +232,19 @@ public final class EpubChapterParser {
         if (entry == null) {
             return null;
         }
-        return zipFile.getInputStream(entry).readAllBytes();
+        try (java.io.InputStream is = zipFile.getInputStream(entry)) {
+            return readAllBytesCompat(is);
+        }
+    }
+
+    private static byte[] readAllBytesCompat(java.io.InputStream is) throws IOException {
+        java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+        int nRead;
+        byte[] data = new byte[16384];
+        while ((nRead = is.read(data, 0, data.length)) != -1) {
+            buffer.write(data, 0, nRead);
+        }
+        return buffer.toByteArray();
     }
 
     private static String parentPath(String path) {
