@@ -1,419 +1,293 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/settings_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_window_backdrop">
+    android:background="@color/surface">
 
-    <ScrollView
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginBottom="104dp"
-        android:clipToPadding="false"
-        android:fillViewport="true"
-        android:overScrollMode="never">
+        android:orientation="vertical">
 
-        <LinearLayout
+        <!-- Windows 11 Style Header -->
+        <RelativeLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingStart="18dp"
-            android:paddingTop="18dp"
-            android:paddingEnd="18dp"
-            android:paddingBottom="28dp">
+            android:layout_height="64dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <ImageButton
+                android:id="@+id/button_back"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_centerVertical="true"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="返回"
+                android:src="@drawable/ic_arrow_back"
+                app:tint="@color/on_surface" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerVertical="true"
+                android:layout_marginStart="16dp"
+                android:layout_toEndOf="@id/button_back"
+                android:fontFamily="sans-serif-medium"
+                android:text="设置"
+                android:textColor="@color/on_surface"
+                android:textSize="20sp" />
+        </RelativeLayout>
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:overScrollMode="never"
+            android:padding="20dp"
+            android:scrollbarStyle="outsideOverlay">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_card"
-                android:elevation="8dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:padding="20dp">
+                android:orientation="vertical">
+
+                <!-- Appearance Section -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="个性化与显示"
+                    android:textColor="@color/primary"
+                    android:textSize="14sp" />
 
                 <LinearLayout
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                    android:layout_marginBottom="24dp"
+                    android:background="@drawable/bg_card"
+                    android:elevation="2dp"
+                    android:orientation="vertical"
+                    android:padding="16dp">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-medium"
-                        android:text="@string/settings_title"
+                        android:text="应用主题"
                         android:textColor="@color/on_surface"
-                        android:textSize="26sp" />
+                        android:textSize="16sp" />
+
+                    <Spinner
+                        android:id="@+id/spinner_app_theme_mode"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/bg_input" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:text="主题、同步、听书与备份"
-                        android:textColor="@color/on_surface_muted"
-                        android:textSize="13sp" />
-                </LinearLayout>
+                        android:layout_marginTop="16dp"
+                        android:text="阅读器界面主题"
+                        android:textColor="@color/on_surface"
+                        android:textSize="16sp" />
 
-                <Button
-                    android:id="@+id/button_import_books"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_primary_button"
-                    android:fontFamily="sans-serif-medium"
-                    android:minHeight="44dp"
-                    android:minWidth="0dp"
-                    android:paddingStart="18dp"
-                    android:paddingTop="10dp"
-                    android:paddingEnd="18dp"
-                    android:paddingBottom="10dp"
-                    android:text="添加书籍"
-                    android:textAllCaps="false"
-                    android:textColor="@android:color/white"
-                    android:textSize="14sp" />
-            </LinearLayout>
+                    <Spinner
+                        android:id="@+id/spinner_reader_ui_theme_mode"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/bg_input" />
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:background="@drawable/bg_card"
-                android:elevation="6dp"
-                android:orientation="vertical"
-                android:padding="18dp">
+                    <TextView
+                        android:id="@+id/text_glass_opacity"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:text="毛玻璃不透明度"
+                        android:textColor="@color/on_surface"
+                        android:textSize="16sp" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="界面主题"
-                    android:textColor="@color/on_surface"
-                    android:textSize="18sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="应用与阅读界面可以分开控制明暗。"
-                    android:textColor="@color/on_surface_muted"
-                    android:textSize="12sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:text="应用主题"
-                    android:textColor="@color/on_surface"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
-                <Spinner
-                    android:id="@+id/spinner_app_theme_mode"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_input"
-                    android:paddingStart="10dp"
-                    android:paddingEnd="10dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:text="阅读界面"
-                    android:textColor="@color/on_surface"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
-                <Spinner
-                    android:id="@+id/spinner_reader_ui_theme_mode"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_input"
-                    android:paddingStart="10dp"
-                    android:paddingEnd="10dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:text="阅读菜单不透明度"
-                    android:textColor="@color/on_surface"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
-                <SeekBar
-                    android:id="@+id/seek_glass_opacity"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:max="80" />
-
-                <TextView
-                    android:id="@+id/text_glass_opacity"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textColor="@color/on_surface_muted"
-                    android:textSize="12sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="只作用于阅读页顶部/底部菜单和阅读弹窗。"
-                    android:textColor="@color/on_surface_muted"
-                    android:textSize="12sp" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:background="@drawable/bg_card"
-                android:elevation="6dp"
-                android:orientation="vertical"
-                android:padding="18dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="阅读习惯"
-                    android:textColor="@color/on_surface"
-                    android:textSize="18sp" />
-
-                <CheckBox
-                    android:id="@+id/check_auto_open"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:buttonTint="@color/primary"
-                    android:text="启动时自动回到最近阅读"
-                    android:textColor="@color/on_surface"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:text="音量 + 键"
-                    android:textColor="@color/on_surface"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
-                <Spinner
-                    android:id="@+id/spinner_volume_key_up_action"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_input"
-                    android:paddingStart="10dp"
-                    android:paddingEnd="10dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:text="音量 - 键"
-                    android:textColor="@color/on_surface"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
-                <Spinner
-                    android:id="@+id/spinner_volume_key_down_action"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_input"
-                    android:paddingStart="10dp"
-                    android:paddingEnd="10dp" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_soft_button"
-                    android:lineSpacingExtra="2dp"
-                    android:paddingStart="14dp"
-                    android:paddingTop="10dp"
-                    android:paddingEnd="14dp"
-                    android:paddingBottom="10dp"
-                    android:text="排版、阅读预设和章节标题显示都放在阅读预览与阅读页内调整。"
-                    android:textColor="@color/on_surface_muted"
-                    android:textSize="12sp" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:background="@drawable/bg_card"
-                android:elevation="6dp"
-                android:orientation="vertical"
-                android:padding="18dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="WebDAV 云同步"
-                    android:textColor="@color/on_surface"
-                    android:textSize="18sp" />
-
-                <CheckBox
-                    android:id="@+id/check_webdav_enabled"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:buttonTint="@color/primary"
-                    android:text="启用 WebDAV 进度同步"
-                    android:textColor="@color/on_surface"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:text="服务器地址"
-                    android:textColor="@color/on_surface"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
-                <EditText
-                    android:id="@+id/input_webdav_url"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_input"
-                    android:hint="https://dav.example.com/dav/"
-                    android:padding="14dp"
-                    android:textColor="@color/on_surface"
-                    android:textColorHint="@color/on_surface_muted"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="子目录"
-                    android:textColor="@color/on_surface"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
-                <EditText
-                    android:id="@+id/input_webdav_dir"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_input"
-                    android:hint="Books"
-                    android:padding="14dp"
-                    android:textColor="@color/on_surface"
-                    android:textColorHint="@color/on_surface_muted"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="用户名"
-                    android:textColor="@color/on_surface"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
-                <EditText
-                    android:id="@+id/input_webdav_user"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_input"
-                    android:hint="用户名"
-                    android:padding="14dp"
-                    android:textColor="@color/on_surface"
-                    android:textColorHint="@color/on_surface_muted"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="密码"
-                    android:textColor="@color/on_surface"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
-                <EditText
-                    android:id="@+id/input_webdav_password"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_input"
-                    android:hint="密码或应用专用密码"
-                    android:inputType="textPassword"
-                    android:padding="14dp"
-                    android:textColor="@color/on_surface"
-                    android:textColorHint="@color/on_surface_muted"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:text="同步内容选择"
-                    android:textColor="@color/on_surface"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
-                <LinearLayout
-                    android:id="@+id/layout_webdav_sync_options"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:orientation="vertical">
-
-                    <LinearLayout
+                    <SeekBar
+                        android:id="@+id/seek_glass_opacity"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal">
+                        android:layout_marginTop="8dp"
+                        android:max="80" />
+                </LinearLayout>
+
+                <!-- Navigation Section -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="操作与导航"
+                    android:textColor="@color/primary"
+                    android:textSize="14sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="24dp"
+                    android:background="@drawable/bg_card"
+                    android:elevation="2dp"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <CheckBox
+                        android:id="@+id/check_auto_open"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="启动时自动打开最后一本书"
+                        android:textColor="@color/on_surface" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="音量上键行为"
+                        android:textColor="@color/on_surface"
+                        android:textSize="16sp" />
+
+                    <Spinner
+                        android:id="@+id/spinner_volume_key_up_action"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/bg_input" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="音量下键行为"
+                        android:textColor="@color/on_surface"
+                        android:textSize="16sp" />
+
+                    <Spinner
+                        android:id="@+id/spinner_volume_key_down_action"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/bg_input" />
+                </LinearLayout>
+
+                <!-- Cloud Sync Section -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="云端同步 (WebDAV)"
+                    android:textColor="@color/primary"
+                    android:textSize="14sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="24dp"
+                    android:background="@drawable/bg_card"
+                    android:elevation="2dp"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <CheckBox
+                        android:id="@+id/check_webdav_enabled"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="启用 WebDAV 同步"
+                        android:textColor="@color/on_surface" />
+
+                    <LinearLayout
+                        android:id="@+id/layout_webdav_config"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="visible">
+
+                        <EditText
+                            android:id="@+id/input_webdav_url"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:background="@drawable/bg_input"
+                            android:hint="服务器地址 (URL)"
+                            android:padding="12dp"
+                            android:textSize="14sp" />
+
+                        <EditText
+                            android:id="@+id/input_webdav_dir"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:background="@drawable/bg_input"
+                            android:hint="同步目录名称"
+                            android:padding="12dp"
+                            android:textSize="14sp" />
+
+                        <EditText
+                            android:id="@+id/input_webdav_user"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:background="@drawable/bg_input"
+                            android:hint="用户名"
+                            android:padding="12dp"
+                            android:textSize="14sp" />
+
+                        <EditText
+                            android:id="@+id/input_webdav_password"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:background="@drawable/bg_input"
+                            android:hint="密码 / 授权码"
+                            android:inputType="textPassword"
+                            android:padding="12dp"
+                            android:textSize="14sp" />
 
                         <Button
-                            android:id="@+id/button_webdav_sync_bookshelf"
-                            android:layout_width="0dp"
+                            android:id="@+id/button_test_webdav"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginEnd="8dp"
-                            android:layout_weight="1"
+                            android:layout_marginTop="16dp"
                             android:background="@drawable/bg_outline_button"
-                            android:minHeight="40dp"
-                            android:text="书架内容"
+                            android:text="测试连接并初始化"
                             android:textAllCaps="false"
-                            android:textColor="@color/on_surface"
-                            android:textSize="12sp" />
-
-                        <Button
-                            android:id="@+id/button_webdav_sync_files"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginEnd="8dp"
-                            android:layout_weight="1"
-                            android:background="@drawable/bg_outline_button"
-                            android:minHeight="40dp"
-                            android:text="书籍文件"
-                            android:textAllCaps="false"
-                            android:textColor="@color/on_surface"
-                            android:textSize="12sp" />
-
-                        <Button
-                            android:id="@+id/button_webdav_sync_ui"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:background="@drawable/bg_outline_button"
-                            android:minHeight="40dp"
-                            android:text="界面设置"
-                            android:textAllCaps="false"
-                            android:textColor="@color/on_surface"
-                            android:textSize="12sp" />
+                            android:textColor="@color/on_surface" />
                     </LinearLayout>
+                </LinearLayout>
+
+                <!-- Backup & Restore Section -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="数据备份"
+                    android:textColor="@color/primary"
+                    android:textSize="14sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="24dp"
+                    android:background="@drawable/bg_card"
+                    android:elevation="2dp"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:id="@+id/text_backup_full"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="全量备份：从未备份"
+                        android:textColor="@color/on_surface_muted"
+                        android:textSize="12sp" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -422,246 +296,100 @@
                         android:orientation="horizontal">
 
                         <Button
-                            android:id="@+id/button_webdav_sync_themes"
+                            android:id="@+id/button_full_backup"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_marginEnd="8dp"
+                            android:layout_marginEnd="4dp"
                             android:layout_weight="1"
-                            android:background="@drawable/bg_outline_button"
-                            android:minHeight="40dp"
-                            android:text="阅读主题"
+                            android:background="@drawable/bg_positive_button"
+                            android:text="立即备份"
                             android:textAllCaps="false"
-                            android:textColor="@color/on_surface"
-                            android:textSize="12sp" />
+                            android:textColor="@android:color/white" />
 
                         <Button
-                            android:id="@+id/button_webdav_sync_backgrounds"
+                            android:id="@+id/button_full_restore"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_marginEnd="8dp"
+                            android:layout_marginStart="4dp"
                             android:layout_weight="1"
                             android:background="@drawable/bg_outline_button"
-                            android:minHeight="40dp"
-                            android:text="背景图片"
+                            android:text="从云端恢复"
                             android:textAllCaps="false"
-                            android:textColor="@color/on_surface"
-                            android:textSize="12sp" />
-
-                        <View
-                            android:layout_width="0dp"
-                            android:layout_height="0dp"
-                            android:layout_weight="1" />
+                            android:textColor="@color/on_surface" />
                     </LinearLayout>
                 </LinearLayout>
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:text="这些开关影响手动备份/恢复范围；阅读进度仍会按单本 JSON 自动桥接。"
-                    android:textColor="@color/on_surface_muted"
-                    android:textSize="12sp" />
-
-                <TextView
-                    android:id="@+id/text_status"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:background="@drawable/bg_soft_button"
-                    android:lineSpacingExtra="2dp"
-                    android:padding="14dp"
-                    android:textColor="@color/on_surface"
-                    android:textSize="13sp" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:background="@drawable/bg_card"
-                android:elevation="6dp"
-                android:orientation="vertical"
-                android:padding="18dp">
-
+                
+                <!-- Tools Section -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
                     android:fontFamily="sans-serif-medium"
-                    android:text="MiMo 听书"
-                    android:textColor="@color/on_surface"
-                    android:textSize="18sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="阅读页切换到 MiMo 时会读取这里保存的 API Key。"
-                    android:textColor="@color/on_surface_muted"
-                    android:textSize="12sp" />
-
-                <EditText
-                    android:id="@+id/input_mimo_api_key"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:background="@drawable/bg_input"
-                    android:hint="输入 MiMo API Key"
-                    android:inputType="textPassword"
-                    android:padding="14dp"
-                    android:textColor="@color/on_surface"
-                    android:textColorHint="@color/on_surface_muted"
+                    android:text="实验室与工具"
+                    android:textColor="@color/primary"
                     android:textSize="14sp" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:background="@drawable/bg_card"
-                android:elevation="6dp"
-                android:orientation="vertical"
-                android:padding="18dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="备份与恢复"
-                    android:textColor="@color/on_surface"
-                    android:textSize="18sp" />
-
-                <TextView
-                    android:id="@+id/text_backup_full"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:background="@drawable/bg_soft_button"
-                    android:padding="14dp"
-                    android:text="全量备份：尚未执行"
-                    android:textColor="@color/on_surface"
-                    android:textSize="13sp" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:orientation="horizontal">
+                    android:layout_marginBottom="80dp"
+                    android:background="@drawable/bg_card"
+                    android:elevation="2dp"
+                    android:orientation="vertical"
+                    android:padding="16dp">
 
-                    <Button
-                        android:id="@+id/button_full_backup"
-                        android:layout_width="0dp"
+                    <TextView
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginEnd="8dp"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_positive_button"
-                        android:fontFamily="sans-serif-medium"
-                        android:minHeight="44dp"
-                        android:text="全量备份"
-                        android:textAllCaps="false"
-                        android:textColor="@android:color/white"
-                        android:textSize="14sp" />
-
-                    <Button
-                        android:id="@+id/button_full_restore"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_outline_button"
-                        android:fontFamily="sans-serif-medium"
-                        android:minHeight="44dp"
-                        android:text="全量恢复"
-                        android:textAllCaps="false"
+                        android:text="MiMo TTS API Key"
                         android:textColor="@color/on_surface"
+                        android:textSize="16sp" />
+
+                    <EditText
+                        android:id="@+id/input_mimo_api_key"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/bg_input"
+                        android:hint="输入 Key"
+                        android:inputType="textPassword"
+                        android:padding="12dp"
                         android:textSize="14sp" />
+
+                    <Button
+                        android:id="@+id/button_import_books"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:background="@drawable/bg_outline_button"
+                        android:text="批量导入本地书籍"
+                        android:textAllCaps="false"
+                        android:textColor="@color/on_surface" />
                 </LinearLayout>
 
-                <TextView
-                    android:id="@+id/text_backup_lite"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:background="@drawable/bg_soft_button"
-                    android:padding="14dp"
-                    android:text="增量备份：尚未执行"
-                    android:textColor="@color/on_surface"
-                    android:textSize="13sp" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:orientation="horizontal">
-
-                    <Button
-                        android:id="@+id/button_lite_backup"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="8dp"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_positive_button"
-                        android:fontFamily="sans-serif-medium"
-                        android:minHeight="44dp"
-                        android:text="增量备份"
-                        android:textAllCaps="false"
-                        android:textColor="@android:color/white"
-                        android:textSize="14sp" />
-
-                    <Button
-                        android:id="@+id/button_lite_restore"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_outline_button"
-                        android:fontFamily="sans-serif-medium"
-                        android:minHeight="44dp"
-                        android:text="增量恢复"
-                        android:textAllCaps="false"
-                        android:textColor="@color/on_surface"
-                        android:textSize="14sp" />
-                </LinearLayout>
             </LinearLayout>
+        </ScrollView>
+    </LinearLayout>
 
-        </LinearLayout>
-    </ScrollView>
-
-    <LinearLayout
-        android:id="@+id/settings_action_bar"
+    <!-- Floating Status Bar -->
+    <androidx.cardview.widget.CardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:layout_marginStart="18dp"
-        android:layout_marginEnd="18dp"
-        android:layout_marginBottom="18dp"
-        android:background="@drawable/bg_card"
-        android:elevation="10dp"
-        android:orientation="vertical"
-        android:padding="14dp">
+        android:layout_margin="16dp"
+        app:cardBackgroundColor="@color/surface"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="8dp">
 
         <TextView
+            android:id="@+id/text_status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_soft_button"
-            android:paddingStart="14dp"
-            android:paddingTop="10dp"
-            android:paddingEnd="14dp"
-            android:paddingBottom="10dp"
-            android:text="设置会实时保存；WebDAV 测试、备份和恢复仍需手动触发。"
-            android:textColor="@color/on_surface_muted"
+            android:padding="12dp"
+            android:text="状态：就绪"
+            android:textAlignment="center"
+            android:textColor="@color/primary"
             android:textSize="12sp" />
-
-        <Button
-            android:id="@+id/button_test_webdav"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:background="@drawable/bg_outline_button"
-            android:fontFamily="sans-serif-medium"
-            android:minHeight="46dp"
-            android:text="@string/settings_test"
-            android:textAllCaps="false"
-            android:textColor="@color/on_surface"
-            android:textSize="14sp" />
-    </LinearLayout>
-
+    </androidx.cardview.widget.CardView>
 
 </FrameLayout>

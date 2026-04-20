@@ -1,15 +1,16 @@
 package com.metahumanz.pacilread.theme;
 
-import android.app.Activity;
-import android.content.Context;
+import android.os.Bundle;
+import androidx.appcompat.app.AppCompatActivity;
 
-public abstract class ThemedReaderActivity extends Activity {
+public abstract class ThemedReaderActivity extends AppCompatActivity {
     private String appliedThemeMode = ThemeModeHelper.MODE_SYSTEM;
 
     @Override
-    protected void attachBaseContext(Context newBase) {
-        appliedThemeMode = ThemeModeHelper.getResolvedReaderThemeMode(newBase);
-        super.attachBaseContext(ThemeModeHelper.wrapForReader(newBase));
+    protected void onCreate(Bundle savedInstanceState) {
+        ThemeModeHelper.apply(this);
+        appliedThemeMode = ThemeModeHelper.getResolvedReaderThemeMode(this);
+        super.onCreate(savedInstanceState);
     }
 
     @Override

@@ -16,6 +16,8 @@ import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.ImageButton;
+import android.view.MenuItem;
 
 import com.metahumanz.pacilread.importer.BookImportService;
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
@@ -78,6 +80,8 @@ public class SettingsActivity extends ThemedActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Modern Windows 11 transition: incoming page slides forward
+        overridePendingTransition(R.anim.activity_slide_forward, R.anim.activity_recede);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_settings);
 
@@ -130,12 +134,20 @@ public class SettingsActivity extends ThemedActivity {
         liteBackupButton.setOnClickListener(v -> runWebDavAction("正在执行增量备份...", listener -> backupManager.incrementalBackup(listener)));
         fullRestoreButton.setOnClickListener(v -> confirmRestore("确定要从云端恢复吗？这将替换您当前的本地书架与设置。", listener -> backupManager.fullRestore(listener)));
         liteRestoreButton.setOnClickListener(v -> confirmRestore("确定要从云端增量恢复吗？这将覆盖您的书架列表与设置，但不会删除现有的本地缓存章节。", listener -> backupManager.incrementalRestore(listener)));
+
+        // Setup back button
+        ImageButton backButton = findViewById(R.id.button_back);
+        if (backButton != null) {
+            backButton.setOnClickListener(v -> onBackPressed());
+        }
     }
 
     @Override
     public void onBackPressed() {
         persistSettingsIfReady();
         super.onBackPressed();
+        // Modern Windows 11 transition: outgoing page slides backward, previous page returns from recede
+        overridePendingTransition(R.anim.activity_return_from_recede, R.anim.activity_slide_backward);
     }
 
     @Override

@@ -113,7 +113,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     // 使用 LruCache 优化内存占用，限制缓存条目数
     private final LruCache<Integer, String> processedChapterLruCache = new LruCache<>(100);
     private final Map<Integer, Integer> processedChapterLengthCache = new HashMap<>();
-    private final Map<Integer, List<PageSlice>> chapterPageCache = new HashMap<>();
+
 
     private ReaderDatabaseHelper databaseHelper;
     private SettingsStore settingsStore;
@@ -203,6 +203,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private int currentReaderPageColor = 0xFFF7F0E1;
     private int currentReaderTextColor = 0xFF5C4B37;
     private int pendingTapPagingDelta = 0;
+    private float lastTapY = -1f;
 
     private GestureDetector gestureDetector;
 
@@ -213,6 +214,23 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private int preparedCurrentSnapshotPageIndex = -1;
     private int preparedIncomingSnapshotChapterIndex = -1;
     private int preparedIncomingSnapshotPageIndex = -1;
+
+    // Static cache to avoid reloading book data and re-paginating during theme changes/recreations
+    private static long lastCachedBookId = -1L;
+    private static BookRecord cachedBook;
+    private static final List<ChapterRecord> cachedChapters = new ArrayList<>();
+    private static final List<ReplacementRuleRecord> cachedRules = new ArrayList<>();
+    private static final Map<Integer, List<PageSlice>> cachedPageSlicesMap = new HashMap<>();
+    
+    // Layout fingerprint to invalidate page slices cache
+    private static String cachedLayoutFontFamily;
+    private static int cachedLayoutFontWeight;
+    private static float cachedLayoutFontSize;
+    private static float cachedLayoutLineSpacing;
+    private static int cachedLayoutSidePadding;
+    private static int cachedLayoutVerticalPadding;
+    private static int cachedLayoutWidth;
+    private static int cachedLayoutHeight;
     private final Runnable pagingSnapshotWarmupRunnable = this::warmPreparedPagingSnapshots;
 
     private final Runnable autoHideRunnable = () -> setControlsVisible(false);
@@ -569,13 +587,28 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                     return true;
                 }
                 float width = readerRoot.getWidth();
-                float third = width / 3f;
-                if (e.getX() < third) {
-                    requestTapPageTurn(-1);
-                } else if (e.getX() > third * 2f) {
-                    requestTapPageTurn(1);
-                } else {
+                float height = readerRoot.getHeight();
+                float x = e.getX();
+                float y = e.getY();
+                
+                float thirdW = width / 3f;
+                float thirdH = height / 3f;
+                
+                // Grid coordinates (0, 1, or 2)
+                int col = (int) (x / thirdW);
+                int row = (int) (y / thirdH);
+                
+                lastTapY = y;
+                
+                if (col == 1 && row == 1) {
+                    // Center (1,1): Toggle Controls
                     setControlsVisible(true);
+                } else if (col == 0 || (col == 1 && row == 0)) {
+                    // Left column (0,*) OR Top-Center (1,0): Previous Page
+                    requestTapPageTurn(-1);
+                } else {
+                    // Right column (2,*) OR Bottom-Center (1,2): Next Page
+                    requestTapPageTurn(1);
                 }
                 return true;
             }
@@ -882,10 +915,39 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     }
 
     private void loadBook() {
+        // Fast path: Reuse cached data if same book
+        if (lastCachedBookId == bookId && cachedBook != null && !cachedChapters.isEmpty()) {
+            book = cachedBook;
+            chapters.clear();
+            chapters.addAll(cachedChapters);
+            replacementRules.clear();
+            replacementRules.addAll(cachedRules);
+            
+            // Check if layout fingerprint changed to decide whether to clear slice cache
+            if (!isLayoutFingerprintSame()) {
+                cachedPageSlicesMap.clear();
+                updateLayoutFingerprint();
+            }
+            
+            int targetChapterIndex = clamp(chapterIndexFromOrder(book.progressIndex), 0, chapters.size() - 1);
+            currentChapterIndex = targetChapterIndex;
+            applyReaderSettings();
+            
+            if (restoredChapterIndex >= 0) {
+                showPage(clamp(restoredChapterIndex, 0, chapters.size() - 1), Math.max(restoredPageIndex, 0), false, 0);
+                restoredChapterIndex = -1;
+                restoredPageIndex = -1;
+            } else {
+                openChapter(currentChapterIndex, book.progressOffset, false, 0);
+            }
+            return;
+        }
+
+        // Slow path: Load from DB
         executor.execute(() -> {
             try {
                 BookRecord loadedBook = databaseHelper.getBook(bookId);
-                List<ChapterRecord> loadedChapters = databaseHelper.getChapters(bookId, false); // 仅加载元数据
+                List<ChapterRecord> loadedChapters = databaseHelper.getChapters(bookId, false);
                 List<ReplacementRuleRecord> loadedRules = databaseHelper.getReplacementRules(bookId);
                 runOnUiThread(() -> {
                     if (loadedBook == null || loadedChapters.isEmpty()) {
@@ -893,35 +955,33 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                         finish();
                         return;
                     }
+                    
+                    // Update cache
+                    lastCachedBookId = bookId;
+                    cachedBook = loadedBook;
+                    cachedChapters.clear();
+                    cachedChapters.addAll(loadedChapters);
+                    cachedRules.clear();
+                    cachedRules.addAll(loadedRules);
+                    cachedPageSlicesMap.clear();
+                    updateLayoutFingerprint();
+
                     book = loadedBook;
                     chapters.clear();
                     chapters.addAll(loadedChapters);
                     replacementRules.clear();
                     replacementRules.addAll(loadedRules);
                     
-                    // 进度越界回退处理
                     int targetChapterIndex = clamp(chapterIndexFromOrder(loadedBook.progressIndex), 0, chapters.size() - 1);
-                    if (targetChapterIndex != chapterIndexFromOrder(loadedBook.progressIndex)) {
-                        Log.w(TAG, "恢复进度时发现章节缺失，已回退至最近可用章节: " + targetChapterIndex);
-                        databaseHelper.updateProgress(book.id, chapters.get(targetChapterIndex).orderIndex, 0);
-                        book.progressIndex = chapters.get(targetChapterIndex).orderIndex;
-                        book.progressOffset = 0;
-                    }
                     currentChapterIndex = targetChapterIndex;
                     applyReaderSettings();
                     if (restoredChapterIndex >= 0) {
-                        showPage(
-                                clamp(restoredChapterIndex, 0, chapters.size() - 1),
-                                Math.max(restoredPageIndex, 0),
-                                false,
-                                0
-                        );
+                        showPage(clamp(restoredChapterIndex, 0, chapters.size() - 1), Math.max(restoredPageIndex, 0), false, 0);
                         restoredChapterIndex = -1;
                         restoredPageIndex = -1;
                     } else {
                         openChapter(currentChapterIndex, loadedBook.progressOffset, false, 0);
                         sessionStartOffset = loadedBook.progressOffset;
-                        // 延迟同步，避免阻塞首屏渲染
                         mainHandler.postDelayed(() -> syncFromWebDav(true), 2000);
                     }
                 });
@@ -933,6 +993,30 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 });
             }
         });
+    }
+
+    private boolean isLayoutFingerprintSame() {
+        if (pageStage == null) return true;
+        return settingsStore.getReaderFontFamily().equals(cachedLayoutFontFamily)
+                && settingsStore.getReaderFontWeight() == cachedLayoutFontWeight
+                && settingsStore.getFontSizeSp() == cachedLayoutFontSize
+                && settingsStore.getLineSpacingExtraSp() == cachedLayoutLineSpacing
+                && settingsStore.getSidePaddingDp() == cachedLayoutSidePadding
+                && settingsStore.getVerticalPaddingDp() == cachedLayoutVerticalPadding
+                && pageStage.getWidth() == cachedLayoutWidth
+                && pageStage.getHeight() == cachedLayoutHeight;
+    }
+
+    private void updateLayoutFingerprint() {
+        if (pageStage == null) return;
+        cachedLayoutFontFamily = settingsStore.getReaderFontFamily();
+        cachedLayoutFontWeight = settingsStore.getReaderFontWeight();
+        cachedLayoutFontSize = settingsStore.getFontSizeSp();
+        cachedLayoutLineSpacing = settingsStore.getLineSpacingExtraSp();
+        cachedLayoutSidePadding = settingsStore.getSidePaddingDp();
+        cachedLayoutVerticalPadding = settingsStore.getVerticalPaddingDp();
+        cachedLayoutWidth = pageStage.getWidth();
+        cachedLayoutHeight = pageStage.getHeight();
     }
 
     private void openChapter(int chapterIndex, int charOffset, boolean animate, int direction) {
@@ -1044,6 +1128,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         }
         return false;
     }
+
 
     private void bindPage(TextView titleView, TextView bodyView, int chapterIndex, int pageIndex) {
         ChapterRecord chapter = chapters.get(chapterIndex);
@@ -1229,6 +1314,8 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         } else {
             resetInteractiveTouchState();
         }
+        // Ensure the incoming page is bound before taking snapshots
+        bindPage(pageTitleIncoming, pageBodyIncoming, targetChapterIndex, targetPageIndex);
         preparePagingSnapshots(targetChapterIndex, targetPageIndex);
         arrangePagingLayers(mode);
         applyPagingVisuals(mode, direction, 0f, "simulation".equals(mode) ? interactiveTouchY : height * 0.5f);
@@ -1501,6 +1588,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         pageBodyIncoming.setLineSpacing(settingsStore.getLineSpacingExtraSp(), 1f);
         pageBodyCurrent.setFullJustifyEnabled(true);
         pageBodyIncoming.setFullJustifyEnabled(true);
+        invalidatePreparedPagingSnapshots();
         updateTtsHighlight();
         int sidePadding = dp(settingsStore.getSidePaddingDp());
         int verticalPadding = dp(settingsStore.getVerticalPaddingDp());
@@ -2148,9 +2236,8 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     }
 
     private List<PageSlice> getPagesForChapter(int chapterIndex) {
-        List<PageSlice> cached = chapterPageCache.get(chapterIndex);
-        if (cached != null) {
-            return cached;
+        if (cachedPageSlicesMap.containsKey(chapterIndex)) {
+            return cachedPageSlicesMap.get(chapterIndex);
         }
         String text = getProcessedChapterText(chapterIndex);
         int pageWidth = getReaderPageTextWidth();
@@ -2174,7 +2261,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 regularPageHeight,
                 pageBodyCurrent.getLineSpacingExtra()
         );
-        chapterPageCache.put(chapterIndex, pages);
+        cachedPageSlicesMap.put(chapterIndex, pages);
         return pages;
     }
 
@@ -2452,15 +2539,41 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                         try {
                             int anchorOffset = currentCharOffset();
                             String previousResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(this);
+                            
+                            // Capture old layout-affecting settings
+                            String oldFontFamily = settingsStore.getReaderFontFamily();
+                            int oldFontWeight = settingsStore.getReaderFontWeight();
+                            float oldFontSize = settingsStore.getFontSizeSp();
+                            float oldLineSpacing = settingsStore.getLineSpacingExtraSp();
+                            int oldSidePadding = settingsStore.getSidePaddingDp();
+                            int oldVerticalPadding = settingsStore.getVerticalPaddingDp();
+                            
                             ReaderThemeConfig.apply(settingsStore, new JSONObject(theme.configJson));
                             clearPageCache();
+                            
                             String nextResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(this);
                             if (!previousResolvedUiMode.equals(nextResolvedUiMode)) {
                                 recreate();
                                 return;
                             }
+                            
                             applyReaderSettings();
-                            openChapter(currentChapterIndex, anchorOffset, false, 0);
+                            
+                            // Check if layout-affecting settings changed
+                            boolean layoutChanged = !oldFontFamily.equals(settingsStore.getReaderFontFamily())
+                                    || oldFontWeight != settingsStore.getReaderFontWeight()
+                                    || oldFontSize != settingsStore.getFontSizeSp()
+                                    || oldLineSpacing != settingsStore.getLineSpacingExtraSp()
+                                    || oldSidePadding != settingsStore.getSidePaddingDp()
+                                    || oldVerticalPadding != settingsStore.getVerticalPaddingDp();
+                            
+                            if (layoutChanged) {
+                                openChapter(currentChapterIndex, anchorOffset, false, 0);
+                            } else {
+                                // Hot swap! Just update the current UI states
+                                invalidatePreparedPagingSnapshots();
+                                updateUiAfterPageChange();
+                            }
                         } catch (Exception ignore) {
                             showToast("主题配置损坏");
                         }
@@ -2497,13 +2610,13 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     }
 
     private void clearPageCache() {
-        chapterPageCache.clear();
+        cachedPageSlicesMap.clear();
     }
 
     private void clearAllReaderCaches() {
         processedChapterLruCache.evictAll();
         processedChapterLengthCache.clear();
-        chapterPageCache.clear();
+        cachedPageSlicesMap.clear();
         totalProcessedBookLength = -1;
     }
 
@@ -2639,6 +2752,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         }
         clearSimulationPagingLayer();
         if (!hasPreparedCurrentSnapshot(currentChapterIndex, currentPageIndex)) {
+            // Ensure the view is bound and ready for snapshot
+            bindPage(pageTitleCurrent, pageBodyCurrent, currentChapterIndex, currentPageIndex);
+            layoutPageLayerForSnapshot(pageCurrent);
             currentPageSnapshotBitmap = screenshotPageLayer(pageCurrent, currentPageSnapshotBitmap);
             if (currentPageSnapshotBitmap != null) {
                 preparedCurrentSnapshotChapterIndex = currentChapterIndex;
@@ -2646,8 +2762,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             }
         }
         if (!hasPreparedIncomingSnapshot(targetChapterIndex, targetPageIndex)) {
-            incomingPageSnapshotBitmap = screenshotPageLayer(pageIncoming, incomingPageSnapshotBitmap);
-            if (incomingPageSnapshotBitmap != null) {
+            Bitmap preparedBitmap = capturePreparedIncomingSnapshot(targetChapterIndex, targetPageIndex);
+            if (preparedBitmap != null) {
+                incomingPageSnapshotBitmap = preparedBitmap;
                 preparedIncomingSnapshotChapterIndex = targetChapterIndex;
                 preparedIncomingSnapshotPageIndex = targetPageIndex;
             }
@@ -3089,13 +3206,33 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     }
 
     private void initializeSimulationAutoStart(int direction, float width, float height) {
-        float startX = direction > 0 ? width * 0.9f : 0.1f;
-        float startY = direction > 0 ? height * 0.9f : height;
+        // Start closer to the actual edge for a smoother "sweep" effect
+        float startX = direction > 0 ? width - 5f : 5f;
+        float startY;
+        
+        float tapY = lastTapY >= 0 ? lastTapY : height / 2f;
+        
+        if (tapY < height / 3f) {
+            // Top zone: Start from top corner
+            startY = 5f;
+        } else if (tapY > height * 2f / 3f) {
+            // Bottom zone: Start from bottom corner
+            startY = height - 5f;
+        } else {
+            // Middle zone: Start from horizontal center
+            startY = height / 2f;
+        }
+        
         captureInteractiveStartPoint(startX, startY);
+        lastTapY = -1f; // Consume tap Y
     }
 
     private float sanitizeStageTouchX(float value) {
         float width = Math.max(pageStage == null ? 0f : pageStage.getWidth(), 1f);
+        if (settingsStore != null && "simulation".equals(settingsStore.getFlipMode())) {
+            // Simulation needs wider range to allow the fold to cross the entire screen
+            return Math.max(-width * 1.2f, Math.min(width * 2.2f, value));
+        }
         return Math.max(0.1f, Math.min(width - 0.1f, value));
     }
 
@@ -3107,20 +3244,27 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private float resolveSimulationTargetTouchX(int direction, boolean commit) {
         float width = Math.max(pageStage == null ? 0f : pageStage.getWidth(), dp(240));
         if (commit) {
-            return direction > 0 ? -width : width;
+            // For forward turn (right to left): touch goes from width to -width
+            // For backward turn (left to right): touch goes from 0 to width * 2
+            return direction > 0 ? -width : width * 2.1f;
         }
         return direction > 0 ? width : -width;
     }
 
     private float resolveSimulationTargetTouchY(int direction) {
         float height = Math.max(pageStage == null ? 0f : pageStage.getHeight(), dp(320));
-        if (direction < 0) {
-            return height;
+        
+        // Differentiate based on starting Y to ensure a diagonal pull
+        if (interactiveStartY < height / 3f) {
+            // Started at top, pull slightly downwards to the opposite side
+            return height * 0.3f;
+        } else if (interactiveStartY > height * 2f / 3f) {
+            // Started at bottom, pull slightly upwards to the opposite side
+            return height * 0.7f;
+        } else {
+            // Started at middle, pull across with a small vertical offset to prevent vertical fold singularity
+            return height / 2f + (direction > 0 ? 10f : -10f);
         }
-        if (interactiveStartY > height / 3f && interactiveStartY < height / 2f) {
-            return 1f;
-        }
-        return height;
     }
 
     private void resetInteractiveTouchState() {

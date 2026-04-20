@@ -18,6 +18,23 @@ public final class ThemeModeHelper {
     private ThemeModeHelper() {
     }
 
+    public static void apply(Context context) {
+        String mode = getAppThemeMode(context);
+        int nightMode;
+        switch (mode) {
+            case MODE_LIGHT:
+                nightMode = androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO;
+                break;
+            case MODE_DARK:
+                nightMode = androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES;
+                break;
+            default:
+                nightMode = androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM;
+                break;
+        }
+        androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(nightMode);
+    }
+
     public static Context wrapForApp(Context base) {
         return wrap(base, getAppThemeMode(base));
     }

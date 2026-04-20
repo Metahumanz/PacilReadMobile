@@ -120,13 +120,8 @@ public class SimulationPageTurnView extends View {
         }
         this.direction = direction;
         this.pageBackgroundColor = pageBackgroundColor;
-        if (direction > 0) {
-            this.frontBitmap = currentBitmap;
-            this.backBitmap = incomingBitmap;
-        } else {
-            this.frontBitmap = incomingBitmap;
-            this.backBitmap = currentBitmap;
-        }
+        this.frontBitmap = currentBitmap;
+        this.backBitmap = incomingBitmap;
         this.startX = ensureTouch(startX);
         this.startY = ensureTouch(startY);
         configureCorner();
@@ -164,23 +159,25 @@ public class SimulationPageTurnView extends View {
             return;
         }
         calcPoints();
-        drawCurrentPageArea(canvas, frontBitmap);
+        
+        // 1. Draw the area of the NEXT page that is revealed (clipping out the folded part of the current page)
         drawNextPageAreaAndShadow(canvas, backBitmap);
+        
+        // 2. Draw the area of the CURRENT page that is still visible
+        drawCurrentPageArea(canvas, frontBitmap);
+        
+        // 3. Draw the BACK of the turning page (the fold itself)
+        drawCurrentBackArea(canvas, direction > 0 ? frontBitmap : backBitmap);
+        
+        // 4. Draw shadows on top
         drawCurrentPageShadow(canvas);
-        drawCurrentBackArea(canvas, frontBitmap);
     }
 
     private void configureCorner() {
         calcCornerXY(startX, startY);
         float width = getWidth();
         float height = getHeight();
-        if (direction < 0) {
-            if (startX > width / 2f) {
-                calcCornerXY(startX, height);
-            } else {
-                calcCornerXY(width - startX, height);
-            }
-        } else if (direction > 0 && width / 2f > startX) {
+        if (direction > 0 && width / 2f > startX) {
             calcCornerXY(width - startX, startY);
         }
     }
@@ -188,7 +185,7 @@ public class SimulationPageTurnView extends View {
     private void updateTouchInternal(float touchX, float touchY) {
         float adjustedTouchY = touchY;
         float height = getHeight();
-        if ((startY > height / 3f && startY < height * 2f / 3f) || direction < 0) {
+        if (startY > height / 3f && startY < height * 2f / 3f) {
             adjustedTouchY = height;
         }
         if (startY > height / 3f && startY < height / 2f && direction > 0) {
@@ -360,6 +357,7 @@ public class SimulationPageTurnView extends View {
     }
 
     private void drawNextPageAreaAndShadow(Canvas canvas, Bitmap bitmap) {
+        // Path1 is the total revealed area (from crease to corner)
         path1.reset();
         path1.moveTo(bezierStart1.x, bezierStart1.y);
         path1.lineTo(bezierVertex1.x, bezierVertex1.y);
@@ -367,6 +365,7 @@ public class SimulationPageTurnView extends View {
         path1.lineTo(bezierStart2.x, bezierStart2.y);
         path1.lineTo(cornerX, cornerY);
         path1.close();
+
         degrees = (float) Math.toDegrees(
                 Math.atan2(bezierControl1.x - cornerX, bezierControl2.y - cornerY)
         );
@@ -385,14 +384,15 @@ public class SimulationPageTurnView extends View {
         }
 
         canvas.save();
+        // The total area that is lifted off the flat page is path0.
+        // We draw the next page in this entire lifted area.
+        // The folded back of the current page will be drawn ON TOP of this later, covering the fold precisely.
         canvas.clipPath(path0);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            canvas.clipPath(path1);
-        } else {
-            canvas.clipPath(path1, Region.Op.INTERSECT);
-        }
+        
         canvas.drawColor(pageBackgroundColor);
         canvas.drawBitmap(bitmap, 0f, 0f, null);
+        
+        // Draw shadow on the revealed next page
         canvas.rotate(degrees, bezierStart1.x, bezierStart1.y);
         backShadowDrawable.setBounds(leftX, Math.round(bezierStart1.y), rightX, Math.round(maxLength + bezierStart1.y));
         backShadowDrawable.draw(canvas);

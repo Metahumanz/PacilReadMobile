@@ -102,6 +102,8 @@ public class MainActivity extends ThemedActivity {
     private Button buttonModeCard;
     private Button buttonModeList;
     private Button emptyActionButton;
+    private View containerSearch;
+    private View iconSearch;
 
     // Section containers
     private View sectionBookshelf;
@@ -301,6 +303,8 @@ public class MainActivity extends ThemedActivity {
         buttonModeCard = findViewById(R.id.button_mode_card);
         buttonModeList = findViewById(R.id.button_mode_list);
         emptyActionButton = findViewById(R.id.button_empty_action);
+        containerSearch = findViewById(R.id.container_search);
+        iconSearch = findViewById(R.id.icon_search);
 
         // Preview section
         previewTheme = findViewById(R.id.text_preview_theme);
@@ -444,6 +448,32 @@ public class MainActivity extends ThemedActivity {
             @Override
             public void afterTextChanged(Editable s) {
             }
+        });
+
+        // Search bar interactions
+        View.OnClickListener focusSearch = v -> {
+            searchInput.requestFocus();
+            android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager)
+                    getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) {
+                imm.showSoftInput(searchInput, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+            }
+        };
+        if (containerSearch != null) containerSearch.setOnClickListener(focusSearch);
+        if (iconSearch != null) iconSearch.setOnClickListener(focusSearch);
+
+        searchInput.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH ||
+                    actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager)
+                        getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) {
+                    imm.hideSoftInputFromWindow(searchInput.getWindowToken(), 0);
+                }
+                searchInput.clearFocus();
+                return true;
+            }
+            return false;
         });
     }
 
@@ -851,13 +881,21 @@ public class MainActivity extends ThemedActivity {
     // ==================== Section Switching ====================
 
     private void showSection(int section) {
-        if (currentSection == SECTION_SETTINGS && section != SECTION_SETTINGS) {
-            persistSettings(true);
+        if (section == SECTION_SETTINGS) {
+            Intent intent = new Intent(this, SettingsActivity.class);
+            startActivity(intent);
+            if (drawerController != null) {
+                drawerController.closeDrawer();
+            }
+            return;
         }
         currentSection = section;
         sectionBookshelf.setVisibility(section == SECTION_BOOKSHELF ? View.VISIBLE : View.GONE);
         sectionPreview.setVisibility(section == SECTION_PREVIEW ? View.VISIBLE : View.GONE);
-        sectionSettings.setVisibility(section == SECTION_SETTINGS ? View.VISIBLE : View.GONE);
+        if (sectionSettings != null) {
+            sectionSettings.setVisibility(View.GONE);
+        }
+        sectionTitle.setVisibility(View.VISIBLE);
 
         switch (section) {
             case SECTION_BOOKSHELF:
@@ -872,9 +910,7 @@ public class MainActivity extends ThemedActivity {
                 updatePreviewPanels();
                 break;
             case SECTION_SETTINGS:
-                sectionTitle.setText("偏好设置");
-                headerActionButton.setVisibility(View.GONE);
-                bindSettingsValues();
+                // Handled above via activity launch
                 break;
         }
         if (drawerController != null) {
