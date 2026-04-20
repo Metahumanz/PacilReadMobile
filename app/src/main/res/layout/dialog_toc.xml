@@ -23,14 +23,14 @@
         android:textSize="12sp" />
 
     <ListView
-        android:id="@+id/toc_list”
-        android:layout_width="match_parent”
-        android:layout_height="0dp”
-        android:layout_marginTop="14dp”
-        android:layout_weight="1”
-        android:divider="@color/divider”
-        android:dividerHeight="1dp”
-        android:fastScrollEnabled="true”
-        android:scrollbarStyle="insideInset”
+        android:id="@+id/toc_list"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="14dp"
+        android:layout_weight="1"
+        android:divider="@color/divider"
+        android:dividerHeight="1dp"
+        android:fastScrollEnabled="true"
+        android:scrollbarStyle="insideInset"
         android:scrollbars="vertical" />
 </LinearLayout>

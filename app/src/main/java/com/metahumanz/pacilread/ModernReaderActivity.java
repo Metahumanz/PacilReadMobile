@@ -58,6 +58,9 @@ import android.os.BatteryManager;
 import android.util.LruCache;
 import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.model.ChapterRecord;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 import com.metahumanz.pacilread.model.ReaderThemeRecord;
 import com.metahumanz.pacilread.model.ReplacementRuleRecord;
 import com.metahumanz.pacilread.reader.JustifiedPageTextView;
@@ -103,6 +106,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private static final String[] READER_FONT_WEIGHT_LABELS = new String[]{"细体", "标准", "粗体"};
     private static final String[] READER_TEXT_COLOR_KEYS = new String[]{"theme_default", "ink_brown", "graphite", "warm_gray", "jade_ink", "forest_ink", "moon_white"};
     private static final String[] READER_TEXT_COLOR_LABELS = new String[]{"跟随主题", "墨棕", "石墨", "暖灰", "青墨", "墨绿", "月白"};
+    private static final String[] UI_THEME_KEYS = new String[]{"follow_app", "system", "light", "dark"};
+    private static final String[] HUD_KEYS = new String[]{"none", "title", "chapter", "title_chapter", "time", "battery", "chapter_page", "book_progress", "page_and_progress", "time_and_battery"};
+    private static final String[] FLIP_KEYS = new String[]{"cover", "slide", "simulation", "scroll", "none"};
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final ExecutorService ttsExecutor = Executors.newSingleThreadExecutor();
@@ -204,6 +210,36 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private int currentReaderTextColor = 0xFF5C4B37;
     private int pendingTapPagingDelta = 0;
     private float lastTapY = -1f;
+    private final String[] selectedReaderTheme = new String[]{"paper"};
+
+    private Spinner fontFamilySpinner;
+    private Spinner textColorSpinner;
+    private SeekBar fontSeek;
+    private SeekBar fontWeightSeek;
+    private SeekBar lineSeek;
+    private SeekBar sideSeek;
+    private SeekBar verticalSeek;
+    private SeekBar letterSpacingSeek;
+    private SeekBar firstLineIndentSeek;
+    private SeekBar backgroundBlurSeek;
+    private CheckBox keepScreenOn;
+    private CheckBox showTitleCheck;
+    private Spinner uiThemeSpinner;
+    private TextView textColorValue;
+    private TextView fontValue;
+    private TextView fontWeightValue;
+    private TextView lineValue;
+    private TextView sideValue;
+    private TextView verticalValue;
+    private TextView letterSpacingValue;
+    private TextView firstLineIndentValue;
+    private TextView backgroundBlurValue;
+
+    private EditText titleInput;
+    private EditText authorInput;
+    private Spinner flipSpinner;
+    private Button sliderBookButton;
+    private Button sliderChapterButton;
 
     private GestureDetector gestureDetector;
 
@@ -1805,28 +1841,28 @@ public class ModernReaderActivity extends ThemedReaderActivity {
 
     private void showStyleDialog() {
         View content = LayoutInflater.from(this).inflate(R.layout.dialog_reader_style, null, false);
-        Spinner fontFamilySpinner = content.findViewById(R.id.style_spinner_font_family);
-        Spinner textColorSpinner = content.findViewById(R.id.style_spinner_text_color);
-        SeekBar fontSeek = content.findViewById(R.id.style_seek_font);
-        SeekBar fontWeightSeek = content.findViewById(R.id.style_seek_font_weight);
-        SeekBar lineSeek = content.findViewById(R.id.style_seek_line_spacing);
-        SeekBar sideSeek = content.findViewById(R.id.style_seek_side_padding);
-        SeekBar verticalSeek = content.findViewById(R.id.style_seek_vertical_padding);
-        SeekBar letterSpacingSeek = content.findViewById(R.id.style_seek_letter_spacing);
-        SeekBar firstLineIndentSeek = content.findViewById(R.id.style_seek_first_line_indent);
-        SeekBar backgroundBlurSeek = content.findViewById(R.id.style_seek_background_blur);
-        TextView textColorValue = content.findViewById(R.id.style_text_text_color);
-        TextView fontValue = content.findViewById(R.id.style_text_font);
-        TextView fontWeightValue = content.findViewById(R.id.style_text_font_weight);
-        TextView lineValue = content.findViewById(R.id.style_text_line_spacing);
-        TextView sideValue = content.findViewById(R.id.style_text_side_padding);
-        TextView verticalValue = content.findViewById(R.id.style_text_vertical_padding);
-        TextView letterSpacingValue = content.findViewById(R.id.style_text_letter_spacing);
-        TextView firstLineIndentValue = content.findViewById(R.id.style_text_first_line_indent);
-        TextView backgroundBlurValue = content.findViewById(R.id.style_text_background_blur);
-        Spinner uiThemeSpinner = content.findViewById(R.id.style_spinner_ui_theme_mode);
-        CheckBox keepScreenOn = content.findViewById(R.id.style_check_keep_screen_on);
-        CheckBox showTitleCheck = content.findViewById(R.id.style_check_show_title);
+        fontFamilySpinner = content.findViewById(R.id.style_spinner_font_family);
+        textColorSpinner = content.findViewById(R.id.style_spinner_text_color);
+        fontSeek = content.findViewById(R.id.style_seek_font);
+        fontWeightSeek = content.findViewById(R.id.style_seek_font_weight);
+        lineSeek = content.findViewById(R.id.style_seek_line_spacing);
+        sideSeek = content.findViewById(R.id.style_seek_side_padding);
+        verticalSeek = content.findViewById(R.id.style_seek_vertical_padding);
+        letterSpacingSeek = content.findViewById(R.id.style_seek_letter_spacing);
+        firstLineIndentSeek = content.findViewById(R.id.style_seek_first_line_indent);
+        backgroundBlurSeek = content.findViewById(R.id.style_seek_background_blur);
+        textColorValue = content.findViewById(R.id.style_text_text_color);
+        fontValue = content.findViewById(R.id.style_text_font);
+        fontWeightValue = content.findViewById(R.id.style_text_font_weight);
+        lineValue = content.findViewById(R.id.style_text_line_spacing);
+        sideValue = content.findViewById(R.id.style_text_side_padding);
+        verticalValue = content.findViewById(R.id.style_text_vertical_padding);
+        letterSpacingValue = content.findViewById(R.id.style_text_letter_spacing);
+        firstLineIndentValue = content.findViewById(R.id.style_text_first_line_indent);
+        backgroundBlurValue = content.findViewById(R.id.style_text_background_blur);
+        uiThemeSpinner = content.findViewById(R.id.style_spinner_ui_theme_mode);
+        keepScreenOn = content.findViewById(R.id.style_check_keep_screen_on);
+        showTitleCheck = content.findViewById(R.id.style_check_show_title);
         TextView backgroundText = content.findViewById(R.id.style_text_background);
         LinearLayout customThemeList = content.findViewById(R.id.style_custom_theme_list);
         Button paperThemeButton = content.findViewById(R.id.style_button_theme_paper);
@@ -1856,7 +1892,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         showTitleCheck.setChecked(settingsStore.isChapterTitleVisible());
         backgroundText.setText(currentBackgroundLabel());
         uiThemeSpinner.setSelection(indexOf(uiThemeKeys, settingsStore.getReaderUiThemeMode(), 0), false);
-        final String[] selectedReaderTheme = new String[]{settingsStore.getReaderTheme()};
+        selectedReaderTheme[0] = settingsStore.getReaderTheme();
         updateReaderThemeButtons(paperThemeButton, forestThemeButton, nightThemeButton, selectedReaderTheme[0]);
         String chapterTitleAlignment = settingsStore.getChapterTitleAlignment();
         styleThemeButton(titleLeftButton, "left".equals(chapterTitleAlignment));
@@ -1870,6 +1906,26 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 ReaderThemePalette.from(selectedReaderTheme[0])
         );
         refreshTextColorPreview.run();
+        Runnable autoApply = () -> {
+            int anchorOffset = currentCharOffset();
+            String previousResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(this);
+            
+            settingsStore.setReaderFontFamily(READER_FONT_FAMILY_KEYS[fontFamilySpinner.getSelectedItemPosition()]);
+            settingsStore.setReaderTextColor(READER_TEXT_COLOR_KEYS[textColorSpinner.getSelectedItemPosition()]);
+            settingsStore.setFontSizeSp(fontSeek.getProgress() + 12);
+            settingsStore.setReaderFontWeight(fontWeightValueForProgress(fontWeightSeek.getProgress()));
+            settingsStore.setLineSpacingExtraSp(lineSeek.getProgress());
+            settingsStore.setSidePaddingDp(sideSeek.getProgress() + 8);
+            settingsStore.setVerticalPaddingDp(verticalSeek.getProgress() + 8);
+            settingsStore.setLetterSpacing(letterSpacingSeek.getProgress() / 10f);
+            settingsStore.setFirstLineIndentDp(firstLineIndentSeek.getProgress());
+            settingsStore.setBackgroundBlurPercent(backgroundBlurSeek.getProgress());
+            settingsStore.setKeepScreenOn(keepScreenOn.isChecked());
+            settingsStore.setChapterTitleVisible(showTitleCheck.isChecked());
+            settingsStore.setReaderTheme(selectedReaderTheme[0]);
+            settingsStore.setReaderUiThemeMode(UI_THEME_KEYS[uiThemeSpinner.getSelectedItemPosition()]);
+            
+            String nextResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(this);
             clearPageCache();
             if (!previousResolvedUiMode.equals(nextResolvedUiMode)) {
                 recreate();
@@ -1993,6 +2049,12 @@ public class ModernReaderActivity extends ThemedReaderActivity {
 
     private void showReaderOptionsDialog() {
         View content = LayoutInflater.from(this).inflate(R.layout.dialog_reader_options, null, false);
+        titleInput = content.findViewById(R.id.options_input_title);
+        authorInput = content.findViewById(R.id.options_input_author);
+        showTitleCheck = content.findViewById(R.id.options_check_show_title);
+        flipSpinner = content.findViewById(R.id.options_spinner_flip_mode);
+        sliderBookButton = content.findViewById(R.id.options_button_slider_book);
+        sliderChapterButton = content.findViewById(R.id.options_button_slider_chapter);
         Spinner tLSpinner = content.findViewById(R.id.options_spinner_hud_tl);
         Spinner tCSpinner = content.findViewById(R.id.options_spinner_hud_tc);
         Spinner tRSpinner = content.findViewById(R.id.options_spinner_hud_tr);
@@ -2361,6 +2423,13 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         int safetyBuffer = Math.max(dp(2), Math.round(pageBodyCurrent.getPaint().getFontSpacing() * 0.08f));
         return measureView.getMeasuredHeight() + dp(CHAPTER_TITLE_BODY_MARGIN_DP) + safetyBuffer;
     }
+    private String getProcessedChapterText(int chapterIndex) {
+        String cached = processedChapterLruCache.get(chapterIndex);
+        if (cached != null) {
+            return cached;
+        }
+        ChapterRecord chapter = chapters.get(chapterIndex);
+        if (chapter.bodyText == null) {
             ChapterRecord fullChapter = databaseHelper.getChapterContent(chapter.id);
             if (fullChapter != null) {
                 chapter.bodyText = fullChapter.bodyText;
@@ -2614,7 +2683,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                         settingsStore.setBackgroundBlurPercent(backgroundBlurSeek.getProgress());
                         settingsStore.setKeepScreenOn(keepScreenOn.isChecked());
                         settingsStore.setChapterTitleVisible(showTitleCheck.isChecked());
-                        settingsStore.setReaderUiThemeMode(uiThemeKeys[uiThemeSpinner.getSelectedItemPosition()]);
+                        settingsStore.setReaderUiThemeMode(UI_THEME_KEYS[uiThemeSpinner.getSelectedItemPosition()]);
                         settingsStore.setReaderTheme(selectedReaderTheme[0]);
                         refreshTextColorPreview.run();
                         String nextResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(this);
@@ -2831,6 +2900,11 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     }
 
     private Typeface buildReaderTypeface(String familyKey, int weight) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return Typeface.create(familyKey, weight);
+        }
+        return Typeface.create(familyKey, weight >= 600 ? Typeface.BOLD : Typeface.NORMAL);
+    }
 
     private void styleReaderMenuButton(Button button, boolean active) {
         button.setBackgroundResource(active ? R.drawable.bg_reader_menu_button_active : R.drawable.bg_reader_menu_button_solid);
@@ -2842,6 +2916,18 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         GlassUiHelper.applyToHierarchy(this, menuTopPanel, settingsStore.getGlassOpacityPercent());
         GlassUiHelper.applyToHierarchy(this, menuInfoPanel, settingsStore.getGlassOpacityPercent());
         GlassUiHelper.applyToHierarchy(this, menuBottomPanel, settingsStore.getGlassOpacityPercent());
+    }
+
+    private void updateReaderThemeButtons(Button paper, Button forest, Button night, String current) {
+        styleThemeButton(paper, "paper".equals(current));
+        styleThemeButton(forest, "forest".equals(current));
+        styleThemeButton(night, "night".equals(current));
+    }
+
+    private void styleThemeButton(Button button, boolean active) {
+        button.setBackgroundResource(active ? R.drawable.bg_reader_menu_button_active : R.drawable.bg_reader_menu_button_solid);
+        button.setTextColor(active ? Color.WHITE : Color.parseColor("#94A3B8"));
+        button.setTag(R.id.tag_glass_background, !active);
     }
 
     private int indexOf(String[] values, String target, int fallback) {
@@ -3651,5 +3737,18 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         @Override
         public void onStopTrackingTouch(SeekBar seekBar) {
         }
+    }
+    private void recordSessionStats() {
+        if (sessionStartTime <= 0) {
+            return;
+        }
+        long durationMs = System.currentTimeMillis() - sessionStartTime;
+        if (durationMs < 2000) {
+            return;
+        }
+        int seconds = (int) (durationMs / 1000);
+        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
+        executor.execute(() -> databaseHelper.recordReadingStats(today, seconds, 0));
+        sessionStartTime = System.currentTimeMillis();
     }
 }
