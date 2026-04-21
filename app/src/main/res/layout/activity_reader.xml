@@ -146,7 +146,7 @@
         android:layout_gravity="top"
         android:clipToPadding="false"
         android:paddingLeft="12dp"
-        android:paddingTop="8dp"
+        android:paddingTop="2dp"
         android:paddingRight="12dp">
 
         <TextView
@@ -154,7 +154,6 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="start|top"
-            android:background="@drawable/bg_reader_hud_pill"
             android:ellipsize="end"
             android:maxLines="1"
             android:maxWidth="176dp"
@@ -162,7 +161,7 @@
             android:paddingTop="5dp"
             android:paddingRight="10dp"
             android:paddingBottom="5dp"
-            android:textColor="#F2FFFFFF"
+            android:textColor="@color/on_surface_muted"
             android:textSize="10sp"
             android:visibility="gone" />
 
@@ -171,7 +170,6 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal|top"
-            android:background="@drawable/bg_reader_hud_pill"
             android:ellipsize="end"
             android:maxLines="1"
             android:maxWidth="152dp"
@@ -179,7 +177,7 @@
             android:paddingTop="5dp"
             android:paddingRight="10dp"
             android:paddingBottom="5dp"
-            android:textColor="#F2FFFFFF"
+            android:textColor="@color/on_surface_muted"
             android:textSize="10sp"
             android:visibility="gone" />
 
@@ -188,7 +186,6 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="end|top"
-            android:background="@drawable/bg_reader_hud_pill"
             android:ellipsize="end"
             android:maxLines="1"
             android:maxWidth="176dp"
@@ -196,7 +193,7 @@
             android:paddingTop="5dp"
             android:paddingRight="10dp"
             android:paddingBottom="5dp"
-            android:textColor="#F2FFFFFF"
+            android:textColor="@color/on_surface_muted"
             android:textSize="10sp"
             android:visibility="gone" />
     </FrameLayout>
@@ -210,14 +207,13 @@
         android:clipToPadding="false"
         android:paddingLeft="12dp"
         android:paddingRight="12dp"
-        android:paddingBottom="8dp">
+        android:paddingBottom="2dp">
 
         <TextView
             android:id="@+id/text_hud_bottom_left"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="start|bottom"
-            android:background="@drawable/bg_reader_hud_pill"
             android:ellipsize="end"
             android:maxLines="1"
             android:maxWidth="176dp"
@@ -225,7 +221,7 @@
             android:paddingTop="5dp"
             android:paddingRight="10dp"
             android:paddingBottom="5dp"
-            android:textColor="#F2FFFFFF"
+            android:textColor="@color/on_surface_muted"
             android:textSize="10sp"
             android:visibility="gone" />
 
@@ -234,7 +230,6 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal|bottom"
-            android:background="@drawable/bg_reader_hud_pill"
             android:ellipsize="end"
             android:maxLines="1"
             android:maxWidth="152dp"
@@ -242,7 +237,7 @@
             android:paddingTop="5dp"
             android:paddingRight="10dp"
             android:paddingBottom="5dp"
-            android:textColor="#F2FFFFFF"
+            android:textColor="@color/on_surface_muted"
             android:textSize="10sp"
             android:visibility="gone" />
 
@@ -251,7 +246,6 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="end|bottom"
-            android:background="@drawable/bg_reader_hud_pill"
             android:ellipsize="end"
             android:maxLines="1"
             android:maxWidth="176dp"
@@ -259,7 +253,7 @@
             android:paddingTop="5dp"
             android:paddingRight="10dp"
             android:paddingBottom="5dp"
-            android:textColor="#F2FFFFFF"
+            android:textColor="@color/on_surface_muted"
             android:textSize="10sp"
             android:visibility="gone" />
     </FrameLayout>

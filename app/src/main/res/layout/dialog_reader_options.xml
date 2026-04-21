@@ -99,16 +99,35 @@
             android:textColor="@color/on_surface"
             android:textStyle="bold" />
 
-        <Spinner
-            android:id="@+id/options_spinner_flip_mode"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:background="@drawable/bg_input"
-            android:paddingStart="10dp"
-            android:paddingTop="8dp"
-            android:paddingEnd="10dp"
-            android:paddingBottom="8dp" />
+            android:orientation="horizontal">
+
+            <Spinner
+                android:id="@+id/options_spinner_flip_mode"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_input"
+                android:paddingStart="10dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="10dp"
+                android:paddingBottom="8dp" />
+
+            <Spinner
+                android:id="@+id/options_spinner_flip_speed"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_input"
+                android:paddingStart="10dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="10dp"
+                android:paddingBottom="8dp" />
+        </LinearLayout>
 
         <CheckBox
             android:id="@+id/options_check_show_title"
@@ -118,21 +137,28 @@
             android:text="章节首页显示标题"
             android:textColor="@color/on_surface" />
 
-        <CheckBox
-            android:id="@+id/options_check_sticky_menu"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="粘性菜单"
-            android:textColor="@color/on_surface" />
-
-        <TextView
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="菜单打开后保持停留，轻触阅读区域才会收起。"
-            android:textColor="@color/on_surface_muted"
-            android:textSize="12sp" />
+            android:layout_marginTop="16dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="HUD 垂直边距"
+                android:textColor="@color/on_surface"
+                android:textStyle="bold" />
+
+            <SeekBar
+                android:id="@+id/options_seek_hud_vertical_margin"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="16dp"
+                android:max="32" />
+        </LinearLayout>
 
         <TextView
             android:layout_width="wrap_content"
@@ -141,14 +167,6 @@
             android:text="HUD 六槽位"
             android:textColor="@color/on_surface"
             android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="空位不会占空间，显示项会像 Win11 HUD 一样直接贴边悬浮。"
-            android:textColor="@color/on_surface_muted"
-            android:textSize="12sp" />
 
         <TextView
             android:layout_width="wrap_content"

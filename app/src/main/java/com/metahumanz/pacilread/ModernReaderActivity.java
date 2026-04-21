@@ -26,6 +26,7 @@ import android.text.TextPaint;
 import android.text.TextWatcher;
 import android.util.Log;
 import android.util.TypedValue;
+import androidx.core.view.WindowCompat;
 import android.view.GestureDetector;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -217,8 +218,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private SeekBar fontSeek;
     private SeekBar fontWeightSeek;
     private SeekBar lineSeek;
-    private SeekBar sideSeek;
-    private SeekBar verticalSeek;
+    private SeekBar leftSeek;
+    private SeekBar rightSeek;
+    private SeekBar topSeek;
+    private SeekBar bottomSeek;
     private SeekBar letterSpacingSeek;
     private SeekBar firstLineIndentSeek;
     private SeekBar backgroundBlurSeek;
@@ -229,8 +232,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private TextView fontValue;
     private TextView fontWeightValue;
     private TextView lineValue;
-    private TextView sideValue;
-    private TextView verticalValue;
+    private TextView leftValue;
+    private TextView rightValue;
+    private TextView topValue;
+    private TextView bottomValue;
     private TextView letterSpacingValue;
     private TextView firstLineIndentValue;
     private TextView backgroundBlurValue;
@@ -263,8 +268,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private static int cachedLayoutFontWeight;
     private static float cachedLayoutFontSize;
     private static float cachedLayoutLineSpacing;
-    private static int cachedLayoutSidePadding;
-    private static int cachedLayoutVerticalPadding;
+    private static int cachedLayoutLeftPadding;
+    private static int cachedLayoutRightPadding;
+    private static int cachedLayoutTopPadding;
+    private static int cachedLayoutBottomPadding;
     private static int cachedLayoutWidth;
     private static int cachedLayoutHeight;
     private final Runnable pagingSnapshotWarmupRunnable = this::warmPreparedPagingSnapshots;
@@ -290,6 +297,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         setContentView(R.layout.activity_reader);
 
         databaseHelper = ReaderDatabaseHelper.getInstance(this);
@@ -485,7 +493,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 : dp(148) + systemInsetBottom;
         hudTopContainer.setPadding(
                 dp(12) + systemInsetLeft,
-                dp(8) + systemInsetTop,
+                dp(settingsStore.getHudVerticalMarginDp()) + systemInsetTop,
                 dp(12) + systemInsetRight,
                 0
         );
@@ -493,14 +501,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 dp(12) + systemInsetLeft,
                 0,
                 dp(12) + systemInsetRight,
-                dp(8) + systemInsetBottom
+                dp(settingsStore.getHudVerticalMarginDp()) + systemInsetBottom
         );
-        pageStage.setPadding(
-                dp(2) + systemInsetLeft,
-                systemInsetTop,
-                dp(2) + systemInsetRight,
-                systemInsetBottom
-        );
+        pageStage.setPadding(0, 0, 0, 0);
         updateFrameLayoutMargins(menuTopPanel,
                 dp(10) + systemInsetLeft,
                 dp(10) + systemInsetTop,
@@ -1026,8 +1029,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 && settingsStore.getReaderFontWeight() == cachedLayoutFontWeight
                 && settingsStore.getFontSizeSp() == cachedLayoutFontSize
                 && settingsStore.getLineSpacingExtraSp() == cachedLayoutLineSpacing
-                && settingsStore.getSidePaddingDp() == cachedLayoutSidePadding
-                && settingsStore.getVerticalPaddingDp() == cachedLayoutVerticalPadding
+                && settingsStore.getLeftPaddingDp() == cachedLayoutLeftPadding
+                && settingsStore.getRightPaddingDp() == cachedLayoutRightPadding
+                && settingsStore.getTopPaddingDp() == cachedLayoutTopPadding
+                && settingsStore.getBottomPaddingDp() == cachedLayoutBottomPadding
                 && pageStage.getWidth() == cachedLayoutWidth
                 && pageStage.getHeight() == cachedLayoutHeight;
     }
@@ -1038,8 +1043,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         cachedLayoutFontWeight = settingsStore.getReaderFontWeight();
         cachedLayoutFontSize = settingsStore.getFontSizeSp();
         cachedLayoutLineSpacing = settingsStore.getLineSpacingExtraSp();
-        cachedLayoutSidePadding = settingsStore.getSidePaddingDp();
-        cachedLayoutVerticalPadding = settingsStore.getVerticalPaddingDp();
+        cachedLayoutLeftPadding = settingsStore.getLeftPaddingDp();
+        cachedLayoutRightPadding = settingsStore.getRightPaddingDp();
+        cachedLayoutTopPadding = settingsStore.getTopPaddingDp();
+        cachedLayoutBottomPadding = settingsStore.getBottomPaddingDp();
         cachedLayoutWidth = pageStage.getWidth();
         cachedLayoutHeight = pageStage.getHeight();
     }
@@ -1638,10 +1645,12 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         
         invalidatePreparedPagingSnapshots();
         updateTtsHighlight();
-        int sidePadding = dp(settingsStore.getSidePaddingDp());
-        int verticalPadding = dp(settingsStore.getVerticalPaddingDp());
-        ((ViewGroup) pageCurrent).setPadding(sidePadding, verticalPadding, sidePadding, verticalPadding);
-        ((ViewGroup) pageIncoming).setPadding(sidePadding, verticalPadding, sidePadding, verticalPadding);
+        int leftPadding = dp(settingsStore.getLeftPaddingDp());
+        int rightPadding = dp(settingsStore.getRightPaddingDp());
+        int topPadding = dp(settingsStore.getTopPaddingDp() + 32) + systemInsetTop;
+        int bottomPadding = dp(settingsStore.getBottomPaddingDp() + 32) + systemInsetBottom;
+        ((ViewGroup) pageCurrent).setPadding(leftPadding, topPadding, rightPadding, bottomPadding);
+        ((ViewGroup) pageIncoming).setPadding(leftPadding, topPadding, rightPadding, bottomPadding);
         if (settingsStore.isKeepScreenOn()) {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         } else {
@@ -1814,8 +1823,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         fontSeek = content.findViewById(R.id.style_seek_font);
         fontWeightSeek = content.findViewById(R.id.style_seek_font_weight);
         lineSeek = content.findViewById(R.id.style_seek_line_spacing);
-        sideSeek = content.findViewById(R.id.style_seek_side_padding);
-        verticalSeek = content.findViewById(R.id.style_seek_vertical_padding);
+        leftSeek = content.findViewById(R.id.style_seek_left_padding);
+        rightSeek = content.findViewById(R.id.style_seek_right_padding);
+        topSeek = content.findViewById(R.id.style_seek_top_padding);
+        bottomSeek = content.findViewById(R.id.style_seek_bottom_padding);
         letterSpacingSeek = content.findViewById(R.id.style_seek_letter_spacing);
         firstLineIndentSeek = content.findViewById(R.id.style_seek_first_line_indent);
         backgroundBlurSeek = content.findViewById(R.id.style_seek_background_blur);
@@ -1823,8 +1834,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         fontValue = content.findViewById(R.id.style_text_font);
         fontWeightValue = content.findViewById(R.id.style_text_font_weight);
         lineValue = content.findViewById(R.id.style_text_line_spacing);
-        sideValue = content.findViewById(R.id.style_text_side_padding);
-        verticalValue = content.findViewById(R.id.style_text_vertical_padding);
+        leftValue = content.findViewById(R.id.style_text_left_padding);
+        rightValue = content.findViewById(R.id.style_text_right_padding);
+        topValue = content.findViewById(R.id.style_text_top_padding);
+        bottomValue = content.findViewById(R.id.style_text_bottom_padding);
         letterSpacingValue = content.findViewById(R.id.style_text_letter_spacing);
         firstLineIndentValue = content.findViewById(R.id.style_text_first_line_indent);
         backgroundBlurValue = content.findViewById(R.id.style_text_background_blur);
@@ -1853,8 +1866,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         fontSeek.setProgress(Math.round(settingsStore.getFontSizeSp()) - 12);
         fontWeightSeek.setProgress(fontWeightProgress(settingsStore.getReaderFontWeight()));
         lineSeek.setProgress(Math.round(settingsStore.getLineSpacingExtraSp()));
-        sideSeek.setProgress(settingsStore.getSidePaddingDp() - 8);
-        verticalSeek.setProgress(settingsStore.getVerticalPaddingDp() - 8);
+        leftSeek.setProgress(settingsStore.getLeftPaddingDp());
+        rightSeek.setProgress(settingsStore.getRightPaddingDp());
+        topSeek.setProgress(settingsStore.getTopPaddingDp());
+        bottomSeek.setProgress(settingsStore.getBottomPaddingDp());
         letterSpacingSeek.setProgress(Math.round(settingsStore.getLetterSpacing() * 10f));
         firstLineIndentSeek.setProgress(settingsStore.getFirstLineIndentDp());
         backgroundBlurSeek.setProgress(settingsStore.getBackgroundBlurPercent());
@@ -1887,8 +1902,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             settingsStore.setFontSizeSp(fontSeek.getProgress() + 12);
             settingsStore.setReaderFontWeight(fontWeightValueForProgress(fontWeightSeek.getProgress()));
             settingsStore.setLineSpacingExtraSp(lineSeek.getProgress());
-            settingsStore.setSidePaddingDp(sideSeek.getProgress() + 8);
-            settingsStore.setVerticalPaddingDp(verticalSeek.getProgress() + 8);
+            settingsStore.setLeftPaddingDp(leftSeek.getProgress());
+            settingsStore.setRightPaddingDp(rightSeek.getProgress());
+            settingsStore.setTopPaddingDp(topSeek.getProgress());
+            settingsStore.setBottomPaddingDp(bottomSeek.getProgress());
             settingsStore.setLetterSpacing(letterSpacingSeek.getProgress() / 10f);
             settingsStore.setFirstLineIndentDp(firstLineIndentSeek.getProgress());
             settingsStore.setBackgroundBlurPercent(backgroundBlurSeek.getProgress());
@@ -1924,10 +1941,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             refreshTextColorPreview.run();
             autoApply.run();
         });
-        updateStyleLabels(fontValue, fontWeightValue, lineValue, sideValue, verticalValue, fontSeek, fontWeightSeek, lineSeek, sideSeek, verticalSeek);
+        updateStyleLabels(fontValue, fontWeightValue, lineValue, leftValue, rightValue, topValue, bottomValue, fontSeek, fontWeightSeek, lineSeek, leftSeek, rightSeek, topSeek, bottomSeek);
         SeekBar.OnSeekBarChangeListener listener = new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                updateStyleLabels(fontValue, fontWeightValue, lineValue, sideValue, verticalValue, fontSeek, fontWeightSeek, lineSeek, sideSeek, verticalSeek);
+                updateStyleLabels(fontValue, fontWeightValue, lineValue, leftValue, rightValue, topValue, bottomValue, fontSeek, fontWeightSeek, lineSeek, leftSeek, rightSeek, topSeek, bottomSeek);
                 if (fromUser) {
                     autoApply.run();
                 }
@@ -1940,8 +1957,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         fontWeightSeek.setOnSeekBarChangeListener(listener);
         fontSeek.setOnSeekBarChangeListener(listener);
         lineSeek.setOnSeekBarChangeListener(listener);
-        sideSeek.setOnSeekBarChangeListener(listener);
-        verticalSeek.setOnSeekBarChangeListener(listener);
+        leftSeek.setOnSeekBarChangeListener(listener);
+        rightSeek.setOnSeekBarChangeListener(listener);
+        topSeek.setOnSeekBarChangeListener(listener);
+        bottomSeek.setOnSeekBarChangeListener(listener);
         
         SeekBar.OnSeekBarChangeListener simpleListener = new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
@@ -2037,8 +2056,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         authorInput = content.findViewById(R.id.options_input_author);
         showTitleCheck = content.findViewById(R.id.options_check_show_title);
         flipSpinner = content.findViewById(R.id.options_spinner_flip_mode);
+        Spinner flipSpeedSpinner = content.findViewById(R.id.options_spinner_flip_speed);
         sliderBookButton = content.findViewById(R.id.options_button_slider_book);
         sliderChapterButton = content.findViewById(R.id.options_button_slider_chapter);
+        SeekBar hudMarginSeek = content.findViewById(R.id.options_seek_hud_vertical_margin);
         Spinner tLSpinner = content.findViewById(R.id.options_spinner_hud_tl);
         Spinner tCSpinner = content.findViewById(R.id.options_spinner_hud_tc);
         Spinner tRSpinner = content.findViewById(R.id.options_spinner_hud_tr);
@@ -2052,6 +2073,11 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         ArrayAdapter<String> adapter = buildSpinnerAdapter(new String[]{"覆盖", "平移", "仿真", "滚动", "无动画"});
         flipSpinner.setAdapter(adapter);
         flipSpinner.setSelection(indexOf(flipKeys, settingsStore.getFlipMode(), 0), false);
+        
+        String[] speedKeys = new String[]{"fast", "medium", "slow"};
+        ArrayAdapter<String> speedAdapter = buildSpinnerAdapter(new String[]{"较快", "适中", "较慢"});
+        flipSpeedSpinner.setAdapter(speedAdapter);
+        flipSpeedSpinner.setSelection(indexOf(speedKeys, settingsStore.getFlipSpeed(), 1), false);
         final String[] sliderMode = new String[]{settingsStore.getReaderSliderMode()};
         AlertDialog dialog = new AlertDialog.Builder(this).setView(content).create();
         styleThemeButton(sliderBookButton, "book".equals(sliderMode[0]));
@@ -2065,6 +2091,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         bLSpinner.setAdapter(hudAdapter); bLSpinner.setSelection(indexOf(hudKeys, settingsStore.getHudBottomLeft(), 0), false);
         bCSpinner.setAdapter(hudAdapter); bCSpinner.setSelection(indexOf(hudKeys, settingsStore.getHudBottomCenter(), 0), false);
         bRSpinner.setAdapter(hudAdapter); bRSpinner.setSelection(indexOf(hudKeys, settingsStore.getHudBottomRight(), 0), false);
+        
+        hudMarginSeek.setProgress(settingsStore.getHudVerticalMarginDp());
+
         Runnable autoApply = () -> {
             String title = titleInput.getText().toString().trim();
             String author = authorInput.getText().toString().trim();
@@ -2079,6 +2108,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 book.author = finalAuthor;
             }
             settingsStore.setFlipMode(flipKeys[flipSpinner.getSelectedItemPosition()]);
+            settingsStore.setFlipSpeed(speedKeys[flipSpeedSpinner.getSelectedItemPosition()]);
             settingsStore.setReaderSliderMode(sliderMode[0]);
             settingsStore.setChapterTitleVisible(showTitleCheck.isChecked());
             settingsStore.setHudTopLeft(hudKeys[tLSpinner.getSelectedItemPosition()]);
@@ -2087,6 +2117,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             settingsStore.setHudBottomLeft(hudKeys[bLSpinner.getSelectedItemPosition()]);
             settingsStore.setHudBottomCenter(hudKeys[bCSpinner.getSelectedItemPosition()]);
             settingsStore.setHudBottomRight(hudKeys[bRSpinner.getSelectedItemPosition()]);
+            settingsStore.setHudVerticalMarginDp(hudMarginSeek.getProgress());
             clearPageCache();
             applyReaderSettings();
             openChapter(currentChapterIndex, anchorOffset, false, 0);
@@ -2101,10 +2132,19 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         titleInput.addTextChangedListener(textWatcher);
         authorInput.addTextChangedListener(textWatcher);
         showTitleCheck.setOnCheckedChangeListener((v, isChecked) -> autoApply.run());
-        flipSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+        
+        hudMarginSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) { if (fromUser) autoApply.run(); }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+
+        android.widget.AdapterView.OnItemSelectedListener flipListener = new android.widget.AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) { autoApply.run(); }
             @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
-        });
+        };
+        flipSpinner.setOnItemSelectedListener(flipListener);
+        flipSpeedSpinner.setOnItemSelectedListener(flipListener);
 
         android.widget.AdapterView.OnItemSelectedListener hudListener = new android.widget.AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) { autoApply.run(); }
@@ -2610,19 +2650,24 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             return 260L;
         }
         String mode = settingsStore.getFlipMode();
+        long baseDuration = 180L;
         if ("none".equals(mode)) {
             return 0L;
+        } else if ("cover".equals(mode)) {
+            baseDuration = 220L;
+        } else if ("simulation".equals(mode)) {
+            baseDuration = 300L;
+        } else if ("scroll".equals(mode)) {
+            baseDuration = 190L;
         }
-        if ("cover".equals(mode)) {
-            return 220L;
+        
+        String speed = settingsStore.getFlipSpeed();
+        if ("fast".equals(speed)) {
+            return (long) (baseDuration * 0.6f);
+        } else if ("slow".equals(speed)) {
+            return (long) (baseDuration * 1.5f);
         }
-        if ("simulation".equals(mode)) {
-            return 300L;
-        }
-        if ("scroll".equals(mode)) {
-            return 190L;
-        }
-        return 180L;
+        return baseDuration;
     }
 
     private boolean ensurePageAreaReady(Runnable action) {
@@ -2681,8 +2726,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                         settingsStore.setReaderFontWeight(fontWeightValueForProgress(fontWeightSeek.getProgress()));
                         settingsStore.setReaderTextColor(READER_TEXT_COLOR_KEYS[textColorSpinner.getSelectedItemPosition()]);
                         settingsStore.setLineSpacingExtraSp(lineSeek.getProgress());
-                        settingsStore.setSidePaddingDp(sideSeek.getProgress() + 8);
-                        settingsStore.setVerticalPaddingDp(verticalSeek.getProgress() + 8);
+                        settingsStore.setLeftPaddingDp(leftSeek.getProgress());
+                        settingsStore.setRightPaddingDp(rightSeek.getProgress());
+                        settingsStore.setTopPaddingDp(topSeek.getProgress());
+                        settingsStore.setBottomPaddingDp(bottomSeek.getProgress());
                         settingsStore.setLetterSpacing(letterSpacingSeek.getProgress() / 10f);
                         settingsStore.setFirstLineIndentDp(firstLineIndentSeek.getProgress());
                         settingsStore.setBackgroundBlurPercent(backgroundBlurSeek.getProgress());
@@ -2816,13 +2863,15 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         return "当前背景：" + new File(path).getName();
     }
 
-    private void updateStyleLabels(TextView fontValue, TextView fontWeightValue, TextView lineValue, TextView sideValue, TextView verticalValue,
-                                   SeekBar fontSeek, SeekBar fontWeightSeek, SeekBar lineSeek, SeekBar sideSeek, SeekBar verticalSeek) {
+    private void updateStyleLabels(TextView fontValue, TextView fontWeightValue, TextView lineValue, TextView leftValue, TextView rightValue, TextView topValue, TextView bottomValue,
+                                   SeekBar fontSeek, SeekBar fontWeightSeek, SeekBar lineSeek, SeekBar leftSeek, SeekBar rightSeek, SeekBar topSeek, SeekBar bottomSeek) {
         fontValue.setText((fontSeek.getProgress() + 12) + " sp");
         fontWeightValue.setText(readerFontWeightLabelForProgress(fontWeightSeek.getProgress()) + " (" + fontWeightValueForProgress(fontWeightSeek.getProgress()) + ")");
         lineValue.setText(lineSeek.getProgress() + " px");
-        sideValue.setText((sideSeek.getProgress() + 8) + " dp");
-        verticalValue.setText((verticalSeek.getProgress() + 8) + " dp");
+        leftValue.setText(leftSeek.getProgress() + " dp");
+        rightValue.setText(rightSeek.getProgress() + " dp");
+        topValue.setText(topSeek.getProgress() + " dp");
+        bottomValue.setText(bottomSeek.getProgress() + " dp");
     }
 
     private int fontWeightProgress(int weight) {

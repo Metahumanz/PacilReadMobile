@@ -183,10 +183,16 @@ public class SimulationPageTurnView extends View {
     }
 
     private void updateTouchInternal(float touchX, float touchY) {
-        // Do not forcibly jump the Y coordinate — let the fold follow the actual
-        // touch point so diagonal page-turns animate all the way to the edge.
+        float adjustedTouchY = touchY;
+        float height = getHeight();
+        if (startY > height / 3f && startY < height * 2f / 3f) {
+            adjustedTouchY = height;
+        }
+        if (startY > height / 3f && startY < height / 2f && direction > 0) {
+            adjustedTouchY = MIN_TOUCH;
+        }
         this.touchX = ensureTouch(touchX);
-        this.touchY = ensureTouch(touchY);
+        this.touchY = ensureTouch(adjustedTouchY);
     }
 
     private float ensureTouch(float value) {

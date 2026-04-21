@@ -221,18 +221,18 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="左右边距"
+            android:text="左边距"
             android:textColor="@color/on_surface"
             android:textStyle="bold" />
 
         <SeekBar
-            android:id="@+id/style_seek_side_padding"
+            android:id="@+id/style_seek_left_padding"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:max="40" />
+            android:max="48" />
 
         <TextView
-            android:id="@+id/style_text_side_padding"
+            android:id="@+id/style_text_left_padding"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="@color/on_surface_muted" />
@@ -241,18 +241,58 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="上下边距"
+            android:text="右边距"
             android:textColor="@color/on_surface"
             android:textStyle="bold" />
 
         <SeekBar
-            android:id="@+id/style_seek_vertical_padding"
+            android:id="@+id/style_seek_right_padding"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="48" />
+
+        <TextView
+            android:id="@+id/style_text_right_padding"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/on_surface_muted" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="上边距"
+            android:textColor="@color/on_surface"
+            android:textStyle="bold" />
+
+        <SeekBar
+            android:id="@+id/style_seek_top_padding"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:max="64" />
 
         <TextView
-            android:id="@+id/style_text_vertical_padding"
+            android:id="@+id/style_text_top_padding"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/on_surface_muted" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="下边距"
+            android:textColor="@color/on_surface"
+            android:textStyle="bold" />
+
+        <SeekBar
+            android:id="@+id/style_seek_bottom_padding"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="64" />
+
+        <TextView
+            android:id="@+id/style_text_bottom_padding"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="@color/on_surface_muted" />

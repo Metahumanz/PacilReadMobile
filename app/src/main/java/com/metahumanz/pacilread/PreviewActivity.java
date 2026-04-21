@@ -66,13 +66,17 @@ public class PreviewActivity extends ThemedActivity {
     private SeekBar previewStyleFontSeekBar;
     private SeekBar previewStyleFontWeightSeekBar;
     private SeekBar previewStyleLineSeekBar;
-    private SeekBar previewStyleSideSeekBar;
-    private SeekBar previewStyleVerticalSeekBar;
+    private SeekBar previewStyleLeftSeekBar;
+    private SeekBar previewStyleRightSeekBar;
+    private SeekBar previewStyleTopSeekBar;
+    private SeekBar previewStyleBottomSeekBar;
     private TextView previewStyleFontText;
     private TextView previewStyleFontWeightText;
     private TextView previewStyleLineText;
-    private TextView previewStyleSideText;
-    private TextView previewStyleVerticalText;
+    private TextView previewStyleLeftText;
+    private TextView previewStyleRightText;
+    private TextView previewStyleTopText;
+    private TextView previewStyleBottomText;
     private CheckBox previewStyleKeepScreenOnCheck;
     private CheckBox previewStyleShowTitleCheck;
     private TextView previewStyleBackgroundText;
@@ -155,13 +159,17 @@ public class PreviewActivity extends ThemedActivity {
         previewStyleFontSeekBar = findViewById(R.id.preview_style_seek_font);
         previewStyleFontWeightSeekBar = findViewById(R.id.preview_style_seek_font_weight);
         previewStyleLineSeekBar = findViewById(R.id.preview_style_seek_line_spacing);
-        previewStyleSideSeekBar = findViewById(R.id.preview_style_seek_side_padding);
-        previewStyleVerticalSeekBar = findViewById(R.id.preview_style_seek_vertical_padding);
+        previewStyleLeftSeekBar = findViewById(R.id.preview_style_seek_left_padding);
+        previewStyleRightSeekBar = findViewById(R.id.preview_style_seek_right_padding);
+        previewStyleTopSeekBar = findViewById(R.id.preview_style_seek_top_padding);
+        previewStyleBottomSeekBar = findViewById(R.id.preview_style_seek_bottom_padding);
         previewStyleFontText = findViewById(R.id.preview_style_text_font);
         previewStyleFontWeightText = findViewById(R.id.preview_style_text_font_weight);
         previewStyleLineText = findViewById(R.id.preview_style_text_line_spacing);
-        previewStyleSideText = findViewById(R.id.preview_style_text_side_padding);
-        previewStyleVerticalText = findViewById(R.id.preview_style_text_vertical_padding);
+        previewStyleLeftText = findViewById(R.id.preview_style_text_left_padding);
+        previewStyleRightText = findViewById(R.id.preview_style_text_right_padding);
+        previewStyleTopText = findViewById(R.id.preview_style_text_top_padding);
+        previewStyleBottomText = findViewById(R.id.preview_style_text_bottom_padding);
         previewStyleKeepScreenOnCheck = findViewById(R.id.preview_style_check_keep_screen_on);
         previewStyleShowTitleCheck = findViewById(R.id.preview_style_check_show_title);
         previewStyleBackgroundText = findViewById(R.id.preview_style_text_background);
@@ -213,8 +221,10 @@ public class PreviewActivity extends ThemedActivity {
         previewStyleFontSeekBar.setOnSeekBarChangeListener(seekListener);
         previewStyleFontWeightSeekBar.setOnSeekBarChangeListener(seekListener);
         previewStyleLineSeekBar.setOnSeekBarChangeListener(seekListener);
-        previewStyleSideSeekBar.setOnSeekBarChangeListener(seekListener);
-        previewStyleVerticalSeekBar.setOnSeekBarChangeListener(seekListener);
+        previewStyleLeftSeekBar.setOnSeekBarChangeListener(seekListener);
+        previewStyleRightSeekBar.setOnSeekBarChangeListener(seekListener);
+        previewStyleTopSeekBar.setOnSeekBarChangeListener(seekListener);
+        previewStyleBottomSeekBar.setOnSeekBarChangeListener(seekListener);
 
         previewStyleKeepScreenOnCheck.setOnCheckedChangeListener((b, c) -> applyPreviewStyleControls());
         previewStyleShowTitleCheck.setOnCheckedChangeListener((b, c) -> applyPreviewStyleControls());
@@ -257,8 +267,10 @@ public class PreviewActivity extends ThemedActivity {
         previewStyleFontSeekBar.setProgress(Math.round(settingsStore.getFontSizeSp()) - 12);
         previewStyleFontWeightSeekBar.setProgress(fontWeightProgress(settingsStore.getReaderFontWeight()));
         previewStyleLineSeekBar.setProgress(Math.round(settingsStore.getLineSpacingExtraSp()));
-        previewStyleSideSeekBar.setProgress(settingsStore.getSidePaddingDp() - 8);
-        previewStyleVerticalSeekBar.setProgress(settingsStore.getVerticalPaddingDp() - 8);
+        previewStyleLeftSeekBar.setProgress(settingsStore.getLeftPaddingDp());
+        previewStyleRightSeekBar.setProgress(settingsStore.getRightPaddingDp());
+        previewStyleTopSeekBar.setProgress(settingsStore.getTopPaddingDp());
+        previewStyleBottomSeekBar.setProgress(settingsStore.getBottomPaddingDp());
         previewStyleKeepScreenOnCheck.setChecked(settingsStore.isKeepScreenOn());
         previewStyleShowTitleCheck.setChecked(settingsStore.isChapterTitleVisible());
         previewStyleBackgroundText.setText(currentPreviewBackgroundLabel());
@@ -274,8 +286,10 @@ public class PreviewActivity extends ThemedActivity {
         settingsStore.setFontSizeSp(previewStyleFontSeekBar.getProgress() + 12f);
         settingsStore.setReaderFontWeight(fontWeightValueForProgress(previewStyleFontWeightSeekBar.getProgress()));
         settingsStore.setLineSpacingExtraSp(previewStyleLineSeekBar.getProgress());
-        settingsStore.setSidePaddingDp(previewStyleSideSeekBar.getProgress() + 8);
-        settingsStore.setVerticalPaddingDp(previewStyleVerticalSeekBar.getProgress() + 8);
+        settingsStore.setLeftPaddingDp(previewStyleLeftSeekBar.getProgress());
+        settingsStore.setRightPaddingDp(previewStyleRightSeekBar.getProgress());
+        settingsStore.setTopPaddingDp(previewStyleTopSeekBar.getProgress());
+        settingsStore.setBottomPaddingDp(previewStyleBottomSeekBar.getProgress());
         settingsStore.setKeepScreenOn(previewStyleKeepScreenOnCheck.isChecked());
         settingsStore.setChapterTitleVisible(previewStyleShowTitleCheck.isChecked());
         settingsStore.setReaderTheme(previewSelectedReaderTheme);
@@ -301,9 +315,11 @@ public class PreviewActivity extends ThemedActivity {
         previewReaderBody.setFullJustifyEnabled(settingsStore.isBodyTextJustified());
         previewReaderPage.setBackgroundColor(palette.pageColor);
         previewReaderScrim.setBackgroundColor(palette.overlayColor);
-        int sidePadding = dp(settingsStore.getSidePaddingDp());
-        int verticalPadding = dp(settingsStore.getVerticalPaddingDp());
-        previewReaderPage.setPadding(sidePadding, verticalPadding, sidePadding, verticalPadding);
+        int leftPadding = dp(settingsStore.getLeftPaddingDp());
+        int rightPadding = dp(settingsStore.getRightPaddingDp());
+        int topPadding = dp(settingsStore.getTopPaddingDp() + 32);
+        int bottomPadding = dp(settingsStore.getBottomPaddingDp() + 32);
+        previewReaderPage.setPadding(leftPadding, topPadding, rightPadding, bottomPadding);
         LinearLayout.LayoutParams bodyParams = (LinearLayout.LayoutParams) previewReaderBody.getLayoutParams();
         bodyParams.topMargin = settingsStore.isChapterTitleVisible() ? dp(14) : 0;
         previewReaderBody.setLayoutParams(bodyParams);
@@ -337,8 +353,10 @@ public class PreviewActivity extends ThemedActivity {
         previewStyleFontWeightText.setText(readerFontWeightLabelForProgress(previewStyleFontWeightSeekBar.getProgress())
                 + " (" + fontWeightValueForProgress(previewStyleFontWeightSeekBar.getProgress()) + ")");
         previewStyleLineText.setText(previewStyleLineSeekBar.getProgress() + " px");
-        previewStyleSideText.setText((previewStyleSideSeekBar.getProgress() + 8) + " dp");
-        previewStyleVerticalText.setText((previewStyleVerticalSeekBar.getProgress() + 8) + " dp");
+        previewStyleLeftText.setText(previewStyleLeftSeekBar.getProgress() + " dp");
+        previewStyleRightText.setText(previewStyleRightSeekBar.getProgress() + " dp");
+        previewStyleTopText.setText(previewStyleTopSeekBar.getProgress() + " dp");
+        previewStyleBottomText.setText(previewStyleBottomSeekBar.getProgress() + " dp");
     }
 
     private void openPreviewBackgroundPicker() {

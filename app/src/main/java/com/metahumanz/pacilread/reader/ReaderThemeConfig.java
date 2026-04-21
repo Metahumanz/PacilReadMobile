@@ -16,8 +16,10 @@ public final class ReaderThemeConfig {
             jsonObject.put("font_weight", settingsStore.getReaderFontWeight());
             jsonObject.put("text_color", settingsStore.getReaderTextColor());
             jsonObject.put("line_spacing_extra", settingsStore.getLineSpacingExtraSp());
-            jsonObject.put("side_padding_dp", settingsStore.getSidePaddingDp());
-            jsonObject.put("vertical_padding_dp", settingsStore.getVerticalPaddingDp());
+            jsonObject.put("left_padding_dp", settingsStore.getLeftPaddingDp());
+            jsonObject.put("right_padding_dp", settingsStore.getRightPaddingDp());
+            jsonObject.put("top_padding_dp", settingsStore.getTopPaddingDp());
+            jsonObject.put("bottom_padding_dp", settingsStore.getBottomPaddingDp());
             jsonObject.put("reader_theme", settingsStore.getReaderTheme());
             jsonObject.put("reader_background_path", settingsStore.getReaderBackgroundPath());
             jsonObject.put("keep_screen_on", settingsStore.isKeepScreenOn());
@@ -39,8 +41,10 @@ public final class ReaderThemeConfig {
         settingsStore.setReaderFontWeight(jsonObject.optInt("font_weight", settingsStore.getReaderFontWeight()));
         settingsStore.setReaderTextColor(jsonObject.optString("text_color", settingsStore.getReaderTextColor()));
         settingsStore.setLineSpacingExtraSp((float) jsonObject.optDouble("line_spacing_extra", settingsStore.getLineSpacingExtraSp()));
-        settingsStore.setSidePaddingDp(jsonObject.optInt("side_padding_dp", settingsStore.getSidePaddingDp()));
-        settingsStore.setVerticalPaddingDp(jsonObject.optInt("vertical_padding_dp", settingsStore.getVerticalPaddingDp()));
+        settingsStore.setLeftPaddingDp(jsonObject.optInt("left_padding_dp", settingsStore.getLeftPaddingDp()));
+        settingsStore.setRightPaddingDp(jsonObject.optInt("right_padding_dp", settingsStore.getRightPaddingDp()));
+        settingsStore.setTopPaddingDp(jsonObject.optInt("top_padding_dp", settingsStore.getTopPaddingDp()));
+        settingsStore.setBottomPaddingDp(jsonObject.optInt("bottom_padding_dp", settingsStore.getBottomPaddingDp()));
         settingsStore.setReaderTheme(jsonObject.optString("reader_theme", settingsStore.getReaderTheme()));
         settingsStore.setReaderBackgroundPath(jsonObject.optString("reader_background_path", settingsStore.getReaderBackgroundPath()));
         settingsStore.setKeepScreenOn(jsonObject.optBoolean("keep_screen_on", settingsStore.isKeepScreenOn()));

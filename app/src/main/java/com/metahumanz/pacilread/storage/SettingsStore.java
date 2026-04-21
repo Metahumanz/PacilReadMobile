@@ -29,8 +29,10 @@ public class SettingsStore {
     private static final String KEY_FONT_WEIGHT = "font_weight";
     private static final String KEY_TEXT_COLOR = "reader_text_color";
     private static final String KEY_LINE_SPACING = "line_spacing_extra";
-    private static final String KEY_SIDE_PADDING = "side_padding_dp";
-    private static final String KEY_VERTICAL_PADDING = "vertical_padding_dp";
+    private static final String KEY_LEFT_PADDING = "left_padding_dp";
+    private static final String KEY_RIGHT_PADDING = "right_padding_dp";
+    private static final String KEY_TOP_PADDING = "top_padding_dp";
+    private static final String KEY_BOTTOM_PADDING = "bottom_padding_dp";
     private static final String KEY_APP_THEME_MODE = "app_theme_mode";
     private static final String KEY_READER_UI_THEME_MODE = "reader_ui_theme_mode";
     private static final String KEY_THEME = "reader_theme";
@@ -59,6 +61,8 @@ public class SettingsStore {
     private static final String KEY_CUSTOM_TEXT_COLOR = "custom_text_color";
     private static final String KEY_CHAPTER_TITLE_ALIGNMENT = "chapter_title_alignment";
     private static final String KEY_BODY_TEXT_JUSTIFY = "body_text_justify";
+    private static final String KEY_FLIP_SPEED = "flip_speed";
+    private static final String KEY_HUD_VERTICAL_MARGIN = "hud_vertical_margin";
 
     private final SharedPreferences preferences;
 
@@ -210,21 +214,39 @@ public class SettingsStore {
         preferences.edit().putFloat(KEY_LINE_SPACING, clamp(value, 0f, 28f)).apply();
     }
 
-    public int getSidePaddingDp() {
-        return preferences.getInt(KEY_SIDE_PADDING, 18);
+    public int getLeftPaddingDp() {
+        return preferences.getInt(KEY_LEFT_PADDING, preferences.getInt("side_padding_dp", 18));
     }
 
-    public void setSidePaddingDp(int value) {
-        preferences.edit().putInt(KEY_SIDE_PADDING, clamp(value, 8, 48)).apply();
+    public void setLeftPaddingDp(int value) {
+        preferences.edit().putInt(KEY_LEFT_PADDING, clamp(value, 0, 48)).apply();
     }
 
-    public int getVerticalPaddingDp() {
-        return preferences.getInt(KEY_VERTICAL_PADDING, 24);
+    public int getRightPaddingDp() {
+        return preferences.getInt(KEY_RIGHT_PADDING, preferences.getInt("side_padding_dp", 18));
     }
 
-    public void setVerticalPaddingDp(int value) {
-        preferences.edit().putInt(KEY_VERTICAL_PADDING, clamp(value, 8, 72)).apply();
+    public void setRightPaddingDp(int value) {
+        preferences.edit().putInt(KEY_RIGHT_PADDING, clamp(value, 0, 48)).apply();
     }
+
+    public int getTopPaddingDp() {
+        return preferences.getInt(KEY_TOP_PADDING, 8);
+    }
+
+    public void setTopPaddingDp(int value) {
+        preferences.edit().putInt(KEY_TOP_PADDING, clamp(value, 0, 128)).apply();
+    }
+
+    public int getBottomPaddingDp() {
+        return preferences.getInt(KEY_BOTTOM_PADDING, 8);
+    }
+
+    public void setBottomPaddingDp(int value) {
+        preferences.edit().putInt(KEY_BOTTOM_PADDING, clamp(value, 0, 128)).apply();
+    }
+
+
 
     public String getAppThemeMode() {
         return normalizeAppThemeMode(preferences.getString(KEY_APP_THEME_MODE, "system"));
@@ -304,6 +326,22 @@ public class SettingsStore {
 
     public void setFlipMode(String value) {
         preferences.edit().putString(KEY_FLIP_MODE, normalizeFlipMode(value)).apply();
+    }
+
+    public String getFlipSpeed() {
+        return preferences.getString(KEY_FLIP_SPEED, "medium");
+    }
+
+    public void setFlipSpeed(String value) {
+        preferences.edit().putString(KEY_FLIP_SPEED, value).apply();
+    }
+
+    public int getHudVerticalMarginDp() {
+        return preferences.getInt(KEY_HUD_VERTICAL_MARGIN, 2);
+    }
+
+    public void setHudVerticalMarginDp(int value) {
+        preferences.edit().putInt(KEY_HUD_VERTICAL_MARGIN, value).apply();
     }
 
     public String getReaderSliderMode() {
