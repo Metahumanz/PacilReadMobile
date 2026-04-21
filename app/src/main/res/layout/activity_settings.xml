@@ -152,6 +152,16 @@
                         android:textColor="@color/on_surface"
                         android:textSize="15sp" />
 
+                    <CheckBox
+                        android:id="@+id/check_reader_menu_auto_hide"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:minHeight="48dp"
+                        android:text="阅读界面自动收起菜单"
+                        android:textColor="@color/on_surface"
+                        android:textSize="15sp" />
+
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -484,21 +494,43 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:text="朗读引擎"
+                        android:textColor="@color/on_surface"
+                        android:textSize="15sp" />
+
+                    <Spinner
+                        android:id="@+id/spinner_tts_engine"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="10dp"
+                        android:background="@drawable/bg_input" />
+
+                    <LinearLayout
+                        android:id="@+id/layout_tts_mimo_key"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
                         android:text="MiMo TTS API 密钥"
                         android:textColor="@color/on_surface"
                         android:textSize="15sp" />
 
-                    <EditText
-                        android:id="@+id/input_mimo_api_key"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:background="@drawable/bg_input"
-                        android:hint="输入 API Key 以启用在线语音"
-                        android:inputType="textPassword"
-                        android:minHeight="48dp"
-                        android:padding="12dp"
-                        android:textSize="14sp" />
+                        <EditText
+                            android:id="@+id/input_mimo_api_key"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:background="@drawable/bg_input"
+                            android:hint="输入 API Key 以启用在线语音"
+                            android:inputType="textPassword"
+                            android:minHeight="48dp"
+                            android:padding="12dp"
+                            android:textSize="14sp" />
+                    </LinearLayout>
                 </LinearLayout>
 
             </LinearLayout>

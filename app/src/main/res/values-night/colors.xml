@@ -19,16 +19,7 @@
     <color name="glass_dark_fill">#FF1C2634</color>
     <color name="glass_dark_fill_strong">#FF253140</color>
     <color name="glass_dark_stroke">#4DFFFFFF</color>
-    <color name="reader_paper_bg">#1D1C17</color>
-    <color name="reader_paper_text">#F4EDE1</color>
-    <color name="reader_forest_bg">#101917</color>
-    <color name="reader_forest_text">#DDE8E0</color>
-    <color name="reader_night_bg">#091018</color>
-    <color name="reader_night_text">#EDF3FA</color>
-    <color name="overlay_dark">#D20A1017</color>
     <color name="overlay_light">#B7141A24</color>
-    <color name="reader_page">#1B2430</color>
-    <color name="reader_page_night">#111923</color>
     <color name="reader_stage_stroke">#22FFFFFF</color>
     <color name="positive">#55B48B</color>
     <color name="danger">#EF8585</color>

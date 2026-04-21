@@ -8,6 +8,7 @@ import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.sync.WebDavClient;
 import com.metahumanz.pacilread.tts.MimoTtsClient;
+import com.metahumanz.pacilread.tts.SystemTtsClient;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -20,16 +21,19 @@ public final class ReaderRuntime {
     public final SettingsStore settingsStore;
     public final WebDavClient webDavClient;
     public final MimoTtsClient mimoTtsClient;
+    public final SystemTtsClient systemTtsClient;
 
     public ReaderRuntime(Context context) {
         databaseHelper = ReaderDatabaseHelper.getInstance(context);
         settingsStore = new SettingsStore(context);
         webDavClient = new WebDavClient(settingsStore);
         mimoTtsClient = new MimoTtsClient();
+        systemTtsClient = new SystemTtsClient(context);
     }
 
     public void shutdown() {
         mainHandler.removeCallbacksAndMessages(null);
+        systemTtsClient.shutdown();
         executor.shutdownNow();
         ttsExecutor.shutdownNow();
         mimoTtsClient.cancel();

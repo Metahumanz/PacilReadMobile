@@ -25,6 +25,7 @@ import android.widget.Toast;
 import com.metahumanz.pacilread.model.ReaderThemeRecord;
 import com.metahumanz.pacilread.reader.JustifiedPageTextView;
 import com.metahumanz.pacilread.reader.ReaderThemeConfig;
+import com.metahumanz.pacilread.reader.modern.theme.ReaderThemePalette;
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedActivity;
@@ -524,13 +525,4 @@ public class PreviewActivity extends ThemedActivity {
         return "标准";
     }
 
-    private static class ReaderThemePalette {
-        final int pageColor, textColor, overlayColor, backgroundDrawableRes;
-        ReaderThemePalette(int p, int t, int o, int b) { pageColor=p; textColor=t; overlayColor=o; backgroundDrawableRes=b; }
-        static ReaderThemePalette from(String key) {
-            if ("forest".equals(key)) return new ReaderThemePalette(0xFFEAF4E6, 0xFF2A4B2A, 0xB8EEF6E9, R.drawable.theme_bg_forest);
-            if ("night".equals(key)) return new ReaderThemePalette(0xFF172033, 0xFFE2E8F0, 0xCC0A0F17, R.drawable.theme_bg_night);
-            return new ReaderThemePalette(0xFFF7F0E1, 0xFF5C4B37, 0xA6FFF8ED, R.drawable.theme_bg_paper);
-        }
-    }
 }

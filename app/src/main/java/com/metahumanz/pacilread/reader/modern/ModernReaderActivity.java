@@ -86,6 +86,11 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         super.onResume();
         chrome.updateSystemBarsVisibility(state.controlsVisible);
         chrome.applyGlassOpacity();
+        if (state.controlsVisible) {
+            chrome.scheduleAutoHide();
+        } else {
+            chrome.cancelAutoHide();
+        }
     }
 
     @Override
@@ -98,6 +103,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     @Override
     protected void onPause() {
         super.onPause();
+        chrome.cancelAutoHide();
         paging.cancelInteractiveAnimator();
         paging.cancelInteractivePaging();
         autoPage.stopAutoPage();

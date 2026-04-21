@@ -37,6 +37,8 @@ public class SettingsActivity extends ThemedActivity {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private static final String[] APP_THEME_KEYS = new String[]{"system", "light", "dark"};
     private static final String[] READER_THEME_KEYS = new String[]{"follow_app", "system", "light", "dark"};
+    private static final String[] TTS_ENGINE_KEYS = new String[]{"system", "mimo"};
+    private static final String[] TTS_ENGINE_LABELS = new String[]{"系统 TTS", "小米 MiMo"};
     private static final String[] VOLUME_KEY_ACTION_KEYS = new String[]{"system", "page_up", "page_down"};
     private static final String[] VOLUME_KEY_ACTION_LABELS = new String[]{"系统音量", "上一页", "下一页"};
 
@@ -51,6 +53,7 @@ public class SettingsActivity extends ThemedActivity {
     private TextView liteBackupText;
 
     private CheckBox autoOpenCheck;
+    private CheckBox readerMenuAutoHideCheck;
     private CheckBox webDavEnabledCheck;
     private EditText urlInput;
     private EditText dirInput;
@@ -59,6 +62,7 @@ public class SettingsActivity extends ThemedActivity {
     private EditText mimoApiKeyInput;
     private Spinner appThemeSpinner;
     private Spinner readerUiThemeSpinner;
+    private Spinner ttsEngineSpinner;
     private Spinner volumeKeyUpActionSpinner;
     private Spinner volumeKeyDownActionSpinner;
     private SeekBar glassOpacitySeekBar;
@@ -74,6 +78,7 @@ public class SettingsActivity extends ThemedActivity {
     private Button webDavSyncThemesButton;
     private Button webDavSyncBackgroundsButton;
     private View webDavSyncOptionsLayout;
+    private View ttsMimoKeyLayout;
     private boolean bindingSettingsValues = false;
     private boolean settingsBusy = false;
 
@@ -92,6 +97,7 @@ public class SettingsActivity extends ThemedActivity {
 
 
         autoOpenCheck = findViewById(R.id.check_auto_open);
+        readerMenuAutoHideCheck = findViewById(R.id.check_reader_menu_auto_hide);
         webDavEnabledCheck = findViewById(R.id.check_webdav_enabled);
         urlInput = findViewById(R.id.input_webdav_url);
         dirInput = findViewById(R.id.input_webdav_dir);
@@ -100,6 +106,7 @@ public class SettingsActivity extends ThemedActivity {
         mimoApiKeyInput = findViewById(R.id.input_mimo_api_key);
         appThemeSpinner = findViewById(R.id.spinner_app_theme_mode);
         readerUiThemeSpinner = findViewById(R.id.spinner_reader_ui_theme_mode);
+        ttsEngineSpinner = findViewById(R.id.spinner_tts_engine);
         volumeKeyUpActionSpinner = findViewById(R.id.spinner_volume_key_up_action);
         volumeKeyDownActionSpinner = findViewById(R.id.spinner_volume_key_down_action);
         glassOpacitySeekBar = findViewById(R.id.seek_glass_opacity);
@@ -118,6 +125,7 @@ public class SettingsActivity extends ThemedActivity {
         webDavSyncUiButton = findViewById(R.id.button_webdav_sync_ui);
         webDavSyncThemesButton = findViewById(R.id.button_webdav_sync_themes);
         webDavSyncBackgroundsButton = findViewById(R.id.button_webdav_sync_backgrounds);
+        ttsMimoKeyLayout = findViewById(R.id.layout_tts_mimo_key);
 
         setupThemeSpinners();
         bindCurrentValues();
@@ -176,6 +184,7 @@ public class SettingsActivity extends ThemedActivity {
     private void bindCurrentValues() {
         bindingSettingsValues = true;
         autoOpenCheck.setChecked(settingsStore.isAutoOpenLastBook());
+        readerMenuAutoHideCheck.setChecked(settingsStore.isReaderMenuAutoHideEnabled());
         webDavEnabledCheck.setChecked(settingsStore.isWebDavEnabled());
         urlInput.setText(settingsStore.getWebDavUrl());
         dirInput.setText(settingsStore.getWebDavDir());
@@ -184,6 +193,9 @@ public class SettingsActivity extends ThemedActivity {
         mimoApiKeyInput.setText(settingsStore.getTtsMimoApiKey());
         appThemeSpinner.setSelection(indexOf(APP_THEME_KEYS, settingsStore.getAppThemeMode(), 0));
         readerUiThemeSpinner.setSelection(indexOf(READER_THEME_KEYS, settingsStore.getReaderUiThemeMode(), 0));
+        if (ttsEngineSpinner != null) {
+            ttsEngineSpinner.setSelection(indexOf(TTS_ENGINE_KEYS, settingsStore.getTtsEngine(), 0));
+        }
         if (volumeKeyUpActionSpinner != null) {
             volumeKeyUpActionSpinner.setSelection(indexOf(VOLUME_KEY_ACTION_KEYS, settingsStore.getVolumeKeyUpAction(), 1));
         }
@@ -193,6 +205,7 @@ public class SettingsActivity extends ThemedActivity {
         glassOpacitySeekBar.setProgress(settingsStore.getGlassOpacityPercent() - 20);
         updateGlassOpacityLabel(settingsStore.getGlassOpacityPercent());
         updateWebDavSyncButtons();
+        updateTtsSettingsVisibility();
         bindingSettingsValues = false;
         refreshStatusSummary();
     }
@@ -205,11 +218,15 @@ public class SettingsActivity extends ThemedActivity {
     private void saveSettings() {
         String previousAppThemeMode = settingsStore.getAppThemeMode();
         settingsStore.setAutoOpenLastBook(autoOpenCheck.isChecked());
+        settingsStore.setReaderMenuAutoHideEnabled(readerMenuAutoHideCheck.isChecked());
         settingsStore.setWebDavEnabled(webDavEnabledCheck.isChecked());
         settingsStore.setWebDavUrl(urlInput.getText().toString());
         settingsStore.setWebDavDir(dirInput.getText().toString());
         settingsStore.setWebDavUser(userInput.getText().toString());
         settingsStore.setWebDavPassword(passwordInput.getText().toString());
+        if (ttsEngineSpinner != null) {
+            settingsStore.setTtsEngine(TTS_ENGINE_KEYS[ttsEngineSpinner.getSelectedItemPosition()]);
+        }
         settingsStore.setTtsMimoApiKey(mimoApiKeyInput.getText().toString());
         settingsStore.setAppThemeMode(APP_THEME_KEYS[appThemeSpinner.getSelectedItemPosition()]);
         settingsStore.setReaderUiThemeMode(READER_THEME_KEYS[readerUiThemeSpinner.getSelectedItemPosition()]);
@@ -225,6 +242,7 @@ public class SettingsActivity extends ThemedActivity {
         settingsStore.setWebDavSyncUiSettingsEnabled(webDavSyncUiButton.isSelected());
         settingsStore.setWebDavSyncThemesEnabled(webDavSyncThemesButton.isSelected());
         settingsStore.setWebDavSyncBackgroundsEnabled(webDavSyncBackgroundsButton.isSelected());
+        updateTtsSettingsVisibility();
         refreshStatusSummary();
         if (!previousAppThemeMode.equals(settingsStore.getAppThemeMode())) {
             recreate();
@@ -248,6 +266,16 @@ public class SettingsActivity extends ThemedActivity {
         readerThemeAdapter.setDropDownViewResource(R.layout.item_spinner_dropdown);
         readerUiThemeSpinner.setAdapter(readerThemeAdapter);
 
+        if (ttsEngineSpinner != null) {
+            ArrayAdapter<String> ttsEngineAdapter = new ArrayAdapter<>(
+                    this,
+                    R.layout.item_spinner_selected,
+                    TTS_ENGINE_LABELS
+            );
+            ttsEngineAdapter.setDropDownViewResource(R.layout.item_spinner_dropdown);
+            ttsEngineSpinner.setAdapter(ttsEngineAdapter);
+        }
+
         android.widget.AdapterView.OnItemSelectedListener autoSaveSpinnerListener = new android.widget.AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
@@ -260,6 +288,9 @@ public class SettingsActivity extends ThemedActivity {
         };
         appThemeSpinner.setOnItemSelectedListener(autoSaveSpinnerListener);
         readerUiThemeSpinner.setOnItemSelectedListener(autoSaveSpinnerListener);
+        if (ttsEngineSpinner != null) {
+            ttsEngineSpinner.setOnItemSelectedListener(autoSaveSpinnerListener);
+        }
         if (volumeKeyUpActionSpinner != null) {
             ArrayAdapter<String> volumeKeyUpAdapter = new ArrayAdapter<>(
                     this,
@@ -325,6 +356,7 @@ public class SettingsActivity extends ThemedActivity {
         passwordInput.addTextChangedListener(autoSaveTextWatcher);
         mimoApiKeyInput.addTextChangedListener(autoSaveTextWatcher);
         autoOpenCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsChanged());
+        readerMenuAutoHideCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsChanged());
         webDavEnabledCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsChanged());
     }
 
@@ -503,6 +535,13 @@ public class SettingsActivity extends ThemedActivity {
             return;
         }
         webDavSyncOptionsLayout.setVisibility(webDavEnabledCheck != null && webDavEnabledCheck.isChecked() ? View.VISIBLE : View.GONE);
+    }
+
+    private void updateTtsSettingsVisibility() {
+        if (ttsMimoKeyLayout == null) {
+            return;
+        }
+        ttsMimoKeyLayout.setVisibility("mimo".equals(settingsStore.getTtsEngine()) ? View.VISIBLE : View.GONE);
     }
 
     private String buildWebDavScopeSummary() {

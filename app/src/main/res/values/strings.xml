@@ -1,12 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">PacilRead</string>
-    <string name="bootstrap_message">原生 Android 工程已初始化</string>
-    <string name="bookshelf_title">书架</string>
-    <string name="bookshelf_subtitle">管理本地书籍</string>
-    <string name="bookshelf_search_hint">搜索书名或作者</string>
-    <string name="action_import">导入</string>
-    <string name="action_settings">设置</string>
     <string name="empty_bookshelf">还没有导入任何书籍</string>
     <string name="empty_bookshelf_hint">导入 TXT、EPUB 或 PDF 后就可以开始阅读。</string>
     <string name="reader_back">返回</string>
@@ -14,9 +8,4 @@
     <string name="reader_search">搜索</string>
     <string name="reader_style">排版</string>
     <string name="reader_tts">朗读</string>
-    <string name="reader_auto_page">自动</string>
-    <string name="reader_sync">云同步</string>
-    <string name="settings_title">设置</string>
-    <string name="settings_save">保存设置</string>
-    <string name="settings_test">探测 WebDAV</string>
 </resources>

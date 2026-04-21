@@ -1,12 +1,12 @@
 package com.metahumanz.pacilread.util;
 
-import android.os.Build;
 import android.text.Html;
 import android.text.Spanned;
 import android.text.TextUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public final class HtmlUtils {
     private HtmlUtils() {
@@ -61,12 +61,7 @@ public final class HtmlUtils {
         if (html == null || html.isEmpty()) {
             return "";
         }
-        Spanned spanned;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            spanned = Html.fromHtml(html, Html.FROM_HTML_MODE_LEGACY);
-        } else {
-            spanned = Html.fromHtml(html);
-        }
+        Spanned spanned = Html.fromHtml(html, Html.FROM_HTML_MODE_LEGACY);
         return spanned.toString().replace('\u00A0', ' ').trim();
     }
 
@@ -74,7 +69,7 @@ public final class HtmlUtils {
         if (html == null) {
             return "";
         }
-        String lower = html.toLowerCase();
+        String lower = html.toLowerCase(Locale.ROOT);
         int bodyStart = lower.indexOf("<body");
         if (bodyStart >= 0) {
             int bodyTagEnd = lower.indexOf('>', bodyStart);
@@ -91,7 +86,7 @@ public final class HtmlUtils {
             return "";
         }
         String[] tags = new String[]{"h1", "h2", "h3", "title"};
-        String lower = html.toLowerCase();
+        String lower = html.toLowerCase(Locale.ROOT);
         for (String tag : tags) {
             String open = "<" + tag;
             String close = "</" + tag + ">";

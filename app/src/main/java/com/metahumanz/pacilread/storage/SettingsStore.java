@@ -63,6 +63,7 @@ public class SettingsStore {
     private static final String KEY_BODY_TEXT_JUSTIFY = "body_text_justify";
     private static final String KEY_FLIP_SPEED = "flip_speed";
     private static final String KEY_HUD_VERTICAL_MARGIN = "hud_vertical_margin";
+    private static final String KEY_READER_MENU_AUTO_HIDE = "reader_menu_auto_hide";
 
     private final SharedPreferences preferences;
 
@@ -297,11 +298,15 @@ public class SettingsStore {
     }
 
     public String getTtsEngine() {
-        return "mimo";
+        String value = preferences.getString(KEY_TTS_ENGINE, null);
+        if ("system".equals(value) || "mimo".equals(value)) {
+            return value;
+        }
+        return getTtsMimoApiKey().isBlank() ? "system" : "mimo";
     }
 
     public void setTtsEngine(String value) {
-        // Always use mimo, ignore other values
+        preferences.edit().putString(KEY_TTS_ENGINE, normalizeTtsEngine(value)).apply();
     }
 
     public float getTtsRate() {
@@ -342,6 +347,14 @@ public class SettingsStore {
 
     public void setHudVerticalMarginDp(int value) {
         preferences.edit().putInt(KEY_HUD_VERTICAL_MARGIN, value).apply();
+    }
+
+    public boolean isReaderMenuAutoHideEnabled() {
+        return preferences.getBoolean(KEY_READER_MENU_AUTO_HIDE, true);
+    }
+
+    public void setReaderMenuAutoHideEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_READER_MENU_AUTO_HIDE, enabled).apply();
     }
 
     public String getReaderSliderMode() {
@@ -570,6 +583,10 @@ public class SettingsStore {
             return value;
         }
         return "follow_app";
+    }
+
+    private static String normalizeTtsEngine(String value) {
+        return "mimo".equals(value) ? "mimo" : "system";
     }
 
     private static String normalizeReaderFontFamily(String value) {

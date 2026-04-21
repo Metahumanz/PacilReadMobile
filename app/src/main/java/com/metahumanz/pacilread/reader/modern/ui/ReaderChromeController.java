@@ -32,6 +32,8 @@ import java.util.List;
 import java.util.Locale;
 
 public final class ReaderChromeController {
+    private static final long MENU_AUTO_HIDE_DELAY_MS = 2500L;
+
     private final ModernReaderActivity activity;
     private final ReaderRuntime runtime;
     private final ReaderViewRefs views;
@@ -272,6 +274,14 @@ public final class ReaderChromeController {
     }
 
     public void scheduleAutoHide() {
+        cancelAutoHide();
+        if (!state.controlsVisible || !runtime.settingsStore.isReaderMenuAutoHideEnabled()) {
+            return;
+        }
+        runtime.mainHandler.postDelayed(autoHideRunnable, MENU_AUTO_HIDE_DELAY_MS);
+    }
+
+    public void cancelAutoHide() {
         runtime.mainHandler.removeCallbacks(autoHideRunnable);
     }
 
@@ -283,9 +293,7 @@ public final class ReaderChromeController {
                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
         if (!ThemeModeHelper.isDark(activity.getResources())) {
             flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
-            }
+            flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
         }
         if (!showSystemBars) {
             flags |= View.SYSTEM_UI_FLAG_FULLSCREEN

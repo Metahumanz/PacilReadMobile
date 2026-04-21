@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     private static final String DATABASE_NAME = "reader.db";
@@ -622,9 +623,13 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     }
 
     private BookRecord findBook(List<BookRecord> books, String title, String author) {
-        String targetKey = (title == null ? "" : title.trim().toLowerCase()) + "::" + (author == null ? "" : author.trim().toLowerCase());
+        String targetKey = (title == null ? "" : title.trim().toLowerCase(Locale.ROOT))
+                + "::"
+                + (author == null ? "" : author.trim().toLowerCase(Locale.ROOT));
         for (BookRecord book : books) {
-            String currentKey = (book.title == null ? "" : book.title.trim().toLowerCase()) + "::" + (book.author == null ? "" : book.author.trim().toLowerCase());
+            String currentKey = (book.title == null ? "" : book.title.trim().toLowerCase(Locale.ROOT))
+                    + "::"
+                    + (book.author == null ? "" : book.author.trim().toLowerCase(Locale.ROOT));
             if (targetKey.equals(currentKey)) {
                 return book;
             }

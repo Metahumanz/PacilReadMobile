@@ -5,6 +5,8 @@ import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.appcompat.content.res.AppCompatResources;
+
 import com.metahumanz.pacilread.R;
 
 import java.util.ArrayList;
@@ -89,7 +91,7 @@ public final class GlassUiHelper {
     private static List<Drawable.ConstantState> resolveGlassStates(Context context) {
         List<Drawable.ConstantState> states = new ArrayList<>(GLASS_DRAWABLES.length);
         for (int drawableRes : GLASS_DRAWABLES) {
-            Drawable drawable = context.getDrawable(drawableRes);
+            Drawable drawable = AppCompatResources.getDrawable(context, drawableRes);
             if (drawable != null && drawable.getConstantState() != null) {
                 states.add(drawable.getConstantState());
             }

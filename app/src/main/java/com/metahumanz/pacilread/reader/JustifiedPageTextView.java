@@ -3,16 +3,17 @@ package com.metahumanz.pacilread.reader;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.os.Build;
+import android.graphics.text.LineBreaker;
 import android.text.Layout;
 import android.text.TextPaint;
 import android.util.AttributeSet;
-import android.widget.TextView;
+
+import androidx.appcompat.widget.AppCompatTextView;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class JustifiedPageTextView extends TextView {
+public class JustifiedPageTextView extends AppCompatTextView {
     private static final float JUSTIFY_MIN_FILL_RATIO = 0.9f;
     private static final float JUSTIFY_MAX_RESIDUAL_EM = 2.2f;
 
@@ -37,11 +38,8 @@ public class JustifiedPageTextView extends TextView {
     }
 
     private void init() {
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            setBreakStrategy(Layout.BREAK_STRATEGY_HIGH_QUALITY);
-            setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NORMAL);
-        }
+        setBreakStrategy(LineBreaker.BREAK_STRATEGY_HIGH_QUALITY);
+        setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NORMAL);
         highlightPaint.setColor(0x40FFC107);
         highlightPaint.setStyle(Paint.Style.FILL);
     }

@@ -1,6 +1,6 @@
 package com.metahumanz.pacilread.reader;
 
-import android.os.Build;
+import android.graphics.text.LineBreaker;
 import android.text.Layout;
 import android.text.StaticLayout;
 import android.text.TextPaint;
@@ -71,14 +71,12 @@ public final class ReaderPaginator {
     }
 
     private static StaticLayout buildLayout(CharSequence source, TextPaint paint, int width, float lineSpacingExtra) {
-        StaticLayout.Builder builder = StaticLayout.Builder.obtain(source, 0, source.length(), paint, width)
+        return StaticLayout.Builder.obtain(source, 0, source.length(), paint, width)
                 .setAlignment(Layout.Alignment.ALIGN_NORMAL)
                 .setIncludePad(false)
-                .setLineSpacing(lineSpacingExtra, 1f);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            builder.setBreakStrategy(Layout.BREAK_STRATEGY_HIGH_QUALITY);
-            builder.setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NORMAL);
-        }
-        return builder.build();
+                .setLineSpacing(lineSpacingExtra, 1f)
+                .setBreakStrategy(LineBreaker.BREAK_STRATEGY_HIGH_QUALITY)
+                .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NORMAL)
+                .build();
     }
 }

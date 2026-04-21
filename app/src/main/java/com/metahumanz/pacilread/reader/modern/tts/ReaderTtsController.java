@@ -8,6 +8,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.SeekBar;
+import android.widget.Spinner;
 import android.widget.TextView;
 
 import com.metahumanz.pacilread.R;
@@ -31,6 +32,8 @@ import java.util.regex.Pattern;
 
 public final class ReaderTtsController {
     private static final Pattern TTS_SEGMENT_PATTERN = Pattern.compile("[^ \\n\\t。！？.!?,，;；、]+[。！？.!?,，;；、]*");
+    private static final String[] TTS_ENGINE_KEYS = new String[]{"system", "mimo"};
+    private static final String[] TTS_ENGINE_LABELS = new String[]{"系统 TTS", "小米 MiMo"};
 
     private final ModernReaderActivity activity;
     private final ReaderRuntime runtime;
@@ -82,7 +85,7 @@ public final class ReaderTtsController {
             stopTts();
             return;
         }
-        if (runtime.settingsStore.getTtsMimoApiKey().isBlank()) {
+        if ("mimo".equals(runtime.settingsStore.getTtsEngine()) && runtime.settingsStore.getTtsMimoApiKey().isBlank()) {
             ui.showToast("请先填写 MiMo API Key");
             return;
         }
@@ -107,6 +110,7 @@ public final class ReaderTtsController {
         ttsUnits.clear();
         state.ttsChapterIndex = -1;
         state.currentTtsUnitIndex = -1;
+        runtime.systemTtsClient.cancel();
         runtime.mimoTtsClient.cancel();
         state.ttsHighlightStart = -1;
         state.ttsHighlightEnd = -1;
@@ -125,15 +129,31 @@ public final class ReaderTtsController {
 
     public void showTtsDialog() {
         View contentView = LayoutInflater.from(activity).inflate(R.layout.dialog_tts, null, false);
+        Spinner engineSpinner = contentView.findViewById(R.id.tts_spinner_engine);
         SeekBar seekBar = contentView.findViewById(R.id.tts_seek_rate);
+        View mimoKeyLayout = contentView.findViewById(R.id.tts_layout_mimo_api_key);
         TextView valueText = contentView.findViewById(R.id.tts_text_rate);
         EditText mimoKeyInput = contentView.findViewById(R.id.tts_input_mimo_api_key);
         TextView noteText = contentView.findViewById(R.id.tts_text_note);
         Button toggleButton = contentView.findViewById(R.id.tts_button_toggle);
+        engineSpinner.setAdapter(dialogSupport.buildSpinnerAdapter(TTS_ENGINE_LABELS));
+        engineSpinner.setSelection(indexOf(TTS_ENGINE_KEYS, runtime.settingsStore.getTtsEngine(), 0), false);
         seekBar.setProgress(ui.clamp(Math.round((runtime.settingsStore.getTtsRate() - 0.5f) * 10f), 0, 15));
         valueText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%.1f 倍", runtime.settingsStore.getTtsRate()));
         mimoKeyInput.setText(runtime.settingsStore.getTtsMimoApiKey());
-        noteText.setText("MiMo 模式会调用小米云端 TTS，模型固定为 mimo-v2-tts / mimo_default。");
+        updateTtsDialogViews(runtime.settingsStore.getTtsEngine(), mimoKeyLayout, noteText);
+        engineSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                String engine = TTS_ENGINE_KEYS[position];
+                runtime.settingsStore.setTtsEngine(engine);
+                updateTtsDialogViews(engine, mimoKeyLayout, noteText);
+            }
+
+            @Override
+            public void onNothingSelected(android.widget.AdapterView<?> parent) {
+            }
+        });
         seekBar.setOnSeekBarChangeListener(new ReaderDialogSupport.SimpleSeekListener(() -> {
             float rate = 0.5f + (seekBar.getProgress() / 10f);
             valueText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%.1f 倍", rate));
@@ -219,7 +239,7 @@ public final class ReaderTtsController {
         state.ttsHighlightStart = unit.start - highlightSlice.start;
         state.ttsHighlightEnd = unit.end - highlightSlice.start;
         updateTtsHighlight();
-        speakCurrentMimoGroup();
+        speakCurrentTtsGroup();
     }
 
     private boolean rebuildTtsUnitsForChapter(int chapterIndex, int minOffset) {
@@ -291,15 +311,15 @@ public final class ReaderTtsController {
         }, paging.readerFlipDurationMs() * 2L + 60L);
     }
 
-    private void speakCurrentMimoGroup() {
+    private void speakCurrentTtsGroup() {
         if (state.currentTtsUnitIndex < 0 || state.currentTtsUnitIndex >= ttsUnits.size()) {
             advanceToNextTtsChapter();
             return;
         }
-        speakWithMimo();
+        speakWithCurrentEngine();
     }
 
-    private void speakWithMimo() {
+    private void speakWithCurrentEngine() {
         int groupCount = 1;
         StringBuilder builder = new StringBuilder(ttsUnits.get(state.currentTtsUnitIndex).text);
         while (state.currentTtsUnitIndex + groupCount < ttsUnits.size()
@@ -314,9 +334,15 @@ public final class ReaderTtsController {
         }
         int sessionId = state.ttsSessionId;
         int consumedUnits = groupCount;
+        String engine = runtime.settingsStore.getTtsEngine();
+        String engineLabel = engineLabel(engine);
         runtime.ttsExecutor.execute(() -> {
             try {
-                runtime.mimoTtsClient.speak(groupText, runtime.settingsStore.getTtsMimoApiKey(), runtime.settingsStore.getTtsRate());
+                if ("mimo".equals(engine)) {
+                    runtime.mimoTtsClient.speak(groupText, runtime.settingsStore.getTtsMimoApiKey(), runtime.settingsStore.getTtsRate());
+                } else {
+                    runtime.systemTtsClient.speak(groupText, runtime.settingsStore.getTtsRate());
+                }
                 activity.runOnUiThread(() -> {
                     if (!state.ttsActive || sessionId != state.ttsSessionId) {
                         return;
@@ -329,7 +355,7 @@ public final class ReaderTtsController {
                         return;
                     }
                     stopTts();
-                    ui.showToast("MiMo 听书失败: " + error.getMessage());
+                    ui.showToast(engineLabel + " 听书失败: " + error.getMessage());
                 });
             }
         });
@@ -345,6 +371,33 @@ public final class ReaderTtsController {
         }
         char lastChar = trimmed.charAt(trimmed.length() - 1);
         return lastChar == '。' || lastChar == '！' || lastChar == '？' || lastChar == '!' || lastChar == '?';
+    }
+
+    private void updateTtsDialogViews(String engine, View mimoKeyLayout, TextView noteText) {
+        if (mimoKeyLayout != null) {
+            mimoKeyLayout.setVisibility("mimo".equals(engine) ? View.VISIBLE : View.GONE);
+        }
+        if (noteText == null) {
+            return;
+        }
+        if ("mimo".equals(engine)) {
+            noteText.setText("MiMo 模式会调用小米云端 TTS，模型固定为 mimo-v2-tts / mimo_default。");
+            return;
+        }
+        noteText.setText("系统 TTS 使用设备内置语音引擎，无需联网，也不需要填写 MiMo API Key。");
+    }
+
+    private String engineLabel(String engine) {
+        return "mimo".equals(engine) ? "MiMo" : "系统 TTS";
+    }
+
+    private int indexOf(String[] values, String target, int fallback) {
+        for (int i = 0; i < values.length; i++) {
+            if (values[i].equals(target)) {
+                return i;
+            }
+        }
+        return fallback;
     }
 
     private static final class SpeechUnit {
