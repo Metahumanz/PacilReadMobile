@@ -301,6 +301,48 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
+            android:text="正文对齐"
+            android:textColor="@color/on_surface"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/style_button_body_justify"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_outline_button"
+                android:minHeight="44dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:text="两端对齐"
+                android:textAllCaps="false"
+                android:textColor="@color/on_surface" />
+
+            <Button
+                android:id="@+id/style_button_body_left"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_outline_button"
+                android:minHeight="44dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:text="左对齐"
+                android:textAllCaps="false"
+                android:textColor="@color/on_surface" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
             android:text="章节标题对齐"
             android:textColor="@color/on_surface"
             android:textStyle="bold" />
@@ -338,6 +380,7 @@
                 android:textAllCaps="false"
                 android:textColor="@color/on_surface" />
         </LinearLayout>
+
 
         <TextView
             android:layout_width="wrap_content"

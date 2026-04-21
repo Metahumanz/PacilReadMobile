@@ -183,16 +183,10 @@ public class SimulationPageTurnView extends View {
     }
 
     private void updateTouchInternal(float touchX, float touchY) {
-        float adjustedTouchY = touchY;
-        float height = getHeight();
-        if (startY > height / 3f && startY < height * 2f / 3f) {
-            adjustedTouchY = height;
-        }
-        if (startY > height / 3f && startY < height / 2f && direction > 0) {
-            adjustedTouchY = MIN_TOUCH;
-        }
+        // Do not forcibly jump the Y coordinate — let the fold follow the actual
+        // touch point so diagonal page-turns animate all the way to the edge.
         this.touchX = ensureTouch(touchX);
-        this.touchY = ensureTouch(adjustedTouchY);
+        this.touchY = ensureTouch(touchY);
     }
 
     private float ensureTouch(float value) {
@@ -441,15 +435,16 @@ public class SimulationPageTurnView extends View {
 
         if (localTouchX > 0 && localTouchX < getWidth()) {
             if (bezierStart1.x < 0 || bezierStart1.x > getWidth()) {
+                // Fix: take absolute value so the crease boundary maps correctly
                 if (bezierStart1.x < 0) {
-                    bezierStart1.x = getWidth() - bezierStart1.x;
+                    bezierStart1.x = Math.abs(bezierStart1.x);
                 }
 
                 float f1 = Math.abs(cornerX - localTouchX);
                 if (f1 <= 0f) {
                     f1 = 1f;
                 }
-                float f2 = getWidth() * f1 / bezierStart1.x;
+                float f2 = getWidth() * f1 / safeDivisor(bezierStart1.x);
                 localTouchX = Math.abs(cornerX - f2);
                 float f3 = Math.abs(cornerX - localTouchX) * Math.abs(cornerY - localTouchY) / f1;
                 localTouchY = Math.abs(cornerY - f3);

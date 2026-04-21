@@ -58,6 +58,7 @@ public class SettingsStore {
     private static final String KEY_BACKGROUND_BLUR_PERCENT = "background_blur_percent";
     private static final String KEY_CUSTOM_TEXT_COLOR = "custom_text_color";
     private static final String KEY_CHAPTER_TITLE_ALIGNMENT = "chapter_title_alignment";
+    private static final String KEY_BODY_TEXT_JUSTIFY = "body_text_justify";
 
     private final SharedPreferences preferences;
 
@@ -442,6 +443,14 @@ public class SettingsStore {
 
     public void setChapterTitleAlignment(String value) {
         preferences.edit().putString(KEY_CHAPTER_TITLE_ALIGNMENT, "center".equals(value) ? "center" : "left").apply();
+    }
+
+    public boolean isBodyTextJustified() {
+        return preferences.getBoolean(KEY_BODY_TEXT_JUSTIFY, true);
+    }
+
+    public void setBodyTextJustified(boolean justified) {
+        preferences.edit().putBoolean(KEY_BODY_TEXT_JUSTIFY, justified).apply();
     }
 
     public String getWebDavProgressBaseUrl() {

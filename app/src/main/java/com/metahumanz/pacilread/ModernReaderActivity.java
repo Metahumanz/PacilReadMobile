@@ -314,17 +314,6 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         sessionStartTime = System.currentTimeMillis();
         sessionStartOffset = 0; // 将在 loadBook 后更新
 
-        // 注册电池电量广播接收器
-        sysMetricsReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                int level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
-                currentBatteryLevel = level;
-                updateHudDisplay();
-            }
-        };
-        registerReceiver(sysMetricsReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
-
         pageBodyCurrent.setText("正在载入...");
         loadBook();
     }
@@ -1624,8 +1613,8 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         pageBodyIncoming.setLineSpacing(settingsStore.getLineSpacingExtraSp(), 1f);
         pageBodyCurrent.setLetterSpacing(settingsStore.getLetterSpacing());
         pageBodyIncoming.setLetterSpacing(settingsStore.getLetterSpacing());
-        pageBodyCurrent.setFullJustifyEnabled(true);
-        pageBodyIncoming.setFullJustifyEnabled(true);
+        pageBodyCurrent.setFullJustifyEnabled(settingsStore.isBodyTextJustified());
+        pageBodyIncoming.setFullJustifyEnabled(settingsStore.isBodyTextJustified());
         
         // Apply first line indent
         int indentPx = dp(settingsStore.getFirstLineIndentDp());
@@ -1662,28 +1651,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         updateSystemBarsVisibility(controlsVisible);
         applyGlassOpacity();
         updateReaderHud();
-        updateHudDisplay();
         invalidatePreparedPagingSnapshots();
-    }
-
-    private void updateHudDisplay() {
-        if (hudTopLeft == null || hudTopCenter == null || hudTopRight == null) return;
-
-        // 时间
-        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm", Locale.getDefault());
-        hudTopLeft.setText(sdf.format(new java.util.Date()));
-
-        // 标题
-        if (book != null && !chapters.isEmpty()) {
-            hudTopCenter.setText(book.title);
-        }
-
-        // 电量
-        if (currentBatteryLevel >= 0) {
-            hudTopRight.setText(currentBatteryLevel + "%");
-        } else {
-            hudTopRight.setText("");
-        }
     }
 
     private void persistProgress() {
@@ -1870,6 +1838,8 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         Button nightThemeButton = content.findViewById(R.id.style_button_theme_night);
         Button titleLeftButton = content.findViewById(R.id.style_button_title_left);
         Button titleCenterButton = content.findViewById(R.id.style_button_title_center);
+        Button bodyJustifyButton = content.findViewById(R.id.style_button_body_justify);
+        Button bodyLeftButton = content.findViewById(R.id.style_button_body_left);
         Button customColorButton = content.findViewById(R.id.style_button_custom_color);
         String[] uiThemeKeys = new String[]{"follow_app", "system", "light", "dark"};
         ArrayAdapter<String> uiThemeAdapter = buildSpinnerAdapter(new String[]{"跟随应用", "跟随系统", "浅色", "深色"});
@@ -1897,6 +1867,8 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         String chapterTitleAlignment = settingsStore.getChapterTitleAlignment();
         styleThemeButton(titleLeftButton, "left".equals(chapterTitleAlignment));
         styleThemeButton(titleCenterButton, "center".equals(chapterTitleAlignment));
+        styleThemeButton(bodyJustifyButton, settingsStore.isBodyTextJustified());
+        styleThemeButton(bodyLeftButton, !settingsStore.isBodyTextJustified());
         updateLetterSpacingLabel(letterSpacingValue, letterSpacingSeek);
         updateFirstLineIndentLabel(firstLineIndentValue, firstLineIndentSeek);
         updateBackgroundBlurLabel(backgroundBlurValue, backgroundBlurSeek);
@@ -2026,6 +1998,18 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             settingsStore.setChapterTitleAlignment("center");
             styleThemeButton(titleLeftButton, false);
             styleThemeButton(titleCenterButton, true);
+            autoApply.run();
+        });
+        bodyJustifyButton.setOnClickListener(v -> {
+            settingsStore.setBodyTextJustified(true);
+            styleThemeButton(bodyJustifyButton, true);
+            styleThemeButton(bodyLeftButton, false);
+            autoApply.run();
+        });
+        bodyLeftButton.setOnClickListener(v -> {
+            settingsStore.setBodyTextJustified(false);
+            styleThemeButton(bodyJustifyButton, false);
+            styleThemeButton(bodyLeftButton, true);
             autoApply.run();
         });
         
@@ -2394,17 +2378,38 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     }
 
     private int getReaderPageTextWidth() {
+        // Use the actual body text view width — it is the true usable area for
+        // pagination. Fall back to subtracting container padding only when the
+        // body hasn't been laid out yet.
+        if (pageBodyCurrent != null && pageBodyCurrent.getWidth() > 0) {
+            return pageBodyCurrent.getWidth()
+                    - pageBodyCurrent.getPaddingLeft()
+                    - pageBodyCurrent.getPaddingRight();
+        }
         if (pageCurrent != null && pageCurrent.getWidth() > 0) {
             return pageCurrent.getWidth() - pageCurrent.getPaddingLeft() - pageCurrent.getPaddingRight();
         }
-        return pageBodyCurrent.getWidth();
+        return 0;
     }
 
     private int getRegularReaderPageHeight() {
-        if (pageCurrent != null && pageCurrent.getHeight() > 0) {
-            return pageCurrent.getHeight() - pageCurrent.getPaddingTop() - pageCurrent.getPaddingBottom();
+        // The body view's measured height is the only reliable source: it
+        // already accounts for the LinearLayout weight, marginTop, and any
+        // other spacing.  Using the container height minus padding is wrong
+        // because it ignores the 14dp marginTop between title and body, which
+        // causes every page to overflow by that margin and creates gaps when
+        // turning pages.
+        if (pageBodyCurrent != null && pageBodyCurrent.getHeight() > 0) {
+            return pageBodyCurrent.getHeight();
         }
-        return pageBodyCurrent.getHeight();
+        // Fallback before first layout pass
+        if (pageCurrent != null && pageCurrent.getHeight() > 0) {
+            return pageCurrent.getHeight()
+                    - pageCurrent.getPaddingTop()
+                    - pageCurrent.getPaddingBottom()
+                    - dp(14); // subtract body marginTop
+        }
+        return 0;
     }
 
     private int measureChapterTitleOccupiedHeight(String title, int width) {
@@ -3425,38 +3430,37 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         float width = Math.max(pageStage == null ? 0f : pageStage.getWidth(), 1f);
         if (settingsStore != null && "simulation".equals(settingsStore.getFlipMode())) {
             // Simulation needs wider range to allow the fold to cross the entire screen
-            return Math.max(-width * 1.2f, Math.min(width * 2.2f, value));
+            return Math.max(-width * 3f, Math.min(width * 4f, value));
         }
         return Math.max(0.1f, Math.min(width - 0.1f, value));
     }
 
     private float sanitizeStageTouchY(float value) {
         float height = Math.max(pageStage == null ? 0f : pageStage.getHeight(), 1f);
+        if (settingsStore != null && "simulation".equals(settingsStore.getFlipMode())) {
+            return Math.max(-height * 3f, Math.min(height * 4f, value));
+        }
         return Math.max(0.1f, Math.min(height - 0.1f, value));
     }
 
     private float resolveSimulationTargetTouchX(int direction, boolean commit) {
         float width = Math.max(pageStage == null ? 0f : pageStage.getWidth(), dp(240));
         if (commit) {
-            // For forward turn (right to left): touch goes from width to -width
-            // For backward turn (left to right): touch goes from 0 to width * 2
-            return direction > 0 ? -width : width * 2.1f;
+            // Make target point far enough to ensure fold line and shadow clear the screen entirely
+            return direction > 0 ? -width * 2.5f : width * 3.5f;
         }
-        return direction > 0 ? width : -width;
+        return direction > 0 ? width * 1.5f : -width * 0.5f;
     }
 
     private float resolveSimulationTargetTouchY(int direction) {
         float height = Math.max(pageStage == null ? 0f : pageStage.getHeight(), dp(320));
         
-        // Differentiate based on starting Y to ensure a diagonal pull
+        // Push Y further out to maintain the diagonal pull vector
         if (interactiveStartY < height / 3f) {
-            // Started at top, pull slightly downwards to the opposite side
-            return height * 0.3f;
+            return height * 1.5f;
         } else if (interactiveStartY > height * 2f / 3f) {
-            // Started at bottom, pull slightly upwards to the opposite side
-            return height * 0.7f;
+            return -height * 0.5f;
         } else {
-            // Started at middle, pull across with a small vertical offset to prevent vertical fold singularity
             return height / 2f + (direction > 0 ? 10f : -10f);
         }
     }

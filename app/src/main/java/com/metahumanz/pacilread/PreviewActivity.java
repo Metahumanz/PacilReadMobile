@@ -298,7 +298,7 @@ public class PreviewActivity extends ThemedActivity {
         previewReaderBody.setTextSize(TypedValue.COMPLEX_UNIT_SP, settingsStore.getFontSizeSp());
         previewReaderBody.setTextColor(palette.textColor);
         previewReaderBody.setLineSpacing(settingsStore.getLineSpacingExtraSp(), 1f);
-        previewReaderBody.setFullJustifyEnabled(true);
+        previewReaderBody.setFullJustifyEnabled(settingsStore.isBodyTextJustified());
         previewReaderPage.setBackgroundColor(palette.pageColor);
         previewReaderScrim.setBackgroundColor(palette.overlayColor);
         int sidePadding = dp(settingsStore.getSidePaddingDp());

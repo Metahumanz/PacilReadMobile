@@ -27,6 +27,9 @@
                 android:layout_width="42dp"
                 android:layout_height="42dp"
                 android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:padding="0dp"
                 android:text="☰"
                 android:textColor="@color/on_surface"
                 android:textSize="18sp" />

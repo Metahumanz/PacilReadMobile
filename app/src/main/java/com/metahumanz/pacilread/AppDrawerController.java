@@ -83,6 +83,16 @@ public class AppDrawerController {
         if (drawerPanel == null || drawerScrim == null) {
             return;
         }
+
+        // Immediately push the panel far off-screen so it never covers content
+        // during the first layout pass, before the post() callback runs.
+        // Without this, drawer_panel sits at x=0 for one frame and occludes the
+        // hamburger button (showing only the right half of the icon).
+        drawerPanel.setTranslationX(-9999f);
+        drawerPanel.setVisibility(View.INVISIBLE);
+        drawerScrim.setVisibility(View.GONE);
+        drawerScrim.setAlpha(0f);
+
         drawerScrim.setOnClickListener(v -> closeDrawer());
         navBookshelf.setOnClickListener(v -> {
             navigationListener.onDrawerDestinationSelected(SECTION_BOOKSHELF);
