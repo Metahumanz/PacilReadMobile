@@ -1,0 +1,295 @@
+package com.metahumanz.pacilread.reader.modern.ui;
+
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Typeface;
+import android.net.Uri;
+import android.os.Build;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.widget.TextView;
+
+import com.metahumanz.pacilread.reader.modern.ModernReaderActivity;
+import com.metahumanz.pacilread.reader.modern.ReaderRuntime;
+import com.metahumanz.pacilread.reader.modern.ReaderSessionState;
+import com.metahumanz.pacilread.reader.modern.ReaderUiUtils;
+import com.metahumanz.pacilread.reader.modern.ReaderViewRefs;
+import com.metahumanz.pacilread.reader.modern.config.ReaderOptionCatalog;
+import com.metahumanz.pacilread.reader.modern.content.ReaderContentController;
+import com.metahumanz.pacilread.reader.modern.paging.ReaderPagingAnimator;
+import com.metahumanz.pacilread.reader.modern.theme.ReaderThemePalette;
+import com.metahumanz.pacilread.tts.MimoTtsClient;
+import com.metahumanz.pacilread.util.FileAssetHelper;
+
+import java.io.File;
+import java.util.Locale;
+
+public final class ReaderStyleController {
+    private final ModernReaderActivity activity;
+    private final ReaderRuntime runtime;
+    private final ReaderViewRefs views;
+    private final ReaderSessionState state;
+    private final ReaderUiUtils ui;
+
+    private ReaderChromeController chrome;
+    private ReaderPagingAnimator paging;
+    private ReaderContentController content;
+    private com.metahumanz.pacilread.reader.modern.tts.ReaderTtsController tts;
+
+    public ReaderStyleController(
+            ModernReaderActivity activity,
+            ReaderRuntime runtime,
+            ReaderViewRefs views,
+            ReaderSessionState state,
+            ReaderUiUtils ui
+    ) {
+        this.activity = activity;
+        this.runtime = runtime;
+        this.views = views;
+        this.state = state;
+        this.ui = ui;
+    }
+
+    public void attachControllers(
+            ReaderChromeController chrome,
+            ReaderPagingAnimator paging,
+            ReaderContentController content,
+            com.metahumanz.pacilread.reader.modern.tts.ReaderTtsController tts
+    ) {
+        this.chrome = chrome;
+        this.paging = paging;
+        this.content = content;
+        this.tts = tts;
+    }
+
+    public void applyReaderSettings() {
+        ReaderThemePalette palette = ReaderThemePalette.from(runtime.settingsStore.getReaderTheme());
+        Typeface bodyTypeface = buildReaderTypeface(
+                runtime.settingsStore.getReaderFontFamily(),
+                runtime.settingsStore.getReaderFontWeight()
+        );
+        Typeface titleTypeface = buildReaderTypeface(
+                runtime.settingsStore.getReaderFontFamily(),
+                Math.max(600, Math.min(900, runtime.settingsStore.getReaderFontWeight() + 200))
+        );
+        int resolvedTextColor = resolveReaderTextColor(palette);
+        state.currentReaderPageColor = palette.pageColor;
+        state.currentReaderTextColor = resolvedTextColor;
+        views.readerRoot.setBackgroundColor(palette.backgroundColor);
+        views.pageCurrent.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        views.pageIncoming.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        views.pageTitleCurrent.setTextColor(resolvedTextColor);
+        views.pageTitleIncoming.setTextColor(resolvedTextColor);
+        views.pageBodyCurrent.setTextColor(resolvedTextColor);
+        views.pageBodyIncoming.setTextColor(resolvedTextColor);
+        views.pageTitleCurrent.setTypeface(titleTypeface);
+        views.pageTitleIncoming.setTypeface(titleTypeface);
+        views.pageBodyCurrent.setTypeface(bodyTypeface);
+        views.pageBodyIncoming.setTypeface(bodyTypeface);
+        views.pageTitleCurrent.setIncludeFontPadding(false);
+        views.pageTitleIncoming.setIncludeFontPadding(false);
+        views.pageTitleCurrent.setTextSize(runtime.settingsStore.getFontSizeSp() + 2f);
+        views.pageTitleIncoming.setTextSize(runtime.settingsStore.getFontSizeSp() + 2f);
+        views.pageBodyCurrent.setTextSize(runtime.settingsStore.getFontSizeSp());
+        views.pageBodyIncoming.setTextSize(runtime.settingsStore.getFontSizeSp());
+        views.pageBodyCurrent.setLineSpacing(runtime.settingsStore.getLineSpacingExtraSp(), 1f);
+        views.pageBodyIncoming.setLineSpacing(runtime.settingsStore.getLineSpacingExtraSp(), 1f);
+        views.pageBodyCurrent.setLetterSpacing(runtime.settingsStore.getLetterSpacing());
+        views.pageBodyIncoming.setLetterSpacing(runtime.settingsStore.getLetterSpacing());
+        views.pageBodyCurrent.setFullJustifyEnabled(runtime.settingsStore.isBodyTextJustified());
+        views.pageBodyIncoming.setFullJustifyEnabled(runtime.settingsStore.isBodyTextJustified());
+
+        int indentPx = ui.dp(runtime.settingsStore.getFirstLineIndentDp());
+        views.pageBodyCurrent.setPadding(
+                ((ViewGroup) views.pageCurrent).getPaddingLeft() + indentPx,
+                ((ViewGroup) views.pageCurrent).getPaddingTop(),
+                ((ViewGroup) views.pageCurrent).getPaddingRight(),
+                ((ViewGroup) views.pageCurrent).getPaddingBottom()
+        );
+        views.pageBodyIncoming.setPadding(
+                ((ViewGroup) views.pageIncoming).getPaddingLeft() + indentPx,
+                ((ViewGroup) views.pageIncoming).getPaddingTop(),
+                ((ViewGroup) views.pageIncoming).getPaddingRight(),
+                ((ViewGroup) views.pageIncoming).getPaddingBottom()
+        );
+
+        String alignment = runtime.settingsStore.getChapterTitleAlignment();
+        views.pageTitleCurrent.setGravity("center".equals(alignment) ? Gravity.CENTER : Gravity.LEFT);
+        views.pageTitleIncoming.setGravity("center".equals(alignment) ? Gravity.CENTER : Gravity.LEFT);
+
+        paging.invalidatePreparedPagingSnapshots();
+        if (tts != null) {
+            tts.updateTtsHighlight();
+        }
+        int leftPadding = ui.dp(runtime.settingsStore.getLeftPaddingDp());
+        int rightPadding = ui.dp(runtime.settingsStore.getRightPaddingDp());
+        int topPadding = ui.dp(runtime.settingsStore.getTopPaddingDp() + 24) + state.systemInsetTop;
+        int bottomPadding = ui.dp(runtime.settingsStore.getBottomPaddingDp() + 24) + state.systemInsetBottom;
+        ((ViewGroup) views.pageCurrent).setPadding(leftPadding, topPadding, rightPadding, bottomPadding);
+        ((ViewGroup) views.pageIncoming).setPadding(leftPadding, topPadding, rightPadding, bottomPadding);
+        if (runtime.settingsStore.isKeepScreenOn()) {
+            activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } else {
+            activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
+        applyBackgroundImage();
+        chrome.updateSystemBarsVisibility(state.controlsVisible);
+        chrome.applyGlassOpacity();
+        chrome.updateReaderHud();
+        paging.invalidatePreparedPagingSnapshots();
+    }
+
+    public void attachBackground(Uri uri) {
+        runtime.executor.execute(() -> {
+            try {
+                String oldPath = runtime.settingsStore.getReaderBackgroundPath();
+                File newFile = FileAssetHelper.copyUriToFolder(activity, uri, "backgrounds", "reader_bg");
+                if (oldPath != null && !oldPath.isBlank()) {
+                    FileAssetHelper.deleteIfExists(oldPath);
+                }
+                runtime.settingsStore.setReaderBackgroundPath(newFile.getAbsolutePath());
+                activity.runOnUiThread(this::applyReaderSettings);
+            } catch (Exception error) {
+                activity.runOnUiThread(() -> ui.showToast("设置背景失败: " + error.getMessage()));
+            }
+        });
+    }
+
+    public void applyBackgroundImage() {
+        String path = runtime.settingsStore.getReaderBackgroundPath();
+        if (path == null || path.isBlank()) {
+            int builtInRes = ReaderThemePalette.from(runtime.settingsStore.getReaderTheme()).backgroundDrawableRes;
+            if (builtInRes != 0) {
+                views.readerBackgroundImage.setImageResource(builtInRes);
+                views.readerBackgroundImage.setVisibility(View.VISIBLE);
+                applyBackgroundBlur();
+            } else {
+                views.readerBackgroundImage.setImageDrawable(null);
+                views.readerBackgroundImage.setVisibility(View.GONE);
+            }
+            return;
+        }
+        Bitmap bitmap = BitmapFactory.decodeFile(path);
+        if (bitmap == null) {
+            int builtInRes = ReaderThemePalette.from(runtime.settingsStore.getReaderTheme()).backgroundDrawableRes;
+            if (builtInRes != 0) {
+                views.readerBackgroundImage.setImageResource(builtInRes);
+                views.readerBackgroundImage.setVisibility(View.VISIBLE);
+                applyBackgroundBlur();
+            } else {
+                views.readerBackgroundImage.setImageDrawable(null);
+                views.readerBackgroundImage.setVisibility(View.GONE);
+            }
+            return;
+        }
+        views.readerBackgroundImage.setImageBitmap(bitmap);
+        views.readerBackgroundImage.setVisibility(View.VISIBLE);
+        applyBackgroundBlur();
+    }
+
+    public void applyBackgroundBlur() {
+        int blurPercent = runtime.settingsStore.getBackgroundBlurPercent();
+        if (blurPercent <= 0) {
+            views.readerBackgroundImage.setAlpha(1.0f);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                views.readerBackgroundImage.setRenderEffect(null);
+            }
+            return;
+        }
+        float alpha = 1.0f - (blurPercent / 100f * 0.5f);
+        views.readerBackgroundImage.setAlpha(alpha);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            float radius = blurPercent / 100f * 25f;
+            android.graphics.RenderEffect blurEffect = android.graphics.RenderEffect.createBlurEffect(
+                    radius,
+                    radius,
+                    android.graphics.Shader.TileMode.CLAMP
+            );
+            views.readerBackgroundImage.setRenderEffect(blurEffect);
+        }
+    }
+
+    public void openBackgroundPicker(int requestCode) {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/*");
+        activity.startActivityForResult(intent, requestCode);
+    }
+
+    public String currentBackgroundLabel() {
+        String path = runtime.settingsStore.getReaderBackgroundPath();
+        if (path == null || path.isBlank()) {
+            return "当前背景：使用" + ReaderThemePalette.from(runtime.settingsStore.getReaderTheme()).displayName + "内置壁纸";
+        }
+        return "当前背景：" + new File(path).getName();
+    }
+
+    public int resolveReaderTextColor(ReaderThemePalette palette) {
+        return resolveReaderTextColorValue(runtime.settingsStore.getReaderTextColor(), palette);
+    }
+
+    public int resolveReaderTextColorValue(String colorKey, ReaderThemePalette palette) {
+        if ("custom".equals(colorKey)) {
+            String customColor = runtime.settingsStore.getCustomTextColor();
+            if (customColor != null && !customColor.isEmpty()) {
+                try {
+                    return android.graphics.Color.parseColor(customColor);
+                } catch (Exception ignore) {
+                }
+            }
+            return palette.textColor;
+        }
+        if ("ink_brown".equals(colorKey)) {
+            return 0xFF5A4330;
+        }
+        if ("graphite".equals(colorKey)) {
+            return 0xFF374151;
+        }
+        if ("warm_gray".equals(colorKey)) {
+            return 0xFF635B52;
+        }
+        if ("jade_ink".equals(colorKey)) {
+            return 0xFF255B57;
+        }
+        if ("forest_ink".equals(colorKey)) {
+            return 0xFF274235;
+        }
+        if ("moon_white".equals(colorKey)) {
+            return 0xFFF5F7FA;
+        }
+        return palette.textColor;
+    }
+
+    public void updateTextColorPreview(TextView preview, String colorKey, ReaderThemePalette palette) {
+        if (preview == null) {
+            return;
+        }
+        int index = ReaderOptionCatalog.indexOf(ReaderOptionCatalog.READER_TEXT_COLOR_KEYS, colorKey, 0);
+        preview.setText("字色预览：" + ReaderOptionCatalog.READER_TEXT_COLOR_LABELS[index]);
+        preview.setTextColor(resolveReaderTextColorValue(colorKey, palette));
+        preview.setBackgroundColor(palette.pageColor);
+    }
+
+    public void updateLetterSpacingLabel(TextView label, android.widget.SeekBar seekBar) {
+        float spacing = seekBar.getProgress() / 10f;
+        label.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%.1f", spacing));
+    }
+
+    public void updateFirstLineIndentLabel(TextView label, android.widget.SeekBar seekBar) {
+        label.setText(seekBar.getProgress() + " 字符");
+    }
+
+    public void updateBackgroundBlurLabel(TextView label, android.widget.SeekBar seekBar) {
+        label.setText(seekBar.getProgress() + "%");
+    }
+
+    public Typeface buildReaderTypeface(String familyKey, int weight) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return Typeface.create(familyKey, weight);
+        }
+        return Typeface.create(familyKey, weight >= 600 ? Typeface.BOLD : Typeface.NORMAL);
+    }
+}

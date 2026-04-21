@@ -1,0 +1,533 @@
+package com.metahumanz.pacilread.reader.modern.dialog;
+
+import android.app.AlertDialog;
+import android.text.Editable;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.SeekBar;
+import android.widget.Spinner;
+import android.widget.TextView;
+
+import com.metahumanz.pacilread.R;
+import com.metahumanz.pacilread.model.ReaderThemeRecord;
+import com.metahumanz.pacilread.reader.ReaderThemeConfig;
+import com.metahumanz.pacilread.reader.modern.ModernReaderActivity;
+import com.metahumanz.pacilread.reader.modern.ReaderRuntime;
+import com.metahumanz.pacilread.reader.modern.ReaderSessionState;
+import com.metahumanz.pacilread.reader.modern.ReaderUiUtils;
+import com.metahumanz.pacilread.reader.modern.config.ReaderOptionCatalog;
+import com.metahumanz.pacilread.reader.modern.content.ReaderContentController;
+import com.metahumanz.pacilread.reader.modern.paging.ReaderNavigationController;
+import com.metahumanz.pacilread.reader.modern.theme.ReaderThemePalette;
+import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
+import com.metahumanz.pacilread.reader.modern.ui.ReaderStyleController;
+import com.metahumanz.pacilread.theme.ThemeModeHelper;
+import com.metahumanz.pacilread.util.FileAssetHelper;
+
+import java.util.List;
+
+public final class ReaderStyleDialogController {
+    private final ModernReaderActivity activity;
+    private final ReaderRuntime runtime;
+    private final ReaderSessionState state;
+    private final ReaderUiUtils ui;
+    private final ReaderDialogSupport dialogSupport;
+    private final ReaderContentController content;
+    private final ReaderNavigationController navigation;
+    private final ReaderStyleController style;
+    private final ReaderChromeController chrome;
+
+    public ReaderStyleDialogController(
+            ModernReaderActivity activity,
+            ReaderRuntime runtime,
+            ReaderSessionState state,
+            ReaderUiUtils ui,
+            ReaderDialogSupport dialogSupport,
+            ReaderContentController content,
+            ReaderNavigationController navigation,
+            ReaderStyleController style,
+            ReaderChromeController chrome
+    ) {
+        this.activity = activity;
+        this.runtime = runtime;
+        this.state = state;
+        this.ui = ui;
+        this.dialogSupport = dialogSupport;
+        this.content = content;
+        this.navigation = navigation;
+        this.style = style;
+        this.chrome = chrome;
+    }
+
+    public void showStyleDialog(int backgroundPickerRequestCode) {
+        View contentView = LayoutInflater.from(activity).inflate(R.layout.dialog_reader_style, null, false);
+        StyleDialogViews refs = StyleDialogViews.bind(contentView);
+        ArrayAdapter<String> uiThemeAdapter = dialogSupport.buildSpinnerAdapter(new String[]{"跟随应用", "跟随系统", "浅色", "深色"});
+        ArrayAdapter<String> fontFamilyAdapter = dialogSupport.buildSpinnerAdapter(ReaderOptionCatalog.READER_FONT_FAMILY_LABELS);
+        ArrayAdapter<String> textColorAdapter = dialogSupport.buildSpinnerAdapter(ReaderOptionCatalog.READER_TEXT_COLOR_LABELS);
+        refs.uiThemeSpinner.setAdapter(uiThemeAdapter);
+        refs.fontFamilySpinner.setAdapter(fontFamilyAdapter);
+        refs.textColorSpinner.setAdapter(textColorAdapter);
+        refs.fontFamilySpinner.setSelection(
+                ReaderOptionCatalog.indexOf(ReaderOptionCatalog.READER_FONT_FAMILY_KEYS, runtime.settingsStore.getReaderFontFamily(), 0),
+                false
+        );
+        refs.textColorSpinner.setSelection(
+                ReaderOptionCatalog.indexOf(ReaderOptionCatalog.READER_TEXT_COLOR_KEYS, runtime.settingsStore.getReaderTextColor(), 0),
+                false
+        );
+        refs.fontSeek.setProgress(Math.round(runtime.settingsStore.getFontSizeSp()) - 12);
+        refs.fontWeightSeek.setProgress(ReaderOptionCatalog.fontWeightProgress(runtime.settingsStore.getReaderFontWeight()));
+        refs.lineSeek.setProgress(Math.round(runtime.settingsStore.getLineSpacingExtraSp()));
+        refs.leftSeek.setProgress(runtime.settingsStore.getLeftPaddingDp());
+        refs.rightSeek.setProgress(runtime.settingsStore.getRightPaddingDp());
+        refs.topSeek.setProgress(runtime.settingsStore.getTopPaddingDp());
+        refs.bottomSeek.setProgress(runtime.settingsStore.getBottomPaddingDp());
+        refs.letterSpacingSeek.setProgress(Math.round(runtime.settingsStore.getLetterSpacing() * 10f));
+        refs.firstLineIndentSeek.setProgress(runtime.settingsStore.getFirstLineIndentDp());
+        refs.backgroundBlurSeek.setProgress(runtime.settingsStore.getBackgroundBlurPercent());
+        refs.keepScreenOn.setChecked(runtime.settingsStore.isKeepScreenOn());
+        refs.showTitleCheck.setChecked(runtime.settingsStore.isChapterTitleVisible());
+        refs.backgroundText.setText(style.currentBackgroundLabel());
+        refs.uiThemeSpinner.setSelection(
+                ReaderOptionCatalog.indexOf(ReaderOptionCatalog.UI_THEME_KEYS, runtime.settingsStore.getReaderUiThemeMode(), 0),
+                false
+        );
+        String[] selectedReaderTheme = new String[]{runtime.settingsStore.getReaderTheme()};
+        chrome.updateReaderThemeButtons(refs.paperThemeButton, refs.forestThemeButton, refs.nightThemeButton, selectedReaderTheme[0]);
+        String chapterTitleAlignment = runtime.settingsStore.getChapterTitleAlignment();
+        chrome.styleThemeButton(refs.titleLeftButton, "left".equals(chapterTitleAlignment));
+        chrome.styleThemeButton(refs.titleCenterButton, "center".equals(chapterTitleAlignment));
+        chrome.styleThemeButton(refs.bodyJustifyButton, runtime.settingsStore.isBodyTextJustified());
+        chrome.styleThemeButton(refs.bodyLeftButton, !runtime.settingsStore.isBodyTextJustified());
+        style.updateLetterSpacingLabel(refs.letterSpacingValue, refs.letterSpacingSeek);
+        style.updateFirstLineIndentLabel(refs.firstLineIndentValue, refs.firstLineIndentSeek);
+        style.updateBackgroundBlurLabel(refs.backgroundBlurValue, refs.backgroundBlurSeek);
+
+        Runnable refreshTextColorPreview = () -> style.updateTextColorPreview(
+                refs.textColorValue,
+                ReaderOptionCatalog.READER_TEXT_COLOR_KEYS[refs.textColorSpinner.getSelectedItemPosition()],
+                ReaderThemePalette.from(selectedReaderTheme[0])
+        );
+        refreshTextColorPreview.run();
+        Runnable autoApply = buildAutoApply(refs, selectedReaderTheme, refreshTextColorPreview);
+
+        refs.paperThemeButton.setOnClickListener(v -> {
+            selectedReaderTheme[0] = "paper";
+            chrome.updateReaderThemeButtons(refs.paperThemeButton, refs.forestThemeButton, refs.nightThemeButton, selectedReaderTheme[0]);
+            refreshTextColorPreview.run();
+            autoApply.run();
+        });
+        refs.forestThemeButton.setOnClickListener(v -> {
+            selectedReaderTheme[0] = "forest";
+            chrome.updateReaderThemeButtons(refs.paperThemeButton, refs.forestThemeButton, refs.nightThemeButton, selectedReaderTheme[0]);
+            refreshTextColorPreview.run();
+            autoApply.run();
+        });
+        refs.nightThemeButton.setOnClickListener(v -> {
+            selectedReaderTheme[0] = "night";
+            chrome.updateReaderThemeButtons(refs.paperThemeButton, refs.forestThemeButton, refs.nightThemeButton, selectedReaderTheme[0]);
+            refreshTextColorPreview.run();
+            autoApply.run();
+        });
+
+        updateStyleLabels(refs);
+
+        SeekBar.OnSeekBarChangeListener listener = new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                updateStyleLabels(refs);
+                if (fromUser) {
+                    autoApply.run();
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                autoApply.run();
+            }
+        };
+        refs.fontWeightSeek.setOnSeekBarChangeListener(listener);
+        refs.fontSeek.setOnSeekBarChangeListener(listener);
+        refs.lineSeek.setOnSeekBarChangeListener(listener);
+        refs.leftSeek.setOnSeekBarChangeListener(listener);
+        refs.rightSeek.setOnSeekBarChangeListener(listener);
+        refs.topSeek.setOnSeekBarChangeListener(listener);
+        refs.bottomSeek.setOnSeekBarChangeListener(listener);
+
+        SeekBar.OnSeekBarChangeListener simpleListener = new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (seekBar == refs.letterSpacingSeek) {
+                    style.updateLetterSpacingLabel(refs.letterSpacingValue, refs.letterSpacingSeek);
+                } else if (seekBar == refs.firstLineIndentSeek) {
+                    style.updateFirstLineIndentLabel(refs.firstLineIndentValue, refs.firstLineIndentSeek);
+                } else if (seekBar == refs.backgroundBlurSeek) {
+                    style.updateBackgroundBlurLabel(refs.backgroundBlurValue, refs.backgroundBlurSeek);
+                }
+                if (fromUser) {
+                    autoApply.run();
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                autoApply.run();
+            }
+        };
+        refs.letterSpacingSeek.setOnSeekBarChangeListener(simpleListener);
+        refs.firstLineIndentSeek.setOnSeekBarChangeListener(simpleListener);
+        refs.backgroundBlurSeek.setOnSeekBarChangeListener(simpleListener);
+
+        refs.keepScreenOn.setOnCheckedChangeListener((buttonView, isChecked) -> autoApply.run());
+        refs.showTitleCheck.setOnCheckedChangeListener((buttonView, isChecked) -> autoApply.run());
+        refs.fontFamilySpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                autoApply.run();
+            }
+
+            @Override
+            public void onNothingSelected(android.widget.AdapterView<?> parent) {
+            }
+        });
+        refs.textColorSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                refreshTextColorPreview.run();
+                autoApply.run();
+            }
+
+            @Override
+            public void onNothingSelected(android.widget.AdapterView<?> parent) {
+            }
+        });
+        refs.uiThemeSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                autoApply.run();
+            }
+
+            @Override
+            public void onNothingSelected(android.widget.AdapterView<?> parent) {
+            }
+        });
+
+        refs.titleLeftButton.setOnClickListener(v -> {
+            runtime.settingsStore.setChapterTitleAlignment("left");
+            chrome.styleThemeButton(refs.titleLeftButton, true);
+            chrome.styleThemeButton(refs.titleCenterButton, false);
+            autoApply.run();
+        });
+        refs.titleCenterButton.setOnClickListener(v -> {
+            runtime.settingsStore.setChapterTitleAlignment("center");
+            chrome.styleThemeButton(refs.titleLeftButton, false);
+            chrome.styleThemeButton(refs.titleCenterButton, true);
+            autoApply.run();
+        });
+        refs.bodyJustifyButton.setOnClickListener(v -> {
+            runtime.settingsStore.setBodyTextJustified(true);
+            chrome.styleThemeButton(refs.bodyJustifyButton, true);
+            chrome.styleThemeButton(refs.bodyLeftButton, false);
+            autoApply.run();
+        });
+        refs.bodyLeftButton.setOnClickListener(v -> {
+            runtime.settingsStore.setBodyTextJustified(false);
+            chrome.styleThemeButton(refs.bodyJustifyButton, false);
+            chrome.styleThemeButton(refs.bodyLeftButton, true);
+            autoApply.run();
+        });
+        refs.customColorButton.setOnClickListener(v -> showCustomColorPickerDialog(() -> {
+            refreshTextColorPreview.run();
+            autoApply.run();
+        }));
+
+        AlertDialog dialog = new AlertDialog.Builder(activity).setView(contentView).create();
+        renderThemeRows(refs.customThemeList, dialog, refs, selectedReaderTheme);
+        contentView.findViewById(R.id.style_button_pick_background).setOnClickListener(v -> style.openBackgroundPicker(backgroundPickerRequestCode));
+        contentView.findViewById(R.id.style_button_clear_background).setOnClickListener(v -> {
+            FileAssetHelper.deleteIfExists(runtime.settingsStore.getReaderBackgroundPath());
+            runtime.settingsStore.setReaderBackgroundPath("");
+            refs.backgroundText.setText(style.currentBackgroundLabel());
+            style.applyReaderSettings();
+        });
+        contentView.findViewById(R.id.style_button_save_theme).setOnClickListener(v -> promptSaveTheme(() -> renderThemeRows(refs.customThemeList, dialog, refs, selectedReaderTheme)));
+        dialogSupport.showStyledDialog(dialog);
+    }
+
+    private Runnable buildAutoApply(StyleDialogViews refs, String[] selectedReaderTheme, Runnable refreshTextColorPreview) {
+        return () -> {
+            int anchorOffset = content.currentCharOffset();
+            String previousResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(activity);
+            runtime.settingsStore.setReaderFontFamily(ReaderOptionCatalog.READER_FONT_FAMILY_KEYS[refs.fontFamilySpinner.getSelectedItemPosition()]);
+            runtime.settingsStore.setReaderTextColor(ReaderOptionCatalog.READER_TEXT_COLOR_KEYS[refs.textColorSpinner.getSelectedItemPosition()]);
+            runtime.settingsStore.setFontSizeSp(refs.fontSeek.getProgress() + 12);
+            runtime.settingsStore.setReaderFontWeight(ReaderOptionCatalog.fontWeightValueForProgress(refs.fontWeightSeek.getProgress()));
+            runtime.settingsStore.setLineSpacingExtraSp(refs.lineSeek.getProgress());
+            runtime.settingsStore.setLeftPaddingDp(refs.leftSeek.getProgress());
+            runtime.settingsStore.setRightPaddingDp(refs.rightSeek.getProgress());
+            runtime.settingsStore.setTopPaddingDp(refs.topSeek.getProgress());
+            runtime.settingsStore.setBottomPaddingDp(refs.bottomSeek.getProgress());
+            runtime.settingsStore.setLetterSpacing(refs.letterSpacingSeek.getProgress() / 10f);
+            runtime.settingsStore.setFirstLineIndentDp(refs.firstLineIndentSeek.getProgress());
+            runtime.settingsStore.setBackgroundBlurPercent(refs.backgroundBlurSeek.getProgress());
+            runtime.settingsStore.setKeepScreenOn(refs.keepScreenOn.isChecked());
+            runtime.settingsStore.setChapterTitleVisible(refs.showTitleCheck.isChecked());
+            runtime.settingsStore.setReaderTheme(selectedReaderTheme[0]);
+            runtime.settingsStore.setReaderUiThemeMode(ReaderOptionCatalog.UI_THEME_KEYS[refs.uiThemeSpinner.getSelectedItemPosition()]);
+            refreshTextColorPreview.run();
+            String nextResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(activity);
+            content.clearPageCache();
+            if (!previousResolvedUiMode.equals(nextResolvedUiMode)) {
+                activity.recreate();
+                return;
+            }
+            style.applyReaderSettings();
+            navigation.openChapter(state.currentChapterIndex, anchorOffset, false, 0);
+        };
+    }
+
+    private void renderThemeRows(LinearLayout container, AlertDialog dialog, StyleDialogViews refs, String[] selectedReaderTheme) {
+        container.removeAllViews();
+        runtime.executor.execute(() -> {
+            List<ReaderThemeRecord> themes = runtime.databaseHelper.getCustomThemes();
+            activity.runOnUiThread(() -> {
+                if (!dialog.isShowing()) {
+                    return;
+                }
+                container.removeAllViews();
+                for (ReaderThemeRecord theme : themes) {
+                    LinearLayout row = new LinearLayout(activity);
+                    row.setOrientation(LinearLayout.HORIZONTAL);
+                    Button applyButton = new Button(activity);
+                    applyButton.setText(theme.name);
+                    applyButton.setBackgroundResource(R.drawable.bg_outline_button);
+                    applyButton.setTextColor(activity.getColor(R.color.primary));
+                    com.metahumanz.pacilread.ui.GlassUiHelper.applyToView(activity, applyButton, runtime.settingsStore.getGlassOpacityPercent());
+                    Button deleteButton = new Button(activity);
+                    deleteButton.setText("删除");
+                    deleteButton.setBackgroundResource(R.drawable.bg_danger_button);
+                    deleteButton.setTextColor(0xFFFFFFFF);
+                    row.addView(applyButton, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+                    LinearLayout.LayoutParams deleteParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    deleteParams.leftMargin = ui.dp(8);
+                    row.addView(deleteButton, deleteParams);
+                    Runnable refreshTextColorPreview = () -> style.updateTextColorPreview(
+                            refs.textColorValue,
+                            ReaderOptionCatalog.READER_TEXT_COLOR_KEYS[refs.textColorSpinner.getSelectedItemPosition()],
+                            ReaderThemePalette.from(selectedReaderTheme[0])
+                    );
+                    Runnable autoApply = buildAutoApply(refs, selectedReaderTheme, refreshTextColorPreview);
+                    applyButton.setOnClickListener(v -> autoApply.run());
+                    deleteButton.setOnClickListener(v -> runtime.executor.execute(() -> {
+                        runtime.databaseHelper.deleteCustomTheme(theme.id);
+                        activity.runOnUiThread(() -> renderThemeRows(container, dialog, refs, selectedReaderTheme));
+                    }));
+                    container.addView(row);
+                }
+            });
+        });
+    }
+
+    private void promptSaveTheme(Runnable onSaved) {
+        EditText input = new EditText(activity);
+        input.setHint("主题名称");
+        new AlertDialog.Builder(activity)
+                .setTitle("保存当前主题")
+                .setView(input)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("保存", (dialog, which) -> {
+                    String name = input.getText().toString().trim();
+                    if (name.isEmpty()) {
+                        ui.showToast("请输入主题名称");
+                        return;
+                    }
+                    runtime.executor.execute(() -> {
+                        runtime.databaseHelper.saveCustomTheme(name, ReaderThemeConfig.export(runtime.settingsStore).toString());
+                        activity.runOnUiThread(onSaved);
+                    });
+                })
+                .show();
+    }
+
+    private void showCustomColorPickerDialog(Runnable onApply) {
+        View contentView = LayoutInflater.from(activity).inflate(R.layout.dialog_color_picker, null, false);
+        SeekBar redSeek = contentView.findViewById(R.id.color_seek_red);
+        SeekBar greenSeek = contentView.findViewById(R.id.color_seek_green);
+        SeekBar blueSeek = contentView.findViewById(R.id.color_seek_blue);
+        TextView redText = contentView.findViewById(R.id.color_text_red);
+        TextView greenText = contentView.findViewById(R.id.color_text_green);
+        TextView blueText = contentView.findViewById(R.id.color_text_blue);
+        View colorPreview = contentView.findViewById(R.id.color_preview);
+        Button applyButton = contentView.findViewById(R.id.color_button_apply);
+
+        String customColor = runtime.settingsStore.getCustomTextColor();
+        int currentColor = 0xFF374151;
+        if (customColor != null && !customColor.isEmpty()) {
+            try {
+                currentColor = android.graphics.Color.parseColor(customColor);
+            } catch (Exception ignore) {
+            }
+        }
+
+        redSeek.setProgress(android.graphics.Color.red(currentColor));
+        greenSeek.setProgress(android.graphics.Color.green(currentColor));
+        blueSeek.setProgress(android.graphics.Color.blue(currentColor));
+
+        Runnable updatePreview = () -> {
+            int r = redSeek.getProgress();
+            int g = greenSeek.getProgress();
+            int b = blueSeek.getProgress();
+            int color = android.graphics.Color.rgb(r, g, b);
+            redText.setText("R: " + r);
+            greenText.setText("G: " + g);
+            blueText.setText("B: " + b);
+            colorPreview.setBackgroundColor(color);
+        };
+        updatePreview.run();
+
+        SeekBar.OnSeekBarChangeListener colorListener = new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                updatePreview.run();
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+            }
+        };
+        redSeek.setOnSeekBarChangeListener(colorListener);
+        greenSeek.setOnSeekBarChangeListener(colorListener);
+        blueSeek.setOnSeekBarChangeListener(colorListener);
+
+        AlertDialog dialog = new AlertDialog.Builder(activity).setView(contentView).create();
+        applyButton.setOnClickListener(v -> {
+            int r = redSeek.getProgress();
+            int g = greenSeek.getProgress();
+            int b = blueSeek.getProgress();
+            String hexColor = String.format("#%02X%02X%02X", r, g, b);
+            runtime.settingsStore.setCustomTextColor(hexColor);
+            runtime.settingsStore.setReaderTextColor("custom");
+            dialog.dismiss();
+            if (onApply != null) {
+                onApply.run();
+            }
+        });
+        dialogSupport.showStyledDialog(dialog);
+    }
+
+    private void updateStyleLabels(StyleDialogViews refs) {
+        refs.fontValue.setText((refs.fontSeek.getProgress() + 12) + " sp");
+        refs.fontWeightValue.setText(
+                ReaderOptionCatalog.readerFontWeightLabelForProgress(refs.fontWeightSeek.getProgress())
+                        + " ("
+                        + ReaderOptionCatalog.fontWeightValueForProgress(refs.fontWeightSeek.getProgress())
+                        + ")"
+        );
+        refs.lineValue.setText(refs.lineSeek.getProgress() + " px");
+        refs.leftValue.setText(refs.leftSeek.getProgress() + " dp");
+        refs.rightValue.setText(refs.rightSeek.getProgress() + " dp");
+        refs.topValue.setText(refs.topSeek.getProgress() + " dp");
+        refs.bottomValue.setText(refs.bottomSeek.getProgress() + " dp");
+    }
+
+    private static final class StyleDialogViews {
+        final Spinner fontFamilySpinner;
+        final Spinner textColorSpinner;
+        final SeekBar fontSeek;
+        final SeekBar fontWeightSeek;
+        final SeekBar lineSeek;
+        final SeekBar leftSeek;
+        final SeekBar rightSeek;
+        final SeekBar topSeek;
+        final SeekBar bottomSeek;
+        final SeekBar letterSpacingSeek;
+        final SeekBar firstLineIndentSeek;
+        final SeekBar backgroundBlurSeek;
+        final TextView textColorValue;
+        final TextView fontValue;
+        final TextView fontWeightValue;
+        final TextView lineValue;
+        final TextView leftValue;
+        final TextView rightValue;
+        final TextView topValue;
+        final TextView bottomValue;
+        final TextView letterSpacingValue;
+        final TextView firstLineIndentValue;
+        final TextView backgroundBlurValue;
+        final Spinner uiThemeSpinner;
+        final CheckBox keepScreenOn;
+        final CheckBox showTitleCheck;
+        final TextView backgroundText;
+        final LinearLayout customThemeList;
+        final Button paperThemeButton;
+        final Button forestThemeButton;
+        final Button nightThemeButton;
+        final Button titleLeftButton;
+        final Button titleCenterButton;
+        final Button bodyJustifyButton;
+        final Button bodyLeftButton;
+        final Button customColorButton;
+
+        private StyleDialogViews(View root) {
+            fontFamilySpinner = root.findViewById(R.id.style_spinner_font_family);
+            textColorSpinner = root.findViewById(R.id.style_spinner_text_color);
+            fontSeek = root.findViewById(R.id.style_seek_font);
+            fontWeightSeek = root.findViewById(R.id.style_seek_font_weight);
+            lineSeek = root.findViewById(R.id.style_seek_line_spacing);
+            leftSeek = root.findViewById(R.id.style_seek_left_padding);
+            rightSeek = root.findViewById(R.id.style_seek_right_padding);
+            topSeek = root.findViewById(R.id.style_seek_top_padding);
+            bottomSeek = root.findViewById(R.id.style_seek_bottom_padding);
+            letterSpacingSeek = root.findViewById(R.id.style_seek_letter_spacing);
+            firstLineIndentSeek = root.findViewById(R.id.style_seek_first_line_indent);
+            backgroundBlurSeek = root.findViewById(R.id.style_seek_background_blur);
+            textColorValue = root.findViewById(R.id.style_text_text_color);
+            fontValue = root.findViewById(R.id.style_text_font);
+            fontWeightValue = root.findViewById(R.id.style_text_font_weight);
+            lineValue = root.findViewById(R.id.style_text_line_spacing);
+            leftValue = root.findViewById(R.id.style_text_left_padding);
+            rightValue = root.findViewById(R.id.style_text_right_padding);
+            topValue = root.findViewById(R.id.style_text_top_padding);
+            bottomValue = root.findViewById(R.id.style_text_bottom_padding);
+            letterSpacingValue = root.findViewById(R.id.style_text_letter_spacing);
+            firstLineIndentValue = root.findViewById(R.id.style_text_first_line_indent);
+            backgroundBlurValue = root.findViewById(R.id.style_text_background_blur);
+            uiThemeSpinner = root.findViewById(R.id.style_spinner_ui_theme_mode);
+            keepScreenOn = root.findViewById(R.id.style_check_keep_screen_on);
+            showTitleCheck = root.findViewById(R.id.style_check_show_title);
+            backgroundText = root.findViewById(R.id.style_text_background);
+            customThemeList = root.findViewById(R.id.style_custom_theme_list);
+            paperThemeButton = root.findViewById(R.id.style_button_theme_paper);
+            forestThemeButton = root.findViewById(R.id.style_button_theme_forest);
+            nightThemeButton = root.findViewById(R.id.style_button_theme_night);
+            titleLeftButton = root.findViewById(R.id.style_button_title_left);
+            titleCenterButton = root.findViewById(R.id.style_button_title_center);
+            bodyJustifyButton = root.findViewById(R.id.style_button_body_justify);
+            bodyLeftButton = root.findViewById(R.id.style_button_body_left);
+            customColorButton = root.findViewById(R.id.style_button_custom_color);
+        }
+
+        static StyleDialogViews bind(View root) {
+            return new StyleDialogViews(root);
+        }
+    }
+}
