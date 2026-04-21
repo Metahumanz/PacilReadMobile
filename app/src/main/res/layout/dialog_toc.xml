@@ -1,36 +1,105 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/toc_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_dialog"
-    android:orientation="vertical"
-    android:padding="18dp">
+    android:background="@drawable/bg_toc_fullscreen">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="目录"
-        android:textColor="@color/on_surface"
-        android:textSize="20sp"
-        android:textStyle="bold" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="拖动右侧滚动条可以快速定位章节。"
-        android:textColor="@color/on_surface_muted"
-        android:textSize="12sp" />
-
-    <ListView
-        android:id="@+id/toc_list"
+    <LinearLayout
+        android:id="@+id/toc_content"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_marginTop="14dp"
-        android:layout_weight="1"
-        android:divider="@color/divider"
-        android:dividerHeight="1dp"
-        android:fastScrollEnabled="true"
-        android:scrollbarStyle="insideInset"
-        android:scrollbars="vertical" />
-</LinearLayout>
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingLeft="20dp"
+        android:paddingTop="18dp"
+        android:paddingRight="16dp"
+        android:paddingBottom="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="目录"
+            android:textColor="@color/on_surface"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="拖动右侧定位条可快速跳到章节，点击条目进入阅读。"
+            android:textColor="@color/on_surface_muted"
+            android:textSize="12sp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="16dp"
+            android:background="@color/divider" />
+
+        <FrameLayout
+            android:id="@+id/toc_body"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="14dp"
+            android:layout_weight="1">
+
+            <ListView
+                android:id="@+id/toc_list"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="80dp"
+                android:clipToPadding="false"
+                android:divider="@android:color/transparent"
+                android:dividerHeight="6dp"
+                android:fastScrollEnabled="false"
+                android:overScrollMode="never"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:scrollbars="none" />
+
+            <TextView
+                android:id="@+id/toc_scrubber_preview"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end|top"
+                android:layout_marginEnd="74dp"
+                android:background="@drawable/bg_toc_scrubber_preview"
+                android:elevation="8dp"
+                android:maxWidth="220dp"
+                android:maxLines="2"
+                android:paddingLeft="14dp"
+                android:paddingTop="10dp"
+                android:paddingRight="14dp"
+                android:paddingBottom="10dp"
+                android:textColor="@color/on_surface"
+                android:textSize="13sp"
+                android:visibility="invisible" />
+
+            <FrameLayout
+                android:id="@+id/toc_scrubber_host"
+                android:layout_width="72dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="end">
+
+                <View
+                    android:id="@+id/toc_scrubber_track"
+                    android:layout_width="10dp"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="20dp"
+                    android:layout_marginBottom="20dp"
+                    android:background="@drawable/bg_toc_scrubber_track" />
+
+                <View
+                    android:id="@+id/toc_scrubber_thumb"
+                    android:layout_width="28dp"
+                    android:layout_height="56dp"
+                    android:layout_gravity="center_horizontal|top"
+                    android:layout_marginTop="20dp"
+                    android:background="@drawable/bg_toc_scrubber_thumb"
+                    android:elevation="6dp" />
+            </FrameLayout>
+        </FrameLayout>
+    </LinearLayout>
+</FrameLayout>

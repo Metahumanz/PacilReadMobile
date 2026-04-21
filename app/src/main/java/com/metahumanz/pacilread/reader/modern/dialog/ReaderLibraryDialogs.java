@@ -1,12 +1,21 @@
 package com.metahumanz.pacilread.reader.modern.dialog;
 
 import android.app.AlertDialog;
+import android.graphics.Insets;
+import android.graphics.Typeface;
+import android.os.Build;
+import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowInsets;
+import android.widget.AbsListView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ListView;
 import android.widget.TextView;
 
@@ -55,20 +64,97 @@ public final class ReaderLibraryDialogs {
             return;
         }
         View contentView = LayoutInflater.from(activity).inflate(R.layout.dialog_toc, null, false);
+        View contentContainer = contentView.findViewById(R.id.toc_content);
+        FrameLayout tocBody = contentView.findViewById(R.id.toc_body);
         ListView listView = contentView.findViewById(R.id.toc_list);
+        View scrubberHost = contentView.findViewById(R.id.toc_scrubber_host);
+        View scrubberTrack = contentView.findViewById(R.id.toc_scrubber_track);
+        View scrubberThumb = contentView.findViewById(R.id.toc_scrubber_thumb);
+        TextView scrubberPreview = contentView.findViewById(R.id.toc_scrubber_preview);
         List<String> items = new ArrayList<>();
         for (int i = 0; i < state.chapters.size(); i++) {
             items.add(String.format(Locale.SIMPLIFIED_CHINESE, "%03d  %s", i + 1, state.chapters.get(i).title));
         }
-        ArrayAdapter<String> adapter = dialogSupport.buildDialogListAdapter(items);
+        ArrayAdapter<String> adapter = new TocListAdapter(items, state.currentChapterIndex);
         listView.setAdapter(adapter);
-        listView.setSelection(state.currentChapterIndex);
+        final boolean[] scrubberDragging = new boolean[]{false};
+        final int[] lastDraggedIndex = new int[]{-1};
         AlertDialog dialog = new AlertDialog.Builder(activity).setView(contentView).create();
+        contentView.setOnApplyWindowInsetsListener((view, windowInsets) -> {
+            int leftInset;
+            int topInset;
+            int rightInset;
+            int bottomInset;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Insets insets = windowInsets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                leftInset = insets.left;
+                topInset = insets.top;
+                rightInset = insets.right;
+                bottomInset = insets.bottom;
+            } else {
+                leftInset = windowInsets.getSystemWindowInsetLeft();
+                topInset = windowInsets.getSystemWindowInsetTop();
+                rightInset = windowInsets.getSystemWindowInsetRight();
+                bottomInset = windowInsets.getSystemWindowInsetBottom();
+            }
+            contentContainer.setPadding(
+                    ui.dp(20) + leftInset,
+                    ui.dp(18) + topInset,
+                    ui.dp(16) + rightInset,
+                    ui.dp(16) + bottomInset
+            );
+            return windowInsets;
+        });
         listView.setOnItemClickListener((parent, view, position, id) -> {
             dialog.dismiss();
             navigation.openChapter(position, 0, true, position >= state.currentChapterIndex ? 1 : -1);
         });
-        dialogSupport.showFullscreenDialog(dialog);
+        listView.setOnScrollListener(new AbsListView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(AbsListView view, int scrollState) {
+            }
+
+            @Override
+            public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {
+                if (scrubberDragging[0]) {
+                    return;
+                }
+                float fraction = firstVisibleFraction(listView, items.size());
+                positionScrubberThumb(scrubberTrack, scrubberThumb, fraction);
+            }
+        });
+        scrubberHost.setOnTouchListener((view, event) -> {
+            if (event.getActionMasked() == MotionEvent.ACTION_CANCEL || event.getActionMasked() == MotionEvent.ACTION_UP) {
+                scrubberDragging[0] = false;
+                lastDraggedIndex[0] = -1;
+                scrubberPreview.setVisibility(View.INVISIBLE);
+                view.getParent().requestDisallowInterceptTouchEvent(false);
+                view.post(() -> positionScrubberThumb(scrubberTrack, scrubberThumb, firstVisibleFraction(listView, items.size())));
+                return true;
+            }
+            if (event.getActionMasked() != MotionEvent.ACTION_DOWN && event.getActionMasked() != MotionEvent.ACTION_MOVE) {
+                return false;
+            }
+            scrubberDragging[0] = true;
+            view.getParent().requestDisallowInterceptTouchEvent(true);
+            float fraction = touchFractionForScrubber(event, scrubberTrack);
+            int index = fractionToChapterIndex(fraction, items.size());
+            positionScrubberThumb(scrubberTrack, scrubberThumb, fraction);
+            if (index != lastDraggedIndex[0]) {
+                lastDraggedIndex[0] = index;
+                listView.setSelectionFromTop(index, 0);
+            }
+            scrubberPreview.setText(items.get(index));
+            scrubberPreview.setVisibility(View.VISIBLE);
+            positionScrubberPreview(scrubberPreview, tocBody, scrubberTrack, fraction);
+            return true;
+        });
+        dialogSupport.showImmersiveFullscreenDialog(dialog, state.controlsVisible);
+        contentView.requestApplyInsets();
+        listView.post(() -> {
+            listView.setSelectionFromTop(state.currentChapterIndex, 0);
+            positionScrubberThumb(scrubberTrack, scrubberThumb, fractionForIndex(state.currentChapterIndex, items.size()));
+        });
     }
 
     public void showSearchDialog() {
@@ -217,6 +303,64 @@ public final class ReaderLibraryDialogs {
         }
     }
 
+    private void positionScrubberPreview(TextView preview, View body, View scrubberTrack, float fraction) {
+        if (body.getHeight() <= 0) {
+            return;
+        }
+        int widthSpec = View.MeasureSpec.makeMeasureSpec(body.getWidth(), View.MeasureSpec.AT_MOST);
+        int heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+        preview.measure(widthSpec, heightSpec);
+        float anchorY = scrubberTrack.getY() + (clampFraction(fraction) * Math.max(scrubberTrack.getHeight(), 1));
+        float targetY = anchorY - (preview.getMeasuredHeight() / 2f);
+        float maxY = Math.max(body.getHeight() - preview.getMeasuredHeight(), 0);
+        preview.setY(Math.max(0f, Math.min(targetY, maxY)));
+    }
+
+    private void positionScrubberThumb(View scrubberTrack, View scrubberThumb, float fraction) {
+        scrubberTrack.post(() -> {
+            float clampedFraction = clampFraction(fraction);
+            float trackTop = scrubberTrack.getY();
+            float travel = Math.max(scrubberTrack.getHeight() - scrubberThumb.getHeight(), 0);
+            scrubberThumb.setY(trackTop + (travel * clampedFraction));
+        });
+    }
+
+    private float touchFractionForScrubber(MotionEvent event, View scrubberTrack) {
+        float trackTop = scrubberTrack.getY();
+        float trackHeight = Math.max(scrubberTrack.getHeight(), 1);
+        return clampFraction((event.getY() - trackTop) / trackHeight);
+    }
+
+    private float firstVisibleFraction(ListView listView, int itemCount) {
+        if (itemCount <= 1) {
+            return 0f;
+        }
+        View firstChild = listView.getChildAt(0);
+        float firstRowOffset = 0f;
+        if (firstChild != null && firstChild.getHeight() > 0) {
+            firstRowOffset = -firstChild.getTop() / (float) firstChild.getHeight();
+        }
+        return clampFraction((listView.getFirstVisiblePosition() + firstRowOffset) / (itemCount - 1f));
+    }
+
+    private float fractionForIndex(int index, int itemCount) {
+        if (itemCount <= 1) {
+            return 0f;
+        }
+        return clampFraction(index / (float) (itemCount - 1));
+    }
+
+    private int fractionToChapterIndex(float fraction, int itemCount) {
+        if (itemCount <= 1) {
+            return 0;
+        }
+        return ui.clamp(Math.round(clampFraction(fraction) * (itemCount - 1)), 0, itemCount - 1);
+    }
+
+    private float clampFraction(float fraction) {
+        return Math.max(0f, Math.min(1f, fraction));
+    }
+
     private static final class SearchResult {
         final int chapterIndex;
         final String chapterTitle;
@@ -228,6 +372,34 @@ public final class ReaderLibraryDialogs {
             this.chapterTitle = chapterTitle;
             this.snippet = snippet;
             this.charOffset = charOffset;
+        }
+    }
+
+    private final class TocListAdapter extends ArrayAdapter<String> {
+        private final int currentChapterIndex;
+
+        private TocListAdapter(List<String> items, int currentChapterIndex) {
+            super(activity, R.layout.item_toc_list_row, R.id.toc_row_text, items);
+            this.currentChapterIndex = currentChapterIndex;
+        }
+
+        @Override
+        public View getView(int position, View convertView, ViewGroup parent) {
+            View view = convertView;
+            if (view == null) {
+                view = LayoutInflater.from(getContext()).inflate(R.layout.item_toc_list_row, parent, false);
+            }
+            View rowContent = view.findViewById(R.id.toc_row_content);
+            View indicator = view.findViewById(R.id.toc_row_indicator);
+            TextView textView = view.findViewById(R.id.toc_row_text);
+            textView.setText(getItem(position));
+            boolean isCurrent = position == currentChapterIndex;
+            rowContent.setBackgroundResource(isCurrent ? R.drawable.bg_toc_row_current : 0);
+            indicator.setVisibility(isCurrent ? View.VISIBLE : View.INVISIBLE);
+            textView.setTextColor(ui.themeColor(isCurrent ? R.color.primary : R.color.on_surface));
+            textView.setTypeface(Typeface.DEFAULT, isCurrent ? Typeface.BOLD : Typeface.NORMAL);
+            textView.setGravity(Gravity.CENTER_VERTICAL);
+            return view;
         }
     }
 }
