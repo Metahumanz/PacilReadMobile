@@ -1647,8 +1647,8 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         updateTtsHighlight();
         int leftPadding = dp(settingsStore.getLeftPaddingDp());
         int rightPadding = dp(settingsStore.getRightPaddingDp());
-        int topPadding = dp(settingsStore.getTopPaddingDp() + 32) + systemInsetTop;
-        int bottomPadding = dp(settingsStore.getBottomPaddingDp() + 32) + systemInsetBottom;
+        int topPadding = dp(settingsStore.getTopPaddingDp() + 24) + systemInsetTop;
+        int bottomPadding = dp(settingsStore.getBottomPaddingDp() + 24) + systemInsetBottom;
         ((ViewGroup) pageCurrent).setPadding(leftPadding, topPadding, rightPadding, bottomPadding);
         ((ViewGroup) pageIncoming).setPadding(leftPadding, topPadding, rightPadding, bottomPadding);
         if (settingsStore.isKeepScreenOn()) {
@@ -3456,18 +3456,16 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private void initializeSimulationAutoStart(int direction, float width, float height) {
         // Start closer to the actual edge for a smoother "sweep" effect
         float startX = direction > 0 ? width - 5f : 5f;
+        
         float startY;
         
         float tapY = lastTapY >= 0 ? lastTapY : height / 2f;
         
         if (tapY < height / 3f) {
-            // Top zone: Start from top corner
             startY = 5f;
         } else if (tapY > height * 2f / 3f) {
-            // Bottom zone: Start from bottom corner
             startY = height - 5f;
         } else {
-            // Middle zone: Start from horizontal center
             startY = height / 2f;
         }
         
@@ -3504,13 +3502,12 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private float resolveSimulationTargetTouchY(int direction) {
         float height = Math.max(pageStage == null ? 0f : pageStage.getHeight(), dp(320));
         
-        // Push Y further out to maintain the diagonal pull vector
         if (interactiveStartY < height / 3f) {
             return height * 1.5f;
         } else if (interactiveStartY > height * 2f / 3f) {
             return -height * 0.5f;
         } else {
-            return height / 2f + (direction > 0 ? 10f : -10f);
+            return interactiveStartY; // perfectly horizontal
         }
     }
 

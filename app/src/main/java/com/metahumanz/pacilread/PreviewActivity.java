@@ -317,8 +317,8 @@ public class PreviewActivity extends ThemedActivity {
         previewReaderScrim.setBackgroundColor(palette.overlayColor);
         int leftPadding = dp(settingsStore.getLeftPaddingDp());
         int rightPadding = dp(settingsStore.getRightPaddingDp());
-        int topPadding = dp(settingsStore.getTopPaddingDp() + 32);
-        int bottomPadding = dp(settingsStore.getBottomPaddingDp() + 32);
+        int topPadding = dp(settingsStore.getTopPaddingDp() + 24);
+        int bottomPadding = dp(settingsStore.getBottomPaddingDp() + 24);
         previewReaderPage.setPadding(leftPadding, topPadding, rightPadding, bottomPadding);
         LinearLayout.LayoutParams bodyParams = (LinearLayout.LayoutParams) previewReaderBody.getLayoutParams();
         bodyParams.topMargin = settingsStore.isChapterTitleVisible() ? dp(14) : 0;

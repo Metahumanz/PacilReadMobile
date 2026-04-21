@@ -186,10 +186,8 @@ public class SimulationPageTurnView extends View {
         float adjustedTouchY = touchY;
         float height = getHeight();
         if (startY > height / 3f && startY < height * 2f / 3f) {
-            adjustedTouchY = height;
-        }
-        if (startY > height / 3f && startY < height / 2f && direction > 0) {
-            adjustedTouchY = MIN_TOUCH;
+            // Force horizontal turn in the middle zone by aligning touchY with the active corner
+            adjustedTouchY = startY <= height / 2f ? MIN_TOUCH : height;
         }
         this.touchX = ensureTouch(touchX);
         this.touchY = ensureTouch(adjustedTouchY);
