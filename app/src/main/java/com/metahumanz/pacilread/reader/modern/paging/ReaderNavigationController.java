@@ -166,7 +166,7 @@ public final class ReaderNavigationController {
         ChapterRecord chapter = state.chapters.get(chapterIndex);
         List<PageSlice> pages = content.getPagesForChapter(chapterIndex);
         PageSlice slice = pages.get(ui.clamp(pageIndex, 0, pages.size() - 1));
-        boolean showTitle = runtime.settingsStore.isChapterTitleVisible() && pageIndex == 0;
+        boolean showTitle = content.shouldShowChapterTitle(chapterIndex, pageIndex);
         titleView.setVisibility(showTitle ? View.VISIBLE : View.GONE);
         titleView.setText(chapter.title);
         paging.updateBodyTopMargin(bodyView, showTitle ? content.getChapterTitleBodyMarginPx() : 0);

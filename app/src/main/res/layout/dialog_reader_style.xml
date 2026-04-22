@@ -309,7 +309,7 @@
             android:id="@+id/style_seek_letter_spacing"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:max="100" />
+            android:max="20" />
 
         <TextView
             android:id="@+id/style_text_letter_spacing"

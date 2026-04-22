@@ -172,11 +172,13 @@ public final class ReaderContentController {
         }
         int offset = currentCharOffset();
         ChapterRecord chapter = state.chapters.get(state.currentChapterIndex);
+        int chapterOrderIndex = chapter.orderIndex;
+        long persistedAt = System.currentTimeMillis();
+        state.book.progressIndex = chapterOrderIndex;
+        state.book.progressOffset = offset;
+        state.book.lastReadAt = persistedAt;
         runtime.executor.execute(() -> {
-            runtime.databaseHelper.updateProgress(state.book.id, chapter.orderIndex, offset);
-            state.book.progressIndex = chapter.orderIndex;
-            state.book.progressOffset = offset;
-            state.book.lastReadAt = System.currentTimeMillis();
+            runtime.databaseHelper.updateProgress(state.book.id, chapterOrderIndex, offset);
             if (runtime.settingsStore.isWebDavEnabled()) {
                 try {
                     runtime.webDavClient.ensureProgressDirectory();
@@ -227,6 +229,8 @@ public final class ReaderContentController {
                         state.chapters.get(remoteIndex).orderIndex,
                         payload.chapterPosition
                 );
+                state.book.progressIndex = state.chapters.get(remoteIndex).orderIndex;
+                state.book.progressOffset = Math.max(payload.chapterPosition, 0);
                 state.book.lastReadAt = payload.chapterTime;
                 activity.runOnUiThread(() -> scheduleReflowAfterLayout(remoteIndex, payload.chapterPosition));
             } catch (Exception error) {
@@ -250,8 +254,9 @@ public final class ReaderContentController {
             fallback.add(new PageSlice(0, text.length(), text));
             return fallback;
         }
-        int firstPageHeight = runtime.settingsStore.isChapterTitleVisible()
-                ? Math.max(1, regularPageHeight - measureChapterTitleOccupiedHeight(state.chapters.get(chapterIndex).title, pageWidth))
+        ChapterRecord chapter = state.chapters.get(chapterIndex);
+        int firstPageHeight = shouldShowChapterTitle(chapterIndex, 0)
+                ? Math.max(1, regularPageHeight - measureChapterTitleOccupiedHeight(chapter.title, pageWidth))
                 : regularPageHeight;
         TextPaint paint = new TextPaint(views.pageBodyCurrent.getPaint());
         List<PageSlice> pages = ReaderPaginator.paginate(
@@ -316,6 +321,16 @@ public final class ReaderContentController {
             return ui.dp(16);
         }
         return Math.max(ui.dp(16), Math.round(views.pageTitleCurrent.getTextSize() * 1.5f));
+    }
+
+    public boolean shouldShowChapterTitle(int chapterIndex, int pageIndex) {
+        if (!runtime.settingsStore.isChapterTitleVisible() || pageIndex != 0) {
+            return false;
+        }
+        if (chapterIndex < 0 || chapterIndex >= state.chapters.size()) {
+            return false;
+        }
+        return hasDisplayableChapterTitle(state.chapters.get(chapterIndex));
     }
 
     public String getProcessedChapterText(int chapterIndex) {
@@ -485,6 +500,12 @@ public final class ReaderContentController {
             emWidth = views.pageBodyCurrent.getTextSize();
         }
         return Math.round(emWidth * indentChars);
+    }
+
+    private boolean hasDisplayableChapterTitle(ChapterRecord chapter) {
+        return chapter != null
+                && chapter.title != null
+                && !chapter.title.trim().isEmpty();
     }
 
     private boolean hasVisibleParagraphText(String text, int start, int end) {

@@ -524,11 +524,11 @@ public class SettingsStore {
     }
 
     public float getLetterSpacing() {
-        return preferences.getFloat(KEY_LETTER_SPACING, 0f);
+        return normalizeLetterSpacing(preferences.getFloat(KEY_LETTER_SPACING, 0f));
     }
 
     public void setLetterSpacing(float value) {
-        preferences.edit().putFloat(KEY_LETTER_SPACING, clamp(value, 0f, 10f)).apply();
+        preferences.edit().putFloat(KEY_LETTER_SPACING, normalizeLetterSpacing(value)).apply();
     }
 
     public int getFirstLineIndentDp() {
@@ -703,6 +703,11 @@ public class SettingsStore {
             return "scroll";
         }
         return "slide";
+    }
+
+    private static float normalizeLetterSpacing(float value) {
+        float clamped = clamp(value, 0f, 1f);
+        return Math.round(clamped * 20f) / 20f;
     }
 
     private static String normalizeVolumeKeyAction(String value, String fallback) {

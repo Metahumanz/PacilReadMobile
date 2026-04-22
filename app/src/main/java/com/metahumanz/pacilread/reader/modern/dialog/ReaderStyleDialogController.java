@@ -33,6 +33,8 @@ import com.metahumanz.pacilread.util.FileAssetHelper;
 import java.util.List;
 
 public final class ReaderStyleDialogController {
+    private static final float LETTER_SPACING_STEP = 0.05f;
+
     private final ModernReaderActivity activity;
     private final ReaderRuntime runtime;
     private final ReaderSessionState state;
@@ -89,7 +91,7 @@ public final class ReaderStyleDialogController {
         refs.rightSeek.setProgress(runtime.settingsStore.getRightPaddingDp());
         refs.topSeek.setProgress(runtime.settingsStore.getTopPaddingDp());
         refs.bottomSeek.setProgress(runtime.settingsStore.getBottomPaddingDp());
-        refs.letterSpacingSeek.setProgress(Math.round(runtime.settingsStore.getLetterSpacing() * 10f));
+        refs.letterSpacingSeek.setProgress(Math.round(runtime.settingsStore.getLetterSpacing() / LETTER_SPACING_STEP));
         refs.firstLineIndentSeek.setProgress(runtime.settingsStore.getFirstLineIndentDp());
         refs.backgroundBlurSeek.setProgress(runtime.settingsStore.getBackgroundBlurPercent());
         refs.keepScreenOn.setChecked(runtime.settingsStore.isKeepScreenOn());
@@ -282,7 +284,7 @@ public final class ReaderStyleDialogController {
             runtime.settingsStore.setRightPaddingDp(refs.rightSeek.getProgress());
             runtime.settingsStore.setTopPaddingDp(refs.topSeek.getProgress());
             runtime.settingsStore.setBottomPaddingDp(refs.bottomSeek.getProgress());
-            runtime.settingsStore.setLetterSpacing(refs.letterSpacingSeek.getProgress() / 10f);
+            runtime.settingsStore.setLetterSpacing(refs.letterSpacingSeek.getProgress() * LETTER_SPACING_STEP);
             runtime.settingsStore.setFirstLineIndentDp(refs.firstLineIndentSeek.getProgress());
             runtime.settingsStore.setBackgroundBlurPercent(refs.backgroundBlurSeek.getProgress());
             runtime.settingsStore.setKeepScreenOn(refs.keepScreenOn.isChecked());

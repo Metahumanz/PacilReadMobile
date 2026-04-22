@@ -349,8 +349,8 @@ public final class ReaderStyleController {
     }
 
     public void updateLetterSpacingLabel(TextView label, android.widget.SeekBar seekBar) {
-        float spacing = seekBar.getProgress() / 10f;
-        label.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%.1f", spacing));
+        float spacing = seekBar.getProgress() / 20f;
+        label.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%.2f", spacing));
     }
 
     public void updateFirstLineIndentLabel(TextView label, android.widget.SeekBar seekBar) {
