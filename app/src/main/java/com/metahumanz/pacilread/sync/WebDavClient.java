@@ -56,6 +56,7 @@ public class WebDavClient {
         requireSuccessfulResponse(request(base + "books/", "MKCOL", null, null), "初始化书籍备份目录", true);
         requireSuccessfulResponse(request(base + "covers/", "MKCOL", null, null), "初始化封面备份目录", true);
         requireSuccessfulResponse(request(base + "backgrounds/", "MKCOL", null, null), "初始化背景备份目录", true);
+        ensureSettingsSnapshotDirectory();
     }
 
     public void ensureReadingStatsDirectory() throws Exception {
@@ -74,6 +75,14 @@ public class WebDavClient {
 
     public String readingStatsBaseUrl() {
         return backupBaseUrl() + "readingStats/";
+    }
+
+    public String settingsSnapshotUrl() {
+        String subdir = settingsStore.getWebDavSettingsSubdir();
+        if (subdir.isBlank()) {
+            return backupBaseUrl() + "settings.json";
+        }
+        return backupBaseUrl() + "settings/" + subdir + "settings.json";
     }
 
     public ProgressPayload downloadProgress(BookRecord book) throws Exception {
@@ -272,6 +281,22 @@ public class WebDavClient {
     private String authorizationHeader() {
         String raw = settingsStore.getWebDavUser() + ":" + settingsStore.getWebDavPassword();
         return "Basic " + Base64.encodeToString(raw.getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP);
+    }
+
+    private void ensureSettingsSnapshotDirectory() throws Exception {
+        String subdir = settingsStore.getWebDavSettingsSubdir();
+        if (subdir.isBlank()) {
+            return;
+        }
+        String currentUrl = backupBaseUrl() + "settings/";
+        requireSuccessfulResponse(request(currentUrl, "MKCOL", null, null), "初始化设置目录", true);
+        for (String segment : subdir.split("/")) {
+            if (segment == null || segment.isBlank()) {
+                continue;
+            }
+            currentUrl += segment + "/";
+            requireSuccessfulResponse(request(currentUrl, "MKCOL", null, null), "初始化设置子目录", true);
+        }
     }
 
     private boolean sameDirectory(String directoryUrl, String absoluteUrl) {

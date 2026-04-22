@@ -336,6 +336,25 @@
                             android:minHeight="48dp"
                             android:padding="12dp" />
 
+                        <EditText
+                            android:id="@+id/input_webdav_settings_subdir"
+                            style="@style/AppChromeInputText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:background="@drawable/bg_app_input"
+                            android:hint="设置子目录（可选，例如 mobile）"
+                            android:minHeight="48dp"
+                            android:padding="12dp" />
+
+                        <TextView
+                            style="@style/AppChromeCaption"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="仅隔离 settings.json。留空时会与电脑共享设置，填写 mobile / android 等可分开同步手机设置。"
+                            android:textColor="@color/app_text_secondary" />
+
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"

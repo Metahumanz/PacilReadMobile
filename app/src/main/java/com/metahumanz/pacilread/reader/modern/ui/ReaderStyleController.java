@@ -3,6 +3,7 @@ package com.metahumanz.pacilread.reader.modern.ui;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
@@ -28,6 +29,11 @@ import java.io.File;
 import java.util.Locale;
 
 public final class ReaderStyleController {
+    private static final float CHAPTER_TITLE_SCALE = 1.4f;
+    private static final int HUD_BAR_HEIGHT_DP = 22;
+    private static final float HUD_TEXT_SIZE_SP = 12f;
+    private static final float HUD_TEXT_ALPHA = 0.78f;
+
     private final ModernReaderActivity activity;
     private final ReaderRuntime runtime;
     private final ReaderViewRefs views;
@@ -81,6 +87,18 @@ public final class ReaderStyleController {
         views.readerRoot.setBackgroundColor(palette.backgroundColor);
         views.pageCurrent.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         views.pageIncoming.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+
+        int leftPadding = ui.dp(runtime.settingsStore.getLeftPaddingDp());
+        int rightPadding = ui.dp(runtime.settingsStore.getRightPaddingDp());
+        int topPadding = ui.dp(runtime.settingsStore.getTopPaddingDp())
+                + state.systemInsetTop
+                + computeHudReservedTopPx();
+        int bottomPadding = ui.dp(runtime.settingsStore.getBottomPaddingDp())
+                + state.systemInsetBottom
+                + computeHudReservedBottomPx();
+        ((ViewGroup) views.pageCurrent).setPadding(leftPadding, topPadding, rightPadding, bottomPadding);
+        ((ViewGroup) views.pageIncoming).setPadding(leftPadding, topPadding, rightPadding, bottomPadding);
+
         views.pageTitleCurrent.setTextColor(resolvedTextColor);
         views.pageTitleIncoming.setTextColor(resolvedTextColor);
         views.pageBodyCurrent.setTextColor(resolvedTextColor);
@@ -91,8 +109,8 @@ public final class ReaderStyleController {
         views.pageBodyIncoming.setTypeface(bodyTypeface);
         views.pageTitleCurrent.setIncludeFontPadding(false);
         views.pageTitleIncoming.setIncludeFontPadding(false);
-        views.pageTitleCurrent.setTextSize(runtime.settingsStore.getFontSizeSp() + 2f);
-        views.pageTitleIncoming.setTextSize(runtime.settingsStore.getFontSizeSp() + 2f);
+        views.pageTitleCurrent.setTextSize(runtime.settingsStore.getFontSizeSp() * CHAPTER_TITLE_SCALE);
+        views.pageTitleIncoming.setTextSize(runtime.settingsStore.getFontSizeSp() * CHAPTER_TITLE_SCALE);
         views.pageBodyCurrent.setTextSize(runtime.settingsStore.getFontSizeSp());
         views.pageBodyIncoming.setTextSize(runtime.settingsStore.getFontSizeSp());
         views.pageBodyCurrent.setLineSpacing(runtime.settingsStore.getLineSpacingExtraSp(), 1f);
@@ -101,19 +119,24 @@ public final class ReaderStyleController {
         views.pageBodyIncoming.setLetterSpacing(runtime.settingsStore.getLetterSpacing());
         views.pageBodyCurrent.setFullJustifyEnabled(runtime.settingsStore.isBodyTextJustified());
         views.pageBodyIncoming.setFullJustifyEnabled(runtime.settingsStore.isBodyTextJustified());
+        styleHudTextView(views.hudTopLeft, bodyTypeface, resolvedTextColor);
+        styleHudTextView(views.hudTopCenter, bodyTypeface, resolvedTextColor);
+        styleHudTextView(views.hudTopRight, bodyTypeface, resolvedTextColor);
+        styleHudTextView(views.hudBottomLeft, bodyTypeface, resolvedTextColor);
+        styleHudTextView(views.hudBottomCenter, bodyTypeface, resolvedTextColor);
+        styleHudTextView(views.hudBottomRight, bodyTypeface, resolvedTextColor);
 
-        int indentPx = ui.dp(runtime.settingsStore.getFirstLineIndentDp());
         views.pageBodyCurrent.setPadding(
-                ((ViewGroup) views.pageCurrent).getPaddingLeft() + indentPx,
-                ((ViewGroup) views.pageCurrent).getPaddingTop(),
-                ((ViewGroup) views.pageCurrent).getPaddingRight(),
-                ((ViewGroup) views.pageCurrent).getPaddingBottom()
+                0,
+                0,
+                0,
+                0
         );
         views.pageBodyIncoming.setPadding(
-                ((ViewGroup) views.pageIncoming).getPaddingLeft() + indentPx,
-                ((ViewGroup) views.pageIncoming).getPaddingTop(),
-                ((ViewGroup) views.pageIncoming).getPaddingRight(),
-                ((ViewGroup) views.pageIncoming).getPaddingBottom()
+                0,
+                0,
+                0,
+                0
         );
 
         String alignment = runtime.settingsStore.getChapterTitleAlignment();
@@ -124,18 +147,17 @@ public final class ReaderStyleController {
         if (tts != null) {
             tts.updateTtsHighlight();
         }
-        int leftPadding = ui.dp(runtime.settingsStore.getLeftPaddingDp());
-        int rightPadding = ui.dp(runtime.settingsStore.getRightPaddingDp());
-        int topPadding = ui.dp(runtime.settingsStore.getTopPaddingDp() + 24) + state.systemInsetTop;
-        int bottomPadding = ui.dp(runtime.settingsStore.getBottomPaddingDp() + 24) + state.systemInsetBottom;
-        ((ViewGroup) views.pageCurrent).setPadding(leftPadding, topPadding, rightPadding, bottomPadding);
-        ((ViewGroup) views.pageIncoming).setPadding(leftPadding, topPadding, rightPadding, bottomPadding);
         if (runtime.settingsStore.isKeepScreenOn()) {
             activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         } else {
             activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         }
         applyBackgroundImage();
+        chrome.updateReaderLayoutInsets();
+        views.pageCurrent.requestLayout();
+        views.pageIncoming.requestLayout();
+        views.pageBodyCurrent.requestLayout();
+        views.pageBodyIncoming.requestLayout();
         chrome.updateSystemBarsVisibility(state.controlsVisible);
         chrome.applyGlassOpacity();
         chrome.updateReaderHud();
@@ -271,6 +293,59 @@ public final class ReaderStyleController {
         preview.setText("字色预览：" + ReaderOptionCatalog.READER_TEXT_COLOR_LABELS[index]);
         preview.setTextColor(resolveReaderTextColorValue(colorKey, palette));
         preview.setBackgroundColor(palette.pageColor);
+    }
+
+    private int computeHudReservedTopPx() {
+        if (!hasVisibleHudSlot(
+                runtime.settingsStore.getHudTopLeft(),
+                runtime.settingsStore.getHudTopCenter(),
+                runtime.settingsStore.getHudTopRight()
+        )) {
+            return 0;
+        }
+        return ui.dp(runtime.settingsStore.getHudTopMarginDp() + HUD_BAR_HEIGHT_DP);
+    }
+
+    private int computeHudReservedBottomPx() {
+        if (!hasVisibleHudSlot(
+                runtime.settingsStore.getHudBottomLeft(),
+                runtime.settingsStore.getHudBottomCenter(),
+                runtime.settingsStore.getHudBottomRight()
+        )) {
+            return 0;
+        }
+        return ui.dp(runtime.settingsStore.getHudBottomMarginDp() + HUD_BAR_HEIGHT_DP);
+    }
+
+    private boolean hasVisibleHudSlot(String... slots) {
+        if (slots == null) {
+            return false;
+        }
+        for (String slot : slots) {
+            if (slot != null && !"none".equals(slot)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void styleHudTextView(TextView textView, Typeface typeface, int textColor) {
+        if (textView == null) {
+            return;
+        }
+        textView.setTypeface(typeface);
+        textView.setIncludeFontPadding(false);
+        textView.setTextSize(HUD_TEXT_SIZE_SP);
+        textView.setTextColor(applyAlpha(textColor, HUD_TEXT_ALPHA));
+    }
+
+    private int applyAlpha(int color, float alpha) {
+        return Color.argb(
+                Math.round(Color.alpha(color) * alpha),
+                Color.red(color),
+                Color.green(color),
+                Color.blue(color)
+        );
     }
 
     public void updateLetterSpacingLabel(TextView label, android.widget.SeekBar seekBar) {

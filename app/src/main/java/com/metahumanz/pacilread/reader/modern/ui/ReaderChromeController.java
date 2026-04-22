@@ -3,6 +3,7 @@ package com.metahumanz.pacilread.reader.modern.ui;
 import android.graphics.Color;
 import android.graphics.Insets;
 import android.os.Build;
+import android.os.SystemClock;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -33,6 +34,7 @@ import java.util.Locale;
 
 public final class ReaderChromeController {
     private static final long MENU_AUTO_HIDE_DELAY_MS = 2500L;
+    private static final long INSET_REFLOW_SUPPRESS_WINDOW_MS = 450L;
 
     private final ModernReaderActivity activity;
     private final ReaderRuntime runtime;
@@ -91,6 +93,8 @@ public final class ReaderChromeController {
 
     public void applyEdgeToEdgeInsets() {
         views.readerRoot.setOnApplyWindowInsetsListener((view, windowInsets) -> {
+            int previousInsetTop = state.systemInsetTop;
+            int previousInsetBottom = state.systemInsetBottom;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 Insets insets = windowInsets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
                 state.systemInsetLeft = insets.left;
@@ -104,6 +108,12 @@ public final class ReaderChromeController {
                 state.systemInsetBottom = windowInsets.getSystemWindowInsetBottom();
             }
             updateReaderLayoutInsets();
+            if ((previousInsetTop != state.systemInsetTop || previousInsetBottom != state.systemInsetBottom)
+                    && state.book != null
+                    && !state.chapters.isEmpty()
+                    && !shouldSuppressInsetDrivenReflow()) {
+                content.scheduleReflowAfterLayout(state.currentChapterIndex, content.currentCharOffset());
+            }
             return windowInsets;
         });
         views.readerRoot.requestApplyInsets();
@@ -117,7 +127,7 @@ public final class ReaderChromeController {
                 : ui.dp(148) + state.systemInsetBottom;
         views.hudTopContainer.setPadding(
                 ui.dp(12) + state.systemInsetLeft,
-                ui.dp(runtime.settingsStore.getHudVerticalMarginDp()) + state.systemInsetTop,
+                ui.dp(runtime.settingsStore.getHudTopMarginDp()) + state.systemInsetTop,
                 ui.dp(12) + state.systemInsetRight,
                 0
         );
@@ -125,7 +135,7 @@ public final class ReaderChromeController {
                 ui.dp(12) + state.systemInsetLeft,
                 0,
                 ui.dp(12) + state.systemInsetRight,
-                ui.dp(runtime.settingsStore.getHudVerticalMarginDp()) + state.systemInsetBottom
+                ui.dp(runtime.settingsStore.getHudBottomMarginDp()) + state.systemInsetBottom
         );
         views.pageStage.setPadding(0, 0, 0, 0);
         updateFrameLayoutMargins(
@@ -149,8 +159,6 @@ public final class ReaderChromeController {
                 ui.dp(10) + state.systemInsetRight,
                 bottomPanelBottomMargin
         );
-        paging.invalidatePreparedPagingSnapshots();
-        paging.schedulePagingSnapshotWarmup();
     }
 
     public void updateUiAfterPageChange() {
@@ -259,6 +267,7 @@ public final class ReaderChromeController {
             } else {
                 runtime.mainHandler.removeCallbacks(autoHideRunnable);
             }
+            suppressInsetDrivenReflowTemporarily();
             updateSystemBarsVisibility(visible);
             return;
         }
@@ -268,6 +277,7 @@ public final class ReaderChromeController {
         animatePanel(views.menuTopPanel, visible, -ui.dp(18));
         animatePanel(views.menuInfoPanel, visible, ui.dp(14));
         animatePanel(views.menuBottomPanel, visible, ui.dp(20));
+        suppressInsetDrivenReflowTemporarily();
         updateSystemBarsVisibility(visible);
         if (visible) {
             scheduleAutoHide();
@@ -430,6 +440,15 @@ public final class ReaderChromeController {
 
     private String trimToEmpty(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private void suppressInsetDrivenReflowTemporarily() {
+        state.suppressInsetReflowUntilUptimeMs =
+                SystemClock.uptimeMillis() + INSET_REFLOW_SUPPRESS_WINDOW_MS;
+    }
+
+    private boolean shouldSuppressInsetDrivenReflow() {
+        return SystemClock.uptimeMillis() < state.suppressInsetReflowUntilUptimeMs;
     }
 
     private void animatePanel(View view, boolean show, float hiddenTranslationY) {

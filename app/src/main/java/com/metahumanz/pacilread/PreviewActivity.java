@@ -306,7 +306,7 @@ public class PreviewActivity extends ThemedActivity {
         previewReaderHeading.setText("第一章 雨落书页时");
         previewReaderHeading.setIncludeFontPadding(false);
         previewReaderHeading.setTypeface(titleTypeface);
-        previewReaderHeading.setTextSize(TypedValue.COMPLEX_UNIT_SP, settingsStore.getFontSizeSp() + 2f);
+        previewReaderHeading.setTextSize(TypedValue.COMPLEX_UNIT_SP, settingsStore.getFontSizeSp() * 1.4f);
         previewReaderHeading.setTextColor(palette.textColor);
         previewReaderBody.setText("雨点敲在窗沿上时，旧书的纸页也跟着轻轻起伏。字距、行距、边距与字重会共同决定这页文字是松弛、沉稳，还是压迫。\n\n如果一段文字像现在这样安静地铺开，说明当前排版已经接近真实阅读状态。");
         previewReaderBody.setTypeface(bodyTypeface);
@@ -322,7 +322,9 @@ public class PreviewActivity extends ThemedActivity {
         int bottomPadding = dp(settingsStore.getBottomPaddingDp() + 24);
         previewReaderPage.setPadding(leftPadding, topPadding, rightPadding, bottomPadding);
         LinearLayout.LayoutParams bodyParams = (LinearLayout.LayoutParams) previewReaderBody.getLayoutParams();
-        bodyParams.topMargin = settingsStore.isChapterTitleVisible() ? dp(14) : 0;
+        bodyParams.topMargin = settingsStore.isChapterTitleVisible()
+                ? Math.max(dp(16), Math.round(previewReaderHeading.getTextSize() * 1.5f))
+                : 0;
         previewReaderBody.setLayoutParams(bodyParams);
         String backgroundPath = settingsStore.getReaderBackgroundPath();
         boolean applied = false;

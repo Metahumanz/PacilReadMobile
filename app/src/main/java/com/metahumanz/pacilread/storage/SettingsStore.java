@@ -16,6 +16,7 @@ public class SettingsStore {
     private static final String KEY_WEB_DAV_ENABLED = "webdav_enabled";
     private static final String KEY_WEB_DAV_URL = "webdav_url";
     private static final String KEY_WEB_DAV_DIR = "webdav_dir";
+    private static final String KEY_WEB_DAV_SETTINGS_SUBDIR = "webdav_settings_subdir";
     private static final String KEY_WEB_DAV_USER = "webdav_user";
     private static final String KEY_WEB_DAV_PASSWORD = "webdav_password";
     private static final String KEY_WEB_DAV_LAST_FULL = "webdav_last_full";
@@ -65,6 +66,8 @@ public class SettingsStore {
     private static final String KEY_BODY_TEXT_JUSTIFY = "body_text_justify";
     private static final String KEY_FLIP_SPEED = "flip_speed";
     private static final String KEY_HUD_VERTICAL_MARGIN = "hud_vertical_margin";
+    private static final String KEY_HUD_TOP_MARGIN = "hud_top_margin";
+    private static final String KEY_HUD_BOTTOM_MARGIN = "hud_bottom_margin";
     private static final String KEY_READER_MENU_AUTO_HIDE = "reader_menu_auto_hide";
     private static final String KEY_READING_TIME_TRACKING_ENABLED = "reading_time_tracking_enabled";
     private static final String KEY_READING_STATS_DEVICE_ID = "reading_stats_device_id";
@@ -105,6 +108,14 @@ public class SettingsStore {
 
     public void setWebDavDir(String value) {
         preferences.edit().putString(KEY_WEB_DAV_DIR, normalizeDirectory(value)).apply();
+    }
+
+    public String getWebDavSettingsSubdir() {
+        return normalizeDirectory(preferences.getString(KEY_WEB_DAV_SETTINGS_SUBDIR, ""));
+    }
+
+    public void setWebDavSettingsSubdir(String value) {
+        preferences.edit().putString(KEY_WEB_DAV_SETTINGS_SUBDIR, normalizeDirectory(value)).apply();
     }
 
     public String getWebDavUser() {
@@ -371,12 +382,39 @@ public class SettingsStore {
         preferences.edit().putString(KEY_FLIP_SPEED, value).apply();
     }
 
+    public int getHudTopMarginDp() {
+        return preferences.getInt(
+                KEY_HUD_TOP_MARGIN,
+                preferences.getInt(KEY_HUD_VERTICAL_MARGIN, 2)
+        );
+    }
+
+    public void setHudTopMarginDp(int value) {
+        preferences.edit().putInt(KEY_HUD_TOP_MARGIN, clamp(value, 0, 32)).apply();
+    }
+
+    public int getHudBottomMarginDp() {
+        return preferences.getInt(
+                KEY_HUD_BOTTOM_MARGIN,
+                preferences.getInt(KEY_HUD_VERTICAL_MARGIN, 2)
+        );
+    }
+
+    public void setHudBottomMarginDp(int value) {
+        preferences.edit().putInt(KEY_HUD_BOTTOM_MARGIN, clamp(value, 0, 32)).apply();
+    }
+
     public int getHudVerticalMarginDp() {
         return preferences.getInt(KEY_HUD_VERTICAL_MARGIN, 2);
     }
 
     public void setHudVerticalMarginDp(int value) {
-        preferences.edit().putInt(KEY_HUD_VERTICAL_MARGIN, value).apply();
+        int clamped = clamp(value, 0, 32);
+        preferences.edit()
+                .putInt(KEY_HUD_VERTICAL_MARGIN, clamped)
+                .putInt(KEY_HUD_TOP_MARGIN, clamped)
+                .putInt(KEY_HUD_BOTTOM_MARGIN, clamped)
+                .apply();
     }
 
     public boolean isReaderMenuAutoHideEnabled() {

@@ -291,13 +291,11 @@ public final class ReaderStyleDialogController {
             runtime.settingsStore.setReaderUiThemeMode(ReaderOptionCatalog.UI_THEME_KEYS[refs.uiThemeSpinner.getSelectedItemPosition()]);
             refreshTextColorPreview.run();
             String nextResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(activity);
-            content.clearPageCache();
             if (!previousResolvedUiMode.equals(nextResolvedUiMode)) {
                 activity.recreate();
                 return;
             }
-            style.applyReaderSettings();
-            navigation.openChapter(state.currentChapterIndex, anchorOffset, false, 0);
+            content.scheduleReflowAfterLayout(state.currentChapterIndex, anchorOffset);
         };
     }
 

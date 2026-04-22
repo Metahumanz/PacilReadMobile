@@ -17,8 +17,6 @@ import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
 import java.util.List;
 
 public final class ReaderNavigationController {
-    private static final int CHAPTER_TITLE_BODY_MARGIN_DP = 16;
-
     private final ModernReaderActivity activity;
     private final ReaderRuntime runtime;
     private final ReaderViewRefs views;
@@ -171,7 +169,7 @@ public final class ReaderNavigationController {
         boolean showTitle = runtime.settingsStore.isChapterTitleVisible() && pageIndex == 0;
         titleView.setVisibility(showTitle ? View.VISIBLE : View.GONE);
         titleView.setText(chapter.title);
-        paging.updateBodyTopMargin(bodyView, showTitle ? ui.dp(CHAPTER_TITLE_BODY_MARGIN_DP) : 0);
+        paging.updateBodyTopMargin(bodyView, showTitle ? content.getChapterTitleBodyMarginPx() : 0);
         bodyView.setText(slice.text == null ? "" : slice.text);
     }
 

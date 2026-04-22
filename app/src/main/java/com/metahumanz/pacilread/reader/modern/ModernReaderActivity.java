@@ -67,6 +67,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         if (savedInstanceState != null) {
             state.restoredChapterIndex = savedInstanceState.getInt("restored_chapter_index", -1);
             state.restoredPageIndex = savedInstanceState.getInt("restored_page_index", -1);
+            state.restoredProgressOffset = savedInstanceState.getInt("restored_progress_offset", -1);
         }
 
         views = ReaderViewRefs.bind(this);
@@ -105,6 +106,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         super.onSaveInstanceState(outState);
         outState.putInt("restored_chapter_index", state.currentChapterIndex);
         outState.putInt("restored_page_index", state.currentPageIndex);
+        outState.putInt("restored_progress_offset", content == null ? -1 : content.currentCharOffset());
     }
 
     @Override
@@ -119,6 +121,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         autoPage.stopAutoPage();
         tts.stopTts();
         content.cancelPendingProgressSave();
+        content.cancelPendingReflow();
         content.persistProgress();
         state.pendingTapPagingDelta = 0;
         paging.removeWarmupCallbacks();

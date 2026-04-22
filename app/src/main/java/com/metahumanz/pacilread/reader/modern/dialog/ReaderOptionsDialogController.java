@@ -11,6 +11,7 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.SeekBar;
 import android.widget.Spinner;
+import android.widget.TextView;
 
 import com.metahumanz.pacilread.R;
 import com.metahumanz.pacilread.reader.modern.ModernReaderActivity;
@@ -91,7 +92,9 @@ public final class ReaderOptionsDialogController {
         refs.bottomRightSpinner.setAdapter(hudAdapter);
         refs.bottomRightSpinner.setSelection(ReaderOptionCatalog.indexOf(ReaderOptionCatalog.HUD_KEYS, runtime.settingsStore.getHudBottomRight(), 0), false);
 
-        refs.hudMarginSeek.setProgress(runtime.settingsStore.getHudVerticalMarginDp());
+        refs.hudTopMarginSeek.setProgress(runtime.settingsStore.getHudTopMarginDp());
+        refs.hudBottomMarginSeek.setProgress(runtime.settingsStore.getHudBottomMarginDp());
+        updateHudMarginLabels(refs);
 
         Runnable autoApply = () -> {
             String title = refs.titleInput.getText().toString().trim();
@@ -102,6 +105,7 @@ public final class ReaderOptionsDialogController {
             String finalTitle = title;
             String finalAuthor = author;
             int anchorOffset = content.currentCharOffset();
+            boolean chapterTitleVisibilityChanged = runtime.settingsStore.isChapterTitleVisible() != refs.showTitleCheck.isChecked();
             if (state.book != null) {
                 state.book.title = finalTitle;
                 state.book.author = finalAuthor;
@@ -116,10 +120,14 @@ public final class ReaderOptionsDialogController {
             runtime.settingsStore.setHudBottomLeft(ReaderOptionCatalog.HUD_KEYS[refs.bottomLeftSpinner.getSelectedItemPosition()]);
             runtime.settingsStore.setHudBottomCenter(ReaderOptionCatalog.HUD_KEYS[refs.bottomCenterSpinner.getSelectedItemPosition()]);
             runtime.settingsStore.setHudBottomRight(ReaderOptionCatalog.HUD_KEYS[refs.bottomRightSpinner.getSelectedItemPosition()]);
-            runtime.settingsStore.setHudVerticalMarginDp(refs.hudMarginSeek.getProgress());
-            content.clearPageCache();
-            style.applyReaderSettings();
-            navigation.openChapter(state.currentChapterIndex, anchorOffset, false, 0);
+            runtime.settingsStore.setHudTopMarginDp(refs.hudTopMarginSeek.getProgress());
+            runtime.settingsStore.setHudBottomMarginDp(refs.hudBottomMarginSeek.getProgress());
+            if (chapterTitleVisibilityChanged) {
+                content.scheduleReflowAfterLayout(state.currentChapterIndex, anchorOffset);
+            } else {
+                chrome.updateReaderLayoutInsets();
+                chrome.updateUiAfterPageChange();
+            }
             runtime.executor.execute(() -> runtime.databaseHelper.updateBookInfo(state.bookId, finalTitle, finalAuthor));
         };
 
@@ -140,9 +148,10 @@ public final class ReaderOptionsDialogController {
         refs.titleInput.addTextChangedListener(textWatcher);
         refs.authorInput.addTextChangedListener(textWatcher);
         refs.showTitleCheck.setOnCheckedChangeListener((buttonView, isChecked) -> autoApply.run());
-        refs.hudMarginSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+        SeekBar.OnSeekBarChangeListener hudMarginSeekListener = new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                updateHudMarginLabels(refs);
                 if (fromUser) {
                     autoApply.run();
                 }
@@ -155,7 +164,9 @@ public final class ReaderOptionsDialogController {
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
             }
-        });
+        };
+        refs.hudTopMarginSeek.setOnSeekBarChangeListener(hudMarginSeekListener);
+        refs.hudBottomMarginSeek.setOnSeekBarChangeListener(hudMarginSeekListener);
 
         android.widget.AdapterView.OnItemSelectedListener flipListener = new android.widget.AdapterView.OnItemSelectedListener() {
             @Override
@@ -203,6 +214,11 @@ public final class ReaderOptionsDialogController {
         dialogSupport.showStyledDialog(dialog);
     }
 
+    private void updateHudMarginLabels(OptionsDialogViews refs) {
+        refs.hudTopMarginValue.setText(refs.hudTopMarginSeek.getProgress() + " dp");
+        refs.hudBottomMarginValue.setText(refs.hudBottomMarginSeek.getProgress() + " dp");
+    }
+
     private static final class OptionsDialogViews {
         final EditText titleInput;
         final EditText authorInput;
@@ -211,7 +227,10 @@ public final class ReaderOptionsDialogController {
         final Spinner flipSpeedSpinner;
         final Button sliderBookButton;
         final Button sliderChapterButton;
-        final SeekBar hudMarginSeek;
+        final SeekBar hudTopMarginSeek;
+        final SeekBar hudBottomMarginSeek;
+        final TextView hudTopMarginValue;
+        final TextView hudBottomMarginValue;
         final Spinner topLeftSpinner;
         final Spinner topCenterSpinner;
         final Spinner topRightSpinner;
@@ -227,7 +246,10 @@ public final class ReaderOptionsDialogController {
             flipSpeedSpinner = root.findViewById(R.id.options_spinner_flip_speed);
             sliderBookButton = root.findViewById(R.id.options_button_slider_book);
             sliderChapterButton = root.findViewById(R.id.options_button_slider_chapter);
-            hudMarginSeek = root.findViewById(R.id.options_seek_hud_vertical_margin);
+            hudTopMarginSeek = root.findViewById(R.id.options_seek_hud_top_margin);
+            hudBottomMarginSeek = root.findViewById(R.id.options_seek_hud_bottom_margin);
+            hudTopMarginValue = root.findViewById(R.id.options_text_hud_top_margin_value);
+            hudBottomMarginValue = root.findViewById(R.id.options_text_hud_bottom_margin_value);
             topLeftSpinner = root.findViewById(R.id.options_spinner_hud_tl);
             topCenterSpinner = root.findViewById(R.id.options_spinner_hud_tc);
             topRightSpinner = root.findViewById(R.id.options_spinner_hud_tr);

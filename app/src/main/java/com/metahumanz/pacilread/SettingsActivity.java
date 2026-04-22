@@ -60,6 +60,7 @@ public class SettingsActivity extends ThemedActivity {
     private CheckBox webDavEnabledCheck;
     private EditText urlInput;
     private EditText dirInput;
+    private EditText settingsSubdirInput;
     private EditText userInput;
     private EditText passwordInput;
     private EditText mimoApiKeyInput;
@@ -115,6 +116,7 @@ public class SettingsActivity extends ThemedActivity {
         webDavEnabledCheck = findViewById(R.id.check_webdav_enabled);
         urlInput = findViewById(R.id.input_webdav_url);
         dirInput = findViewById(R.id.input_webdav_dir);
+        settingsSubdirInput = findViewById(R.id.input_webdav_settings_subdir);
         userInput = findViewById(R.id.input_webdav_user);
         passwordInput = findViewById(R.id.input_webdav_password);
         mimoApiKeyInput = findViewById(R.id.input_mimo_api_key);
@@ -218,6 +220,7 @@ public class SettingsActivity extends ThemedActivity {
         webDavEnabledCheck.setChecked(settingsStore.isWebDavEnabled());
         urlInput.setText(settingsStore.getWebDavUrl());
         dirInput.setText(settingsStore.getWebDavDir());
+        settingsSubdirInput.setText(settingsStore.getWebDavSettingsSubdir());
         userInput.setText(settingsStore.getWebDavUser());
         passwordInput.setText(settingsStore.getWebDavPassword());
         mimoApiKeyInput.setText(settingsStore.getTtsMimoApiKey());
@@ -255,6 +258,7 @@ public class SettingsActivity extends ThemedActivity {
         settingsStore.setWebDavEnabled(webDavEnabledCheck.isChecked());
         settingsStore.setWebDavUrl(urlInput.getText().toString());
         settingsStore.setWebDavDir(dirInput.getText().toString());
+        settingsStore.setWebDavSettingsSubdir(settingsSubdirInput.getText().toString());
         settingsStore.setWebDavUser(userInput.getText().toString());
         settingsStore.setWebDavPassword(passwordInput.getText().toString());
         if (ttsEngineSpinner != null) {
@@ -387,6 +391,7 @@ public class SettingsActivity extends ThemedActivity {
         };
         urlInput.addTextChangedListener(autoSaveTextWatcher);
         dirInput.addTextChangedListener(autoSaveTextWatcher);
+        settingsSubdirInput.addTextChangedListener(autoSaveTextWatcher);
         userInput.addTextChangedListener(autoSaveTextWatcher);
         passwordInput.addTextChangedListener(autoSaveTextWatcher);
         mimoApiKeyInput.addTextChangedListener(autoSaveTextWatcher);
@@ -437,6 +442,7 @@ public class SettingsActivity extends ThemedActivity {
             return;
         }
         statusText.setText("已启用自动进度同步\n手动备份范围：" + buildWebDavScopeSummary()
+                + "\n设置快照目录：" + buildWebDavSettingsSnapshotSummary()
                 + "\n阅读时长累计：" + (settingsStore.isWebDavSyncReadingStatsEnabled() ? "已启用" : "已关闭"));
     }
 
@@ -747,6 +753,14 @@ public class SettingsActivity extends ThemedActivity {
             items.add("背景图片");
         }
         return items.isEmpty() ? "未选择" : String.join(" / ", items);
+    }
+
+    private String buildWebDavSettingsSnapshotSummary() {
+        String subdir = settingsStore.getWebDavSettingsSubdir();
+        if (subdir.isBlank()) {
+            return "默认共享 settings.json";
+        }
+        return "settings/" + subdir + "settings.json";
     }
 
     private interface BackgroundAction {
