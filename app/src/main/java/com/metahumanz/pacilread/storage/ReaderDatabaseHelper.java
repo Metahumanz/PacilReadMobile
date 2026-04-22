@@ -122,7 +122,6 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 "updated_at INTEGER NOT NULL DEFAULT 0" +
                 ")");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_reading_stats_date ON reading_stats(date)");
-        db.execSQL("CREATE INDEX IF NOT EXISTS idx_books_reading_stats_key ON books(reading_stats_key)");
     }
 
     private void ensureSchema(SQLiteDatabase db) {
