@@ -1,20 +1,26 @@
 package com.metahumanz.pacilread.reader.modern.content;
 
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.text.Layout;
 import android.text.SpannableString;
+import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextPaint;
+import android.text.style.AlignmentSpan;
+import android.text.style.ForegroundColorSpan;
 import android.text.style.LeadingMarginSpan;
+import android.text.style.LineHeightSpan;
 import android.util.Log;
 import android.util.LruCache;
-import android.util.TypedValue;
 import android.view.View;
-import android.widget.TextView;
 
 import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.model.ChapterRecord;
 import com.metahumanz.pacilread.model.ReplacementRuleRecord;
 import com.metahumanz.pacilread.reader.PageSlice;
 import com.metahumanz.pacilread.reader.ReaderPaginator;
+import com.metahumanz.pacilread.reader.ReaderTitleSpan;
 import com.metahumanz.pacilread.reader.ReplacementEngine;
 import com.metahumanz.pacilread.reader.modern.ModernReaderActivity;
 import com.metahumanz.pacilread.reader.modern.ReaderRuntime;
@@ -246,27 +252,19 @@ public final class ReaderContentController {
         if (cachedPageSlicesMap.containsKey(chapterIndex)) {
             return cachedPageSlicesMap.get(chapterIndex);
         }
-        CharSequence text = buildDisplayChapterText(chapterIndex);
+        DisplayChapterText display = buildDisplayChapterText(chapterIndex);
         int pageWidth = getReaderPageTextWidth();
         int regularPageHeight = getRegularReaderPageHeight();
-        if (pageWidth <= 0 || regularPageHeight <= 0) {
-            List<PageSlice> fallback = new ArrayList<>();
-            fallback.add(new PageSlice(0, text.length(), text));
-            return fallback;
-        }
-        ChapterRecord chapter = state.chapters.get(chapterIndex);
-        int firstPageHeight = shouldShowChapterTitle(chapterIndex, 0)
-                ? Math.max(1, regularPageHeight - measureChapterTitleOccupiedHeight(chapter.title, pageWidth))
-                : regularPageHeight;
         TextPaint paint = new TextPaint(views.pageBodyCurrent.getPaint());
-        List<PageSlice> pages = ReaderPaginator.paginate(
-                text,
+        List<PageSlice> pages = sanitizePageSlices(ReaderPaginator.paginate(
+                display.text,
                 paint,
                 pageWidth,
-                firstPageHeight,
                 regularPageHeight,
-                views.pageBodyCurrent.getLineSpacingExtra()
-        );
+                regularPageHeight,
+                views.pageBodyCurrent.getLineSpacingExtra(),
+                display.bodyStartIndex
+        ));
         cachedPageSlicesMap.put(chapterIndex, pages);
         return pages;
     }
@@ -299,38 +297,11 @@ public final class ReaderContentController {
         return 0;
     }
 
-    public int measureChapterTitleOccupiedHeight(String title, int width) {
-        if (title == null || title.isBlank() || width <= 0) {
-            return 0;
-        }
-        TextView measureView = new TextView(activity);
-        measureView.setIncludeFontPadding(false);
-        measureView.setMaxLines(2);
-        measureView.setTypeface(views.pageTitleCurrent.getTypeface());
-        measureView.setTextSize(TypedValue.COMPLEX_UNIT_PX, views.pageTitleCurrent.getTextSize());
-        measureView.setText(title);
-        int widthSpec = View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY);
-        int heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
-        measureView.measure(widthSpec, heightSpec);
-        int safetyBuffer = Math.max(ui.dp(2), Math.round(views.pageBodyCurrent.getPaint().getFontSpacing() * 0.08f));
-        return measureView.getMeasuredHeight() + getChapterTitleBodyMarginPx() + safetyBuffer;
-    }
-
     public int getChapterTitleBodyMarginPx() {
         if (views.pageTitleCurrent == null) {
             return ui.dp(16);
         }
         return Math.max(ui.dp(16), Math.round(views.pageTitleCurrent.getTextSize() * 1.5f));
-    }
-
-    public boolean shouldShowChapterTitle(int chapterIndex, int pageIndex) {
-        if (!runtime.settingsStore.isChapterTitleVisible() || pageIndex != 0) {
-            return false;
-        }
-        if (chapterIndex < 0 || chapterIndex >= state.chapters.size()) {
-            return false;
-        }
-        return hasDisplayableChapterTitle(state.chapters.get(chapterIndex));
     }
 
     public String getProcessedChapterText(int chapterIndex) {
@@ -353,7 +324,58 @@ public final class ReaderContentController {
         return processed;
     }
 
-    private CharSequence buildDisplayChapterText(int chapterIndex) {
+    private DisplayChapterText buildDisplayChapterText(int chapterIndex) {
+        CharSequence body = buildDisplayBodyText(chapterIndex);
+        ChapterRecord chapter = state.chapters.get(chapterIndex);
+        if (!runtime.settingsStore.isChapterTitleVisible() || !hasDisplayableChapterTitle(chapter)) {
+            return new DisplayChapterText(body, 0);
+        }
+
+        SpannableStringBuilder builder = new SpannableStringBuilder();
+        String title = chapter.title.trim();
+        int titleStart = builder.length();
+        builder.append(title);
+        int titleEnd = builder.length();
+        builder.append('\n');
+        int titleParagraphEnd = builder.length();
+        builder.setSpan(
+                new ReaderTitleSpan(resolveChapterTitleTypeface(), resolveChapterTitleTextSizePx()),
+                titleStart,
+                titleEnd,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        );
+        if ("center".equals(runtime.settingsStore.getChapterTitleAlignment())) {
+            builder.setSpan(
+                    new AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER),
+                    titleStart,
+                    titleParagraphEnd,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
+        }
+
+        int spacerStart = builder.length();
+        builder.append(' ');
+        int spacerEnd = builder.length();
+        builder.append('\n');
+        builder.setSpan(
+                new ForegroundColorSpan(Color.TRANSPARENT),
+                spacerStart,
+                spacerEnd,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        );
+        builder.setSpan(
+                new FixedLineHeightSpan(getChapterTitleBodyMarginPx()),
+                spacerStart,
+                spacerEnd,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        );
+
+        int bodyStartIndex = builder.length();
+        builder.append(body);
+        return new DisplayChapterText(builder, bodyStartIndex);
+    }
+
+    private CharSequence buildDisplayBodyText(int chapterIndex) {
         String processed = getProcessedChapterText(chapterIndex);
         int indentPx = computeParagraphIndentPx();
         if (processed.isEmpty() || indentPx <= 0) {
@@ -475,6 +497,8 @@ public final class ReaderContentController {
                 availableWidth,
                 availableHeight,
                 runtime.settingsStore.isChapterTitleVisible(),
+                runtime.settingsStore.getChapterTitleAlignment(),
+                resolveChapterTitleTextSizePx(),
                 views.pageBodyCurrent.getTextSize(),
                 runtime.settingsStore.getReaderFontWeight(),
                 runtime.settingsStore.getReaderFontFamily(),
@@ -590,5 +614,74 @@ public final class ReaderContentController {
                 action.run();
             }
         });
+    }
+
+    private List<PageSlice> sanitizePageSlices(List<PageSlice> pages) {
+        List<PageSlice> sanitized = new ArrayList<>(pages.size());
+        for (PageSlice slice : pages) {
+            sanitized.add(new PageSlice(
+                    slice.start,
+                    slice.end,
+                    slice.bodyStartInSlice,
+                    slice.bodyEndInSlice,
+                    stripDisplayOnlyBodySpans(slice.text)
+            ));
+        }
+        return sanitized;
+    }
+
+    private CharSequence stripDisplayOnlyBodySpans(CharSequence text) {
+        if (!(text instanceof Spanned)) {
+            return text;
+        }
+        SpannableString sanitized = new SpannableString(text);
+        LeadingMarginSpan[] marginSpans = sanitized.getSpans(0, sanitized.length(), LeadingMarginSpan.class);
+        for (LeadingMarginSpan marginSpan : marginSpans) {
+            sanitized.removeSpan(marginSpan);
+        }
+        return sanitized;
+    }
+
+    private Typeface resolveChapterTitleTypeface() {
+        if (views.pageTitleCurrent != null && views.pageTitleCurrent.getTypeface() != null) {
+            return views.pageTitleCurrent.getTypeface();
+        }
+        return views.pageBodyCurrent == null ? null : views.pageBodyCurrent.getTypeface();
+    }
+
+    private float resolveChapterTitleTextSizePx() {
+        if (views.pageTitleCurrent != null && views.pageTitleCurrent.getTextSize() > 0f) {
+            return views.pageTitleCurrent.getTextSize();
+        }
+        return views.pageBodyCurrent == null ? 0f : views.pageBodyCurrent.getTextSize();
+    }
+
+    private static final class DisplayChapterText {
+        final CharSequence text;
+        final int bodyStartIndex;
+
+        private DisplayChapterText(CharSequence text, int bodyStartIndex) {
+            this.text = text == null ? "" : text;
+            this.bodyStartIndex = Math.max(0, Math.min(bodyStartIndex, this.text.length()));
+        }
+    }
+
+    private static final class FixedLineHeightSpan implements LineHeightSpan {
+        private final int heightPx;
+
+        private FixedLineHeightSpan(int heightPx) {
+            this.heightPx = Math.max(heightPx, 0);
+        }
+
+        @Override
+        public void chooseHeight(CharSequence text, int start, int end, int spanstartv, int v, android.graphics.Paint.FontMetricsInt fontMetricsInt) {
+            if (fontMetricsInt == null || heightPx <= 0) {
+                return;
+            }
+            fontMetricsInt.ascent = -heightPx;
+            fontMetricsInt.top = fontMetricsInt.ascent;
+            fontMetricsInt.descent = 0;
+            fontMetricsInt.bottom = 0;
+        }
     }
 }

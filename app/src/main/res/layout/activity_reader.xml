@@ -32,19 +32,17 @@
                 android:id="@+id/text_page_title_current"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:ellipsize="end"
                 android:fontFamily="serif"
                 android:includeFontPadding="false"
-                android:maxLines="2"
                 android:textColor="@color/on_surface"
                 android:textSize="20sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:visibility="gone" />
 
             <com.metahumanz.pacilread.reader.JustifiedPageTextView
                 android:id="@+id/text_page_body_current"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:layout_marginTop="14dp"
                 android:layout_weight="1"
                 android:fontFamily="serif"
                 android:gravity="start|top"
@@ -69,19 +67,17 @@
                 android:id="@+id/text_page_title_incoming"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:ellipsize="end"
                 android:fontFamily="serif"
                 android:includeFontPadding="false"
-                android:maxLines="2"
                 android:textColor="@color/on_surface"
                 android:textSize="20sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:visibility="gone" />
 
             <com.metahumanz.pacilread.reader.JustifiedPageTextView
                 android:id="@+id/text_page_body_incoming"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:layout_marginTop="14dp"
                 android:layout_weight="1"
                 android:fontFamily="serif"
                 android:gravity="start|top"

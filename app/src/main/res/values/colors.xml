@@ -1,68 +1,68 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="surface">#EEF2F8</color>
-    <color name="surface_variant">#DAE3EF</color>
-    <color name="surface_raised">#F8FBFF</color>
-    <color name="primary">#005FB8</color>
-    <color name="primary_variant">#00498F</color>
-    <color name="accent">#7EA9DD</color>
-    <color name="accent_soft">#DDEBFF</color>
-    <color name="on_surface">#172231</color>
-    <color name="on_surface_muted">#667688</color>
-    <color name="card">#F9FBFF</color>
-    <color name="divider">#CFD9E6</color>
-    <color name="backdrop_top">#F6F9FD</color>
-    <color name="backdrop_bottom">#E2EAF3</color>
-    <color name="glass_fill">#F2FFFFFF</color>
-    <color name="glass_fill_strong">#FAFFFFFF</color>
-    <color name="glass_stroke">#8CFFFFFF</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_variant">#F3F4F5</color>
+    <color name="surface_raised">#FAFAFA</color>
+    <color name="primary">#1C69D4</color>
+    <color name="primary_variant">#0653B6</color>
+    <color name="accent">#7F8B99</color>
+    <color name="accent_soft">#EEF1F4</color>
+    <color name="on_surface">#262626</color>
+    <color name="on_surface_muted">#757575</color>
+    <color name="card">#FFFFFF</color>
+    <color name="divider">#D6D6D6</color>
+    <color name="backdrop_top">#FFFFFF</color>
+    <color name="backdrop_bottom">#F1F3F5</color>
+    <color name="glass_fill">#F7FFFFFF</color>
+    <color name="glass_fill_strong">#FCFFFFFF</color>
+    <color name="glass_stroke">#66DADADA</color>
     <color name="glass_dark_fill">#FF212B39</color>
     <color name="glass_dark_fill_strong">#FF283443</color>
     <color name="glass_dark_stroke">#59FFFFFF</color>
-    <color name="overlay_light">#CFEAF2F8</color>
-    <color name="reader_stage_stroke">#4DFFFFFF</color>
+    <color name="overlay_light">#D9F3F4F5</color>
+    <color name="reader_stage_stroke">#1F262626</color>
     <color name="positive">#2F8F68</color>
-    <color name="danger">#C45555</color>
+    <color name="danger">#B74848</color>
 
     <color name="app_background">#FFFFFF</color>
     <color name="app_surface">#FFFFFF</color>
-    <color name="app_surface_secondary">#EEF0F3</color>
-    <color name="app_surface_raised">#F7F8FA</color>
+    <color name="app_surface_secondary">#F5F5F5</color>
+    <color name="app_surface_raised">#FAFAFA</color>
     <color name="app_backdrop_top">#FFFFFF</color>
-    <color name="app_backdrop_bottom">#EEF0F3</color>
+    <color name="app_backdrop_bottom">#F3F4F5</color>
 
-    <color name="app_text_primary">#0A0B0D</color>
-    <color name="app_text_secondary">#5B616E</color>
-    <color name="app_text_muted">#6D7482</color>
+    <color name="app_text_primary">#262626</color>
+    <color name="app_text_secondary">#757575</color>
+    <color name="app_text_muted">#BBBBBB</color>
     <color name="app_text_on_primary">#FFFFFF</color>
 
-    <color name="app_primary">#0052FF</color>
-    <color name="app_primary_variant">#0667D0</color>
-    <color name="app_primary_hover">#578BFA</color>
-    <color name="app_primary_tint">#EAF1FF</color>
+    <color name="app_primary">#1C69D4</color>
+    <color name="app_primary_variant">#0653B6</color>
+    <color name="app_primary_hover">#0653B6</color>
+    <color name="app_primary_tint">#EDF3FB</color>
 
-    <color name="app_border">#335B616E</color>
-    <color name="app_border_strong">#4D5B616E</color>
+    <color name="app_border">#D9D9D9</color>
+    <color name="app_border_strong">#BFBFBF</color>
     <color name="app_glass_fill">#F7FFFFFF</color>
-    <color name="app_glass_fill_strong">#F2EEF0F3</color>
-    <color name="app_glass_stroke">#335B616E</color>
+    <color name="app_glass_fill_strong">#F4F5F5F5</color>
+    <color name="app_glass_stroke">#66D4D4D4</color>
 
     <color name="app_button_primary_text">#FFFFFF</color>
-    <color name="app_button_outline_text">#0052FF</color>
-    <color name="app_button_secondary_text">#0A0B0D</color>
-    <color name="app_button_positive_text">#05210E</color>
+    <color name="app_button_outline_text">#262626</color>
+    <color name="app_button_secondary_text">#262626</color>
+    <color name="app_button_positive_text">#FFFFFF</color>
     <color name="app_button_danger_text">#FFFFFF</color>
 
-    <color name="app_nav_text_active">#0052FF</color>
-    <color name="app_nav_text_idle">#0A0B0D</color>
-    <color name="app_nav_active_bg">#EEF3FF</color>
+    <color name="app_nav_text_active">#262626</color>
+    <color name="app_nav_text_idle">#757575</color>
+    <color name="app_nav_active_bg">#F7F7F7</color>
     <color name="app_nav_idle_bg">#00000000</color>
-    <color name="app_scrim">#5C0A0B0D</color>
+    <color name="app_scrim">#66262626</color>
 
-    <color name="app_badge_fill">#F2FFFFFF</color>
-    <color name="app_badge_stroke">#40FFFFFF</color>
-    <color name="app_badge_text">#0A0B0D</color>
+    <color name="app_badge_fill">#E6FFFFFF</color>
+    <color name="app_badge_stroke">#8CD9D9D9</color>
+    <color name="app_badge_text">#262626</color>
 
-    <color name="app_positive">#30D158</color>
-    <color name="app_danger">#FF3B30</color>
+    <color name="app_positive">#2F8F68</color>
+    <color name="app_danger">#B74848</color>
 </resources>

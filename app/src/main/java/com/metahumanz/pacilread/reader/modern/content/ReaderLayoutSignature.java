@@ -6,6 +6,8 @@ final class ReaderLayoutSignature {
     private final int availableWidthPx;
     private final int availableHeightPx;
     private final boolean chapterTitleVisible;
+    private final String chapterTitleAlignment;
+    private final float titleTextSizePx;
     private final float bodyTextSizePx;
     private final int bodyFontWeight;
     private final String bodyFontFamily;
@@ -23,6 +25,8 @@ final class ReaderLayoutSignature {
             int availableWidthPx,
             int availableHeightPx,
             boolean chapterTitleVisible,
+            String chapterTitleAlignment,
+            float titleTextSizePx,
             float bodyTextSizePx,
             int bodyFontWeight,
             String bodyFontFamily,
@@ -39,6 +43,8 @@ final class ReaderLayoutSignature {
         this.availableWidthPx = availableWidthPx;
         this.availableHeightPx = availableHeightPx;
         this.chapterTitleVisible = chapterTitleVisible;
+        this.chapterTitleAlignment = chapterTitleAlignment;
+        this.titleTextSizePx = titleTextSizePx;
         this.bodyTextSizePx = bodyTextSizePx;
         this.bodyFontWeight = bodyFontWeight;
         this.bodyFontFamily = bodyFontFamily;
@@ -65,6 +71,7 @@ final class ReaderLayoutSignature {
         return availableWidthPx == that.availableWidthPx
                 && availableHeightPx == that.availableHeightPx
                 && chapterTitleVisible == that.chapterTitleVisible
+                && Float.compare(that.titleTextSizePx, titleTextSizePx) == 0
                 && Float.compare(that.bodyTextSizePx, bodyTextSizePx) == 0
                 && bodyFontWeight == that.bodyFontWeight
                 && Float.compare(that.lineSpacingExtraPx, lineSpacingExtraPx) == 0
@@ -76,6 +83,7 @@ final class ReaderLayoutSignature {
                 && bottomPaddingDp == that.bottomPaddingDp
                 && systemInsetTopPx == that.systemInsetTopPx
                 && systemInsetBottomPx == that.systemInsetBottomPx
+                && Objects.equals(chapterTitleAlignment, that.chapterTitleAlignment)
                 && Objects.equals(bodyFontFamily, that.bodyFontFamily);
     }
 
@@ -85,6 +93,8 @@ final class ReaderLayoutSignature {
                 availableWidthPx,
                 availableHeightPx,
                 chapterTitleVisible,
+                chapterTitleAlignment,
+                titleTextSizePx,
                 bodyTextSizePx,
                 bodyFontWeight,
                 bodyFontFamily,

@@ -226,8 +226,8 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         registerReceiver(sysMetricsReceiver, filter);
 
         findViewById(R.id.button_back).setOnClickListener(v -> finish());
-        findViewById(R.id.button_prev_chapter).setOnClickListener(v -> navigation.openChapter(state.currentChapterIndex - 1, 0, true, -1));
-        findViewById(R.id.button_next_chapter).setOnClickListener(v -> navigation.openChapter(state.currentChapterIndex + 1, 0, true, 1));
+        findViewById(R.id.button_prev_chapter).setOnClickListener(v -> navigation.openChapterFromStart(state.currentChapterIndex - 1, true, -1));
+        findViewById(R.id.button_next_chapter).setOnClickListener(v -> navigation.openChapterFromStart(state.currentChapterIndex + 1, true, 1));
         findViewById(R.id.button_toc).setOnClickListener(v -> libraryDialogs.showTocDialog());
         findViewById(R.id.button_search).setOnClickListener(v -> libraryDialogs.showSearchDialog());
         findViewById(R.id.button_rules).setOnClickListener(v -> libraryDialogs.showRulesDialog());
@@ -262,7 +262,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 if ("book".equals(runtime.settingsStore.getReaderSliderMode())) {
                     int chapterIndex = ui.clamp(seekBar.getProgress(), 0, state.chapters.size() - 1);
                     int direction = chapterIndex >= state.currentChapterIndex ? 1 : -1;
-                    navigation.openChapter(chapterIndex, 0, true, direction);
+                    navigation.openChapterFromStart(chapterIndex, true, direction);
                     return;
                 }
                 int direction = seekBar.getProgress() >= state.currentPageIndex ? 1 : -1;

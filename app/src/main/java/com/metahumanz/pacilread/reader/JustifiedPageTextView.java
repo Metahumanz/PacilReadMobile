@@ -5,7 +5,10 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.text.LineBreaker;
 import android.text.Layout;
+import android.text.Spanned;
 import android.text.TextPaint;
+import android.text.style.AlignmentSpan;
+import android.text.style.LineHeightSpan;
 import android.util.AttributeSet;
 
 import androidx.appcompat.widget.AppCompatTextView;
@@ -85,6 +88,11 @@ public class JustifiedPageTextView extends AppCompatTextView {
             if (start >= end) {
                 continue;
             }
+            if (shouldUsePlatformLine(text, start, end)) {
+                drawLineHighlight(canvas, layout.getLineLeft(lineIndex), layout.getLineBaseline(lineIndex), paint, text, start, end);
+                drawPlatformLine(canvas, layout, lineIndex, availableWidth);
+                continue;
+            }
             String rawLine = text.subSequence(start, end).toString();
             boolean paragraphEnd = rawLine.endsWith("\n") || rawLine.endsWith("\r");
             String drawLine = trimLineBreaks(rawLine);
@@ -102,6 +110,23 @@ public class JustifiedPageTextView extends AppCompatTextView {
                 canvas.drawText(drawLine, lineLeft, baseline, paint);
             }
         }
+        canvas.restoreToCount(saveCount);
+    }
+
+    private boolean shouldUsePlatformLine(CharSequence text, int lineStart, int lineEnd) {
+        if (!(text instanceof Spanned)) {
+            return false;
+        }
+        Spanned spanned = (Spanned) text;
+        return spanned.getSpans(lineStart, lineEnd, ReaderTitleSpan.class).length > 0
+                || spanned.getSpans(lineStart, lineEnd, AlignmentSpan.class).length > 0
+                || spanned.getSpans(lineStart, lineEnd, LineHeightSpan.class).length > 0;
+    }
+
+    private void drawPlatformLine(Canvas canvas, Layout layout, int lineIndex, int availableWidth) {
+        int saveCount = canvas.save();
+        canvas.clipRect(0, layout.getLineTop(lineIndex), availableWidth, layout.getLineBottom(lineIndex));
+        layout.draw(canvas);
         canvas.restoreToCount(saveCount);
     }
 

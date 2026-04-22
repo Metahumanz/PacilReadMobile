@@ -236,8 +236,9 @@ public final class ReaderTtsController {
             return;
         }
         PageSlice highlightSlice = pages.get(ui.clamp(state.currentPageIndex, 0, pages.size() - 1));
-        state.ttsHighlightStart = unit.start - highlightSlice.start;
-        state.ttsHighlightEnd = unit.end - highlightSlice.start;
+        int bodyOffsetInSlice = Math.max(highlightSlice.bodyStartInSlice, 0);
+        state.ttsHighlightStart = bodyOffsetInSlice + (unit.start - highlightSlice.start);
+        state.ttsHighlightEnd = bodyOffsetInSlice + (unit.end - highlightSlice.start);
         updateTtsHighlight();
         activity.markReadingActivity();
         speakCurrentTtsGroup();
@@ -293,15 +294,7 @@ public final class ReaderTtsController {
             return;
         }
         int nextChapterIndex = state.ttsChapterIndex + 1;
-        boolean chapterTurning = state.currentChapterIndex == state.ttsChapterIndex;
-        if (chapterTurning) {
-            if (!navigation.pageDown()) {
-                stopTts();
-                return;
-            }
-        } else {
-            navigation.openChapter(nextChapterIndex, 0, true, 1);
-        }
+        navigation.openChapter(nextChapterIndex, 0, true, 1);
         int sessionId = state.ttsSessionId;
         runtime.mainHandler.postDelayed(() -> {
             if (!state.ttsActive || sessionId != state.ttsSessionId) {

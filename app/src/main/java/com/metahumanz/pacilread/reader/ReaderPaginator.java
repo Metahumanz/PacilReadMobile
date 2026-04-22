@@ -13,25 +13,38 @@ public final class ReaderPaginator {
     }
 
     public static List<PageSlice> paginate(CharSequence source, TextPaint paint, int width, int height, float lineSpacingExtra) {
-        return paginate(source, paint, width, height, height, lineSpacingExtra);
+        return paginate(source, paint, width, height, height, lineSpacingExtra, 0);
     }
 
     public static List<PageSlice> paginate(CharSequence source, TextPaint paint, int width, int firstPageHeight, int regularPageHeight, float lineSpacingExtra) {
+        return paginate(source, paint, width, firstPageHeight, regularPageHeight, lineSpacingExtra, 0);
+    }
+
+    public static List<PageSlice> paginate(
+            CharSequence source,
+            TextPaint paint,
+            int width,
+            int firstPageHeight,
+            int regularPageHeight,
+            float lineSpacingExtra,
+            int bodyStartIndex
+    ) {
         List<PageSlice> pages = new ArrayList<>();
+        CharSequence safeSource = source == null ? "" : source;
+        int safeBodyStartIndex = Math.max(0, Math.min(bodyStartIndex, safeSource.length()));
         if (source == null) {
-            pages.add(new PageSlice(0, 0, ""));
+            pages.add(new PageSlice(0, 0, -1, -1, ""));
             return pages;
         }
-        String text = source.toString();
-        if (text.isEmpty() || width <= 0 || firstPageHeight <= 0 || regularPageHeight <= 0) {
-            pages.add(new PageSlice(0, text.length(), text));
+        if (safeSource.length() == 0 || width <= 0 || firstPageHeight <= 0 || regularPageHeight <= 0) {
+            pages.add(buildPageSlice(safeSource, safeBodyStartIndex, 0, safeSource.length()));
             return pages;
         }
 
-        StaticLayout layout = buildLayout(text, paint, width, lineSpacingExtra);
+        StaticLayout layout = buildLayout(safeSource, paint, width, lineSpacingExtra);
         int lineCount = layout.getLineCount();
         if (lineCount == 0) {
-            pages.add(new PageSlice(0, text.length(), text));
+            pages.add(buildPageSlice(safeSource, safeBodyStartIndex, 0, safeSource.length()));
             return pages;
         }
 
@@ -48,12 +61,12 @@ public final class ReaderPaginator {
             if (end <= start) {
                 break;
             }
-            pages.add(new PageSlice(start, end, text.subSequence(start, end)));
+            pages.add(buildPageSlice(safeSource, safeBodyStartIndex, start, end));
             startLine = endLine + 1;
         }
 
         if (pages.isEmpty()) {
-            pages.add(new PageSlice(0, text.length(), text));
+            pages.add(buildPageSlice(safeSource, safeBodyStartIndex, 0, safeSource.length()));
         }
         return pages;
     }
@@ -62,12 +75,26 @@ public final class ReaderPaginator {
         if (pages == null || pages.isEmpty()) {
             return 0;
         }
+        int safeOffset = Math.max(offset, 0);
+        int firstBodyPageIndex = -1;
+        int lastBodyPageIndex = -1;
         for (int i = 0; i < pages.size(); i++) {
-            if (offset < pages.get(i).end) {
+            PageSlice page = pages.get(i);
+            if (!page.hasBodyText()) {
+                continue;
+            }
+            if (firstBodyPageIndex < 0) {
+                firstBodyPageIndex = i;
+            }
+            lastBodyPageIndex = i;
+            if (safeOffset < page.end) {
                 return i;
             }
         }
-        return pages.size() - 1;
+        if (safeOffset == 0 && firstBodyPageIndex >= 0) {
+            return firstBodyPageIndex;
+        }
+        return lastBodyPageIndex >= 0 ? lastBodyPageIndex : 0;
     }
 
     private static StaticLayout buildLayout(CharSequence source, TextPaint paint, int width, float lineSpacingExtra) {
@@ -78,5 +105,20 @@ public final class ReaderPaginator {
                 .setBreakStrategy(LineBreaker.BREAK_STRATEGY_HIGH_QUALITY)
                 .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NORMAL)
                 .build();
+    }
+
+    private static PageSlice buildPageSlice(CharSequence source, int bodyStartIndex, int contentStart, int contentEnd) {
+        int safeContentStart = Math.max(0, Math.min(contentStart, source.length()));
+        int safeContentEnd = Math.max(safeContentStart, Math.min(contentEnd, source.length()));
+        int bodyTextStart = Math.max(safeContentStart, bodyStartIndex);
+        int bodyTextEnd = Math.max(bodyTextStart, safeContentEnd);
+        boolean hasBodyText = bodyTextEnd > bodyTextStart;
+        return new PageSlice(
+                Math.max(0, bodyTextStart - bodyStartIndex),
+                Math.max(0, bodyTextEnd - bodyStartIndex),
+                hasBodyText ? bodyTextStart - safeContentStart : -1,
+                hasBodyText ? bodyTextEnd - safeContentStart : -1,
+                source.subSequence(safeContentStart, safeContentEnd)
+        );
     }
 }

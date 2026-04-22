@@ -3,7 +3,6 @@ package com.metahumanz.pacilread.reader.modern.paging;
 import android.view.View;
 import android.widget.TextView;
 
-import com.metahumanz.pacilread.model.ChapterRecord;
 import com.metahumanz.pacilread.reader.PageSlice;
 import com.metahumanz.pacilread.reader.ReaderPaginator;
 import com.metahumanz.pacilread.reader.modern.ModernReaderActivity;
@@ -64,6 +63,17 @@ public final class ReaderNavigationController {
         showPage(safeChapterIndex, pageIndex, animate, direction);
     }
 
+    public void openChapterFromStart(int chapterIndex, boolean animate, int direction) {
+        if (state.chapters.isEmpty()) {
+            return;
+        }
+        if (!paging.ensurePageAreaReady(() -> openChapterFromStart(chapterIndex, animate, direction))) {
+            return;
+        }
+        int safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size() - 1);
+        showPage(safeChapterIndex, 0, animate, direction);
+    }
+
     public void showPage(int chapterIndex, int pageIndex, boolean animate, int direction) {
         if (state.chapters.isEmpty()) {
             return;
@@ -106,7 +116,7 @@ public final class ReaderNavigationController {
             return true;
         }
         if (state.currentChapterIndex < state.chapters.size() - 1) {
-            openChapter(state.currentChapterIndex + 1, 0, true, 1);
+            openChapterFromStart(state.currentChapterIndex + 1, true, 1);
             return true;
         }
         return false;
@@ -163,13 +173,11 @@ public final class ReaderNavigationController {
     }
 
     public void bindPage(TextView titleView, TextView bodyView, int chapterIndex, int pageIndex) {
-        ChapterRecord chapter = state.chapters.get(chapterIndex);
         List<PageSlice> pages = content.getPagesForChapter(chapterIndex);
         PageSlice slice = pages.get(ui.clamp(pageIndex, 0, pages.size() - 1));
-        boolean showTitle = content.shouldShowChapterTitle(chapterIndex, pageIndex);
-        titleView.setVisibility(showTitle ? View.VISIBLE : View.GONE);
-        titleView.setText(chapter.title);
-        paging.updateBodyTopMargin(bodyView, showTitle ? content.getChapterTitleBodyMarginPx() : 0);
+        titleView.setVisibility(View.GONE);
+        titleView.setText(null);
+        paging.updateBodyTopMargin(bodyView, 0);
         bodyView.setText(slice.text == null ? "" : slice.text);
     }
 
