@@ -3,7 +3,8 @@
     android:id="@+id/main_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_window_backdrop">
+    android:background="@drawable/bg_window_backdrop"
+    android:theme="@style/AppChromeSurfaceTheme">
 
     <LinearLayout
         android:id="@+id/content_shell"
@@ -31,19 +32,17 @@
                 android:minHeight="0dp"
                 android:padding="0dp"
                 android:text="☰"
-                android:textColor="@color/on_surface"
+                android:textColor="@color/app_text_primary"
                 android:textSize="18sp" />
 
             <TextView
                 android:id="@+id/text_section_title"
+                style="@style/AppChromeBarTitle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:layout_weight="1"
-                android:fontFamily="sans-serif-medium"
-                android:text="排版与预览"
-                android:textColor="@color/on_surface"
-                android:textSize="18sp" />
+                android:text="排版与预览" />
         </LinearLayout>
 
         <!-- ========== Preview Content ========== -->
@@ -72,20 +71,17 @@
                     android:paddingBottom="4dp">
 
                     <TextView
+                        style="@style/AppChromePageTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-medium"
-                        android:text="排版与预览"
-                        android:textColor="@color/on_surface"
-                        android:textSize="22sp" />
+                        android:text="排版与预览" />
 
                     <TextView
+                        style="@style/AppChromeBodyMuted"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:text="全局控制阅读引擎的文字排版、视觉主题与页面布局。"
-                        android:textColor="@color/on_surface_muted"
-                        android:textSize="13sp" />
+                        android:text="全局控制阅读引擎的文字排版、视觉主题与页面布局。" />
                 </LinearLayout>
 
                 <!-- Theme summary -->
@@ -93,28 +89,25 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:background="@drawable/bg_card"
+                    android:background="@drawable/bg_app_card"
                     android:elevation="4dp"
                     android:orientation="vertical"
                     android:padding="18dp">
 
                     <TextView
+                        style="@style/AppChromeCardTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-medium"
-                        android:text="阅读引擎实时效果映射"
-                        android:textColor="@color/on_surface"
-                        android:textSize="18sp" />
+                        android:text="阅读引擎实时效果映射" />
 
                     <TextView
                         android:id="@+id/text_preview_theme"
+                        style="@style/AppChromeBodyMuted"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:background="@drawable/bg_soft_button"
-                        android:padding="14dp"
-                        android:textColor="@color/on_surface"
-                        android:textSize="13sp" />
+                        android:background="@drawable/bg_app_soft_button"
+                        android:padding="14dp" />
                 </LinearLayout>
 
                 <!-- Reader preview (flat) -->
@@ -122,18 +115,16 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
-                    android:background="@drawable/bg_card"
+                    android:background="@drawable/bg_app_card"
                     android:elevation="4dp"
                     android:orientation="vertical"
                     android:padding="18dp">
 
                     <TextView
+                        style="@style/AppChromeCardTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-medium"
-                        android:text="阅读页预览"
-                        android:textColor="@color/on_surface"
-                        android:textSize="18sp" />
+                        android:text="阅读页预览" />
 
                     <FrameLayout
                         android:layout_width="match_parent"

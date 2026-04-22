@@ -344,8 +344,8 @@ public class PreviewActivity extends ThemedActivity {
 
     private void stylePreviewThemeButton(Button button, boolean active) {
         if (button == null) return;
-        button.setBackgroundResource(active ? R.drawable.bg_primary_button : R.drawable.bg_outline_button);
-        button.setTextColor(getColor(active ? android.R.color.white : R.color.on_surface));
+        button.setBackgroundResource(active ? R.drawable.bg_app_primary_button : R.drawable.bg_app_outline_button);
+        button.setTextColor(getColor(active ? R.color.app_button_primary_text : R.color.app_button_outline_text));
         GlassUiHelper.applyToView(this, button, settingsStore.getGlassOpacityPercent());
     }
 
@@ -401,8 +401,8 @@ public class PreviewActivity extends ThemedActivity {
                     Button applyButton = new Button(this);
                     applyButton.setText(theme.name);
                     applyButton.setAllCaps(false);
-                    applyButton.setBackgroundResource(R.drawable.bg_outline_button);
-                    applyButton.setTextColor(getColor(R.color.primary));
+                    applyButton.setBackgroundResource(R.drawable.bg_app_outline_button);
+                    applyButton.setTextColor(getColor(R.color.app_button_outline_text));
                     applyButton.setPadding(dp(16), dp(8), dp(16), dp(8));
                     GlassUiHelper.applyToView(this, applyButton, settingsStore.getGlassOpacityPercent());
                     LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
@@ -410,7 +410,8 @@ public class PreviewActivity extends ThemedActivity {
                     Button deleteButton = new Button(this);
                     deleteButton.setText("删除");
                     deleteButton.setAllCaps(false);
-                    deleteButton.setBackgroundResource(R.drawable.bg_danger_button);
+                    deleteButton.setBackgroundResource(R.drawable.bg_app_danger_button);
+                    deleteButton.setTextColor(getColor(R.color.app_button_danger_text));
                     deleteButton.setPadding(dp(12), dp(8), dp(12), dp(8));
                     LinearLayout.LayoutParams dp2 = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
                     dp2.leftMargin = dp(8);
@@ -441,6 +442,12 @@ public class PreviewActivity extends ThemedActivity {
     private void promptSavePreviewTheme() {
         EditText input = new EditText(this);
         input.setHint("主题名称");
+        input.setBackgroundResource(R.drawable.bg_app_input);
+        input.setTextColor(getColor(R.color.app_text_primary));
+        input.setHintTextColor(getColor(R.color.app_text_secondary));
+        int horizontal = dp(14);
+        int vertical = dp(12);
+        input.setPadding(horizontal, vertical, horizontal, vertical);
         new AlertDialog.Builder(this)
                 .setTitle("保存当前主题").setView(input).setNegativeButton("取消", null)
                 .setPositiveButton("保存", (dialog, which) -> {
@@ -488,8 +495,8 @@ public class PreviewActivity extends ThemedActivity {
     }
 
     private ArrayAdapter<String> buildSpinnerAdapter(String[] items) {
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, R.layout.item_spinner_selected, items);
-        adapter.setDropDownViewResource(R.layout.item_spinner_dropdown);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, R.layout.item_app_spinner_selected, items);
+        adapter.setDropDownViewResource(R.layout.item_app_spinner_dropdown);
         return adapter;
     }
 

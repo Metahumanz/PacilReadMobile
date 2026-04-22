@@ -1,19 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="PacilReadTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="android:windowBackground">@color/app_background</item>
-        <item name="android:colorBackground">@color/app_background</item>
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="colorPrimary">@color/app_primary</item>
-        <item name="colorPrimaryVariant">@color/app_primary_variant</item>
-        <item name="colorSecondary">@color/app_primary</item>
-        <item name="colorOnPrimary">@color/app_button_primary_text</item>
-        <item name="android:textColorPrimary">@color/app_text_primary</item>
-        <item name="android:textColorSecondary">@color/app_text_secondary</item>
-        <item name="materialButtonStyle">@style/AppButtonStyle</item>
-    </style>
-
     <style name="AppButtonStyle" parent="Widget.MaterialComponents.Button">
         <item name="android:insetTop">0dp</item>
         <item name="android:insetBottom">0dp</item>
@@ -25,10 +11,10 @@
         <item name="android:paddingTop">10dp</item>
         <item name="android:paddingRight">16dp</item>
         <item name="android:paddingBottom">10dp</item>
-        <item name="android:textSize">15sp</item>
+        <item name="android:textSize">14sp</item>
         <item name="android:textStyle">normal</item>
-        <item name="android:fontFamily">sans-serif-medium</item>
-        <item name="cornerRadius">12dp</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="cornerRadius">4dp</item>
         <item name="backgroundTint">@null</item>
     </style>
 
@@ -36,105 +22,110 @@
         <item name="android:textColorPrimary">@color/app_text_primary</item>
         <item name="android:textColorSecondary">@color/app_text_secondary</item>
         <item name="android:textColorHint">@color/app_text_secondary</item>
-        <item name="android:fontFamily">sans-serif</item>
-        <item name="fontFamily">sans-serif</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="fontFamily">monospace</item>
     </style>
 
     <style name="AppChromeBarTitle">
-        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">monospace</item>
         <item name="android:textColor">@color/app_text_primary</item>
         <item name="android:textSize">18sp</item>
     </style>
 
     <style name="AppChromePageTitle">
-        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">monospace</item>
         <item name="android:textColor">@color/app_text_primary</item>
-        <item name="android:textSize">22sp</item>
+        <item name="android:textSize">21sp</item>
+        <item name="android:textStyle">bold</item>
     </style>
 
     <style name="AppChromeCardTitle">
-        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">monospace</item>
         <item name="android:textColor">@color/app_text_primary</item>
-        <item name="android:textSize">18sp</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:textStyle">bold</item>
     </style>
 
     <style name="AppChromeSectionLabel">
-        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">monospace</item>
         <item name="android:textColor">@color/app_primary</item>
-        <item name="android:textSize">13sp</item>
-        <item name="android:letterSpacing">0.02</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:letterSpacing">0</item>
     </style>
 
     <style name="AppChromeFieldLabel">
-        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">monospace</item>
         <item name="android:textColor">@color/app_text_primary</item>
         <item name="android:textSize">14sp</item>
     </style>
 
     <style name="AppChromeBody">
-        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:fontFamily">monospace</item>
         <item name="android:textColor">@color/app_text_primary</item>
         <item name="android:textSize">15sp</item>
     </style>
 
     <style name="AppChromeBodyStrong">
-        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">monospace</item>
         <item name="android:textColor">@color/app_text_primary</item>
         <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
     </style>
 
     <style name="AppChromeBodyMuted">
-        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:fontFamily">monospace</item>
         <item name="android:textColor">@color/app_text_secondary</item>
         <item name="android:textSize">13sp</item>
     </style>
 
     <style name="AppChromeCaption">
-        <item name="android:fontFamily">sans-serif-medium</item>
-        <item name="android:textColor">@color/app_text_muted</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textColor">@color/app_text_secondary</item>
         <item name="android:textSize">12sp</item>
     </style>
 
     <style name="AppChromeMicro">
-        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">monospace</item>
         <item name="android:textColor">@color/app_text_muted</item>
         <item name="android:textSize">11sp</item>
     </style>
 
     <style name="AppChromeAccentCaption">
-        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">monospace</item>
         <item name="android:textColor">@color/app_primary</item>
         <item name="android:textSize">12sp</item>
     </style>
 
     <style name="AppChromeCheckBox">
-        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:fontFamily">monospace</item>
         <item name="android:textColor">@color/app_text_primary</item>
         <item name="android:textSize">15sp</item>
     </style>
 
     <style name="AppChromeInputText">
-        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:fontFamily">monospace</item>
         <item name="android:textColor">@color/app_text_primary</item>
         <item name="android:textColorHint">@color/app_text_secondary</item>
         <item name="android:textSize">15sp</item>
     </style>
 
     <style name="AppChromeDrawerBrand">
-        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">monospace</item>
         <item name="android:textColor">@color/app_text_primary</item>
-        <item name="android:textSize">20sp</item>
+        <item name="android:textSize">19sp</item>
+        <item name="android:textStyle">bold</item>
     </style>
 
     <style name="AppChromeDrawerItem">
-        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">monospace</item>
         <item name="android:textColor">@color/app_nav_text_idle</item>
         <item name="android:textSize">14sp</item>
     </style>
 
     <style name="AppChromeMetricValue">
-        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">monospace</item>
         <item name="android:textColor">@color/app_text_primary</item>
         <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
     </style>
 </resources>

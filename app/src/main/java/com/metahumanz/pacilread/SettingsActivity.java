@@ -287,27 +287,27 @@ public class SettingsActivity extends ThemedActivity {
     private void setupThemeSpinners() {
         ArrayAdapter<String> appThemeAdapter = new ArrayAdapter<>(
                 this,
-                R.layout.item_spinner_selected,
+                R.layout.item_app_spinner_selected,
                 new String[]{"跟随系统", "浅色", "深色"}
         );
-        appThemeAdapter.setDropDownViewResource(R.layout.item_spinner_dropdown);
+        appThemeAdapter.setDropDownViewResource(R.layout.item_app_spinner_dropdown);
         appThemeSpinner.setAdapter(appThemeAdapter);
 
         ArrayAdapter<String> readerThemeAdapter = new ArrayAdapter<>(
                 this,
-                R.layout.item_spinner_selected,
+                R.layout.item_app_spinner_selected,
                 new String[]{"跟随应用", "跟随系统", "浅色", "深色"}
         );
-        readerThemeAdapter.setDropDownViewResource(R.layout.item_spinner_dropdown);
+        readerThemeAdapter.setDropDownViewResource(R.layout.item_app_spinner_dropdown);
         readerUiThemeSpinner.setAdapter(readerThemeAdapter);
 
         if (ttsEngineSpinner != null) {
             ArrayAdapter<String> ttsEngineAdapter = new ArrayAdapter<>(
                     this,
-                    R.layout.item_spinner_selected,
+                    R.layout.item_app_spinner_selected,
                     TTS_ENGINE_LABELS
             );
-            ttsEngineAdapter.setDropDownViewResource(R.layout.item_spinner_dropdown);
+            ttsEngineAdapter.setDropDownViewResource(R.layout.item_app_spinner_dropdown);
             ttsEngineSpinner.setAdapter(ttsEngineAdapter);
         }
 
@@ -329,20 +329,20 @@ public class SettingsActivity extends ThemedActivity {
         if (volumeKeyUpActionSpinner != null) {
             ArrayAdapter<String> volumeKeyUpAdapter = new ArrayAdapter<>(
                     this,
-                    R.layout.item_spinner_selected,
+                    R.layout.item_app_spinner_selected,
                     VOLUME_KEY_ACTION_LABELS
             );
-            volumeKeyUpAdapter.setDropDownViewResource(R.layout.item_spinner_dropdown);
+            volumeKeyUpAdapter.setDropDownViewResource(R.layout.item_app_spinner_dropdown);
             volumeKeyUpActionSpinner.setAdapter(volumeKeyUpAdapter);
             volumeKeyUpActionSpinner.setOnItemSelectedListener(autoSaveSpinnerListener);
         }
         if (volumeKeyDownActionSpinner != null) {
             ArrayAdapter<String> volumeKeyDownAdapter = new ArrayAdapter<>(
                     this,
-                    R.layout.item_spinner_selected,
+                    R.layout.item_app_spinner_selected,
                     VOLUME_KEY_ACTION_LABELS
             );
-            volumeKeyDownAdapter.setDropDownViewResource(R.layout.item_spinner_dropdown);
+            volumeKeyDownAdapter.setDropDownViewResource(R.layout.item_app_spinner_dropdown);
             volumeKeyDownActionSpinner.setAdapter(volumeKeyDownAdapter);
             volumeKeyDownActionSpinner.setOnItemSelectedListener(autoSaveSpinnerListener);
         }
@@ -586,8 +586,8 @@ public class SettingsActivity extends ThemedActivity {
             return;
         }
         button.setSelected(selected);
-        button.setBackgroundResource(selected ? R.drawable.bg_primary_button : R.drawable.bg_outline_button);
-        button.setTextColor(getColor(selected ? android.R.color.white : R.color.on_surface));
+        button.setBackgroundResource(selected ? R.drawable.bg_app_primary_button : R.drawable.bg_app_outline_button);
+        button.setTextColor(getColor(selected ? R.color.app_button_primary_text : R.color.app_button_outline_text));
     }
 
     private void updateWebDavSyncOptionsVisibility() {

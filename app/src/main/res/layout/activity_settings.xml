@@ -4,14 +4,14 @@
     android:id="@+id/settings_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/surface">
+    android:background="@color/app_background"
+    android:theme="@style/AppChromeSurfaceTheme">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <!-- Windows 11 Style Header -->
         <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="64dp"
@@ -27,18 +27,16 @@
                 android:contentDescription="返回"
                 android:padding="12dp"
                 android:src="@drawable/ic_arrow_back"
-                app:tint="@color/on_surface" />
+                app:tint="@color/app_text_primary" />
 
             <TextView
+                style="@style/AppChromeBarTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_centerVertical="true"
                 android:layout_marginStart="12dp"
                 android:layout_toEndOf="@id/button_back"
-                android:fontFamily="sans-serif-medium"
-                android:text="偏好设置"
-                android:textColor="@color/on_surface"
-                android:textSize="20sp" />
+                android:text="偏好设置" />
         </RelativeLayout>
 
         <ScrollView
@@ -55,63 +53,59 @@
                 android:orientation="vertical"
                 android:paddingBottom="40dp">
 
-                <!-- Appearance Section -->
                 <TextView
+                    style="@style/AppChromeSectionLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="4dp"
                     android:layout_marginBottom="10dp"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="个性化与显示"
-                    android:textColor="@color/primary"
-                    android:textSize="13sp" />
+                    android:text="个性化与显示" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="20dp"
-                    android:background="@drawable/bg_card"
+                    android:background="@drawable/bg_app_card"
                     android:elevation="2dp"
                     android:orientation="vertical"
                     android:padding="18dp">
 
                     <TextView
+                        style="@style/AppChromeBody"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="应用主题模式"
-                        android:textColor="@color/on_surface"
-                        android:textSize="15sp" />
+                        android:text="应用主题模式" />
 
                     <Spinner
                         android:id="@+id/spinner_app_theme_mode"
                         android:layout_width="match_parent"
                         android:layout_height="48dp"
                         android:layout_marginTop="10dp"
-                        android:background="@drawable/bg_input" />
+                        android:background="@drawable/bg_app_input"
+                        android:popupBackground="@drawable/bg_app_dialog" />
 
                     <TextView
+                        style="@style/AppChromeBody"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="18dp"
-                        android:text="阅读界面主题"
-                        android:textColor="@color/on_surface"
-                        android:textSize="15sp" />
+                        android:text="阅读界面主题" />
 
                     <Spinner
                         android:id="@+id/spinner_reader_ui_theme_mode"
                         android:layout_width="match_parent"
                         android:layout_height="48dp"
                         android:layout_marginTop="10dp"
-                        android:background="@drawable/bg_input" />
+                        android:background="@drawable/bg_app_input"
+                        android:popupBackground="@drawable/bg_app_dialog" />
 
                     <TextView
                         android:id="@+id/text_glass_opacity"
+                        style="@style/AppChromeBody"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="18dp"
-                        android:text="毛玻璃不透明度"
-                        android:textColor="@color/on_surface"
-                        android:textSize="15sp" />
+                        android:text="毛玻璃不透明度" />
 
                     <SeekBar
                         android:id="@+id/seek_glass_opacity"
@@ -123,103 +117,95 @@
                         android:paddingEnd="0dp" />
                 </LinearLayout>
 
-                <!-- Navigation Section -->
                 <TextView
+                    style="@style/AppChromeSectionLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="4dp"
                     android:layout_marginBottom="10dp"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="交互行为"
-                    android:textColor="@color/primary"
-                    android:textSize="13sp" />
+                    android:text="交互行为" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="20dp"
-                    android:background="@drawable/bg_card"
+                    android:background="@drawable/bg_app_card"
                     android:elevation="2dp"
                     android:orientation="vertical"
                     android:padding="18dp">
 
                     <CheckBox
                         android:id="@+id/check_auto_open"
+                        style="@style/AppChromeCheckBox"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:minHeight="48dp"
-                        android:text="启动应用时自动打开最近阅读"
-                        android:textColor="@color/on_surface"
-                        android:textSize="15sp" />
+                        android:text="启动应用时自动打开最近阅读" />
 
                     <CheckBox
                         android:id="@+id/check_reader_menu_auto_hide"
+                        style="@style/AppChromeCheckBox"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:minHeight="48dp"
-                        android:text="阅读界面自动收起菜单"
-                        android:textColor="@color/on_surface"
-                        android:textSize="15sp" />
+                        android:text="阅读界面自动收起菜单" />
 
                     <TextView
+                        style="@style/AppChromeBody"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
-                        android:text="音量上键翻页行为"
-                        android:textColor="@color/on_surface"
-                        android:textSize="15sp" />
+                        android:text="音量上键翻页行为" />
 
                     <Spinner
                         android:id="@+id/spinner_volume_key_up_action"
                         android:layout_width="match_parent"
                         android:layout_height="48dp"
                         android:layout_marginTop="10dp"
-                        android:background="@drawable/bg_input" />
+                        android:background="@drawable/bg_app_input"
+                        android:popupBackground="@drawable/bg_app_dialog" />
 
                     <TextView
+                        style="@style/AppChromeBody"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
-                        android:text="音量下键翻页行为"
-                        android:textColor="@color/on_surface"
-                        android:textSize="15sp" />
+                        android:text="音量下键翻页行为" />
 
                     <Spinner
                         android:id="@+id/spinner_volume_key_down_action"
                         android:layout_width="match_parent"
                         android:layout_height="48dp"
                         android:layout_marginTop="10dp"
-                        android:background="@drawable/bg_input" />
+                        android:background="@drawable/bg_app_input"
+                        android:popupBackground="@drawable/bg_app_dialog" />
                 </LinearLayout>
 
                 <TextView
+                    style="@style/AppChromeSectionLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="4dp"
                     android:layout_marginBottom="10dp"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="阅读时长统计"
-                    android:textColor="@color/primary"
-                    android:textSize="13sp" />
+                    android:text="阅读时长统计" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="20dp"
-                    android:background="@drawable/bg_card"
+                    android:background="@drawable/bg_app_card"
                     android:elevation="2dp"
                     android:orientation="vertical"
                     android:padding="18dp">
 
                     <CheckBox
                         android:id="@+id/check_reading_time_tracking"
+                        style="@style/AppChromeCheckBox"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:minHeight="48dp"
-                        android:text="记录阅读时长"
-                        android:textColor="@color/on_surface"
-                        android:textSize="15sp" />
+                        android:text="记录阅读时长" />
 
                     <LinearLayout
                         android:id="@+id/layout_reading_stats_content"
@@ -231,11 +217,10 @@
 
                         <TextView
                             android:id="@+id/text_reading_stats_hint"
+                            style="@style/AppChromeCaption"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="当前范围阅读总时长"
-                            android:textColor="@color/on_surface_muted"
-                            android:textSize="12sp" />
+                            android:text="当前范围阅读总时长" />
 
                         <LinearLayout
                             android:layout_width="match_parent"
@@ -248,10 +233,10 @@
                                 android:layout_width="0dp"
                                 android:layout_height="40dp"
                                 android:layout_weight="1"
-                                android:background="@drawable/bg_primary_button"
+                                android:background="@drawable/bg_app_primary_button"
                                 android:text="本日"
                                 android:textAllCaps="false"
-                                android:textColor="@android:color/white" />
+                                android:textColor="@color/app_button_primary_text" />
 
                             <Button
                                 android:id="@+id/button_stats_period_week"
@@ -259,10 +244,10 @@
                                 android:layout_height="40dp"
                                 android:layout_marginStart="8dp"
                                 android:layout_weight="1"
-                                android:background="@drawable/bg_outline_button"
+                                android:background="@drawable/bg_app_outline_button"
                                 android:text="本周"
                                 android:textAllCaps="false"
-                                android:textColor="@color/on_surface" />
+                                android:textColor="@color/app_button_outline_text" />
 
                             <Button
                                 android:id="@+id/button_stats_period_year"
@@ -270,19 +255,19 @@
                                 android:layout_height="40dp"
                                 android:layout_marginStart="8dp"
                                 android:layout_weight="1"
-                                android:background="@drawable/bg_outline_button"
+                                android:background="@drawable/bg_app_outline_button"
                                 android:text="本年"
                                 android:textAllCaps="false"
-                                android:textColor="@color/on_surface" />
+                                android:textColor="@color/app_button_outline_text" />
                         </LinearLayout>
 
                         <TextView
                             android:id="@+id/text_reading_stats_total"
+                            style="@style/AppChromeMetricValue"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="16dp"
                             android:text="0 秒"
-                            android:textColor="@color/on_surface"
                             android:textSize="28sp"
                             android:textStyle="bold" />
 
@@ -291,41 +276,37 @@
                             android:layout_width="match_parent"
                             android:layout_height="46dp"
                             android:layout_marginTop="14dp"
-                            android:background="@drawable/bg_outline_button"
+                            android:background="@drawable/bg_app_outline_button"
                             android:text="查看详细统计"
                             android:textAllCaps="false"
-                            android:textColor="@color/on_surface" />
+                            android:textColor="@color/app_button_outline_text" />
                     </LinearLayout>
                 </LinearLayout>
 
-                <!-- Cloud Sync Section -->
                 <TextView
+                    style="@style/AppChromeSectionLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="4dp"
                     android:layout_marginBottom="10dp"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="云端同步 (WebDAV)"
-                    android:textColor="@color/primary"
-                    android:textSize="13sp" />
+                    android:text="云端同步 (WebDAV)" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="20dp"
-                    android:background="@drawable/bg_card"
+                    android:background="@drawable/bg_app_card"
                     android:elevation="2dp"
                     android:orientation="vertical"
                     android:padding="18dp">
 
                     <CheckBox
                         android:id="@+id/check_webdav_enabled"
+                        style="@style/AppChromeCheckBox"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:minHeight="48dp"
-                        android:text="启用 WebDAV 多端同步"
-                        android:textColor="@color/on_surface"
-                        android:textSize="15sp" />
+                        android:text="启用 WebDAV 多端同步" />
 
                     <LinearLayout
                         android:id="@+id/layout_webdav_config"
@@ -336,24 +317,24 @@
 
                         <EditText
                             android:id="@+id/input_webdav_url"
+                            style="@style/AppChromeInputText"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:background="@drawable/bg_input"
+                            android:background="@drawable/bg_app_input"
                             android:hint="服务器 URL (例如 https://dav.jianguoyun.com/dav/)"
                             android:minHeight="48dp"
-                            android:padding="12dp"
-                            android:textSize="14sp" />
+                            android:padding="12dp" />
 
                         <EditText
                             android:id="@+id/input_webdav_dir"
+                            style="@style/AppChromeInputText"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="10dp"
-                            android:background="@drawable/bg_input"
+                            android:background="@drawable/bg_app_input"
                             android:hint="根目录名称 (默认为 PacilRead)"
                             android:minHeight="48dp"
-                            android:padding="12dp"
-                            android:textSize="14sp" />
+                            android:padding="12dp" />
 
                         <LinearLayout
                             android:layout_width="match_parent"
@@ -363,37 +344,36 @@
 
                             <EditText
                                 android:id="@+id/input_webdav_user"
+                                style="@style/AppChromeInputText"
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_marginEnd="5dp"
                                 android:layout_weight="1"
-                                android:background="@drawable/bg_input"
+                                android:background="@drawable/bg_app_input"
                                 android:hint="用户名"
                                 android:minHeight="48dp"
-                                android:padding="12dp"
-                                android:textSize="14sp" />
+                                android:padding="12dp" />
 
                             <EditText
                                 android:id="@+id/input_webdav_password"
+                                style="@style/AppChromeInputText"
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="5dp"
                                 android:layout_weight="1"
-                                android:background="@drawable/bg_input"
+                                android:background="@drawable/bg_app_input"
                                 android:hint="密码/AppKey"
                                 android:inputType="textPassword"
                                 android:minHeight="48dp"
-                                android:padding="12dp"
-                                android:textSize="14sp" />
+                                android:padding="12dp" />
                         </LinearLayout>
 
                         <TextView
+                            style="@style/AppChromeFieldLabel"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="18dp"
-                            android:text="同步内容过滤"
-                            android:textColor="@color/on_surface"
-                            android:textSize="14sp" />
+                            android:text="同步内容过滤" />
 
                         <GridLayout
                             android:id="@+id/layout_webdav_sync_options"
@@ -408,9 +388,10 @@
                                 android:layout_height="40dp"
                                 android:layout_columnWeight="1"
                                 android:layout_margin="2dp"
-                                android:background="@drawable/bg_outline_button"
+                                android:background="@drawable/bg_app_outline_button"
                                 android:text="书架"
                                 android:textAllCaps="false"
+                                android:textColor="@color/app_button_outline_text"
                                 android:textSize="13sp" />
 
                             <Button
@@ -419,9 +400,10 @@
                                 android:layout_height="40dp"
                                 android:layout_columnWeight="1"
                                 android:layout_margin="2dp"
-                                android:background="@drawable/bg_outline_button"
+                                android:background="@drawable/bg_app_outline_button"
                                 android:text="文件"
                                 android:textAllCaps="false"
+                                android:textColor="@color/app_button_outline_text"
                                 android:textSize="13sp" />
 
                             <Button
@@ -430,9 +412,10 @@
                                 android:layout_height="40dp"
                                 android:layout_columnWeight="1"
                                 android:layout_margin="2dp"
-                                android:background="@drawable/bg_outline_button"
+                                android:background="@drawable/bg_app_outline_button"
                                 android:text="界面"
                                 android:textAllCaps="false"
+                                android:textColor="@color/app_button_outline_text"
                                 android:textSize="13sp" />
 
                             <Button
@@ -441,9 +424,10 @@
                                 android:layout_height="40dp"
                                 android:layout_columnWeight="1"
                                 android:layout_margin="2dp"
-                                android:background="@drawable/bg_outline_button"
+                                android:background="@drawable/bg_app_outline_button"
                                 android:text="主题"
                                 android:textAllCaps="false"
+                                android:textColor="@color/app_button_outline_text"
                                 android:textSize="13sp" />
 
                             <Button
@@ -452,9 +436,10 @@
                                 android:layout_height="40dp"
                                 android:layout_columnWeight="1"
                                 android:layout_margin="2dp"
-                                android:background="@drawable/bg_outline_button"
+                                android:background="@drawable/bg_app_outline_button"
                                 android:text="背景"
                                 android:textAllCaps="false"
+                                android:textColor="@color/app_button_outline_text"
                                 android:textSize="13sp" />
 
                             <Button
@@ -463,9 +448,10 @@
                                 android:layout_height="40dp"
                                 android:layout_columnWeight="1"
                                 android:layout_margin="2dp"
-                                android:background="@drawable/bg_outline_button"
+                                android:background="@drawable/bg_app_outline_button"
                                 android:text="阅读时长"
                                 android:textAllCaps="false"
+                                android:textColor="@color/app_button_outline_text"
                                 android:textSize="13sp" />
                         </GridLayout>
 
@@ -474,50 +460,46 @@
                             android:layout_width="match_parent"
                             android:layout_height="48dp"
                             android:layout_marginTop="16dp"
-                            android:background="@drawable/bg_outline_button"
+                            android:background="@drawable/bg_app_outline_button"
                             android:text="测试 WebDAV 连接"
                             android:textAllCaps="false"
-                            android:textColor="@color/on_surface" />
+                            android:textColor="@color/app_button_outline_text" />
 
                         <TextView
                             android:id="@+id/text_status"
+                            style="@style/AppChromeMicro"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
                             android:text="状态：就绪"
                             android:textAlignment="center"
-                            android:textColor="@color/primary"
-                            android:textSize="11sp" />
+                            android:textColor="@color/app_primary" />
                     </LinearLayout>
                 </LinearLayout>
 
-                <!-- Backup & Restore Section -->
                 <TextView
+                    style="@style/AppChromeSectionLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="4dp"
                     android:layout_marginBottom="10dp"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="数据备份与迁移"
-                    android:textColor="@color/primary"
-                    android:textSize="13sp" />
+                    android:text="数据备份与迁移" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="20dp"
-                    android:background="@drawable/bg_card"
+                    android:background="@drawable/bg_app_card"
                     android:elevation="2dp"
                     android:orientation="vertical"
                     android:padding="18dp">
 
                     <TextView
                         android:id="@+id/text_backup_full"
+                        style="@style/AppChromeCaption"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="全量备份：从未执行"
-                        android:textColor="@color/on_surface_muted"
-                        android:textSize="12sp" />
+                        android:text="全量备份：从未执行" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -531,10 +513,10 @@
                             android:layout_height="46dp"
                             android:layout_marginEnd="5dp"
                             android:layout_weight="1"
-                            android:background="@drawable/bg_positive_button"
+                            android:background="@drawable/bg_app_positive_button"
                             android:text="全量备份"
                             android:textAllCaps="false"
-                            android:textColor="@android:color/white" />
+                            android:textColor="@color/app_button_positive_text" />
 
                         <Button
                             android:id="@+id/button_full_restore"
@@ -542,20 +524,19 @@
                             android:layout_height="46dp"
                             android:layout_marginStart="5dp"
                             android:layout_weight="1"
-                            android:background="@drawable/bg_outline_button"
+                            android:background="@drawable/bg_app_outline_button"
                             android:text="全量恢复"
                             android:textAllCaps="false"
-                            android:textColor="@color/on_surface" />
+                            android:textColor="@color/app_button_outline_text" />
                     </LinearLayout>
 
                     <TextView
                         android:id="@+id/text_backup_lite"
+                        style="@style/AppChromeCaption"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="20dp"
-                        android:text="增量备份：从未执行"
-                        android:textColor="@color/on_surface_muted"
-                        android:textSize="12sp" />
+                        android:text="增量备份：从未执行" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -569,10 +550,10 @@
                             android:layout_height="46dp"
                             android:layout_marginEnd="5dp"
                             android:layout_weight="1"
-                            android:background="@drawable/bg_positive_button"
+                            android:background="@drawable/bg_app_positive_button"
                             android:text="增量备份"
                             android:textAllCaps="false"
-                            android:textColor="@android:color/white" />
+                            android:textColor="@color/app_button_positive_text" />
 
                         <Button
                             android:id="@+id/button_lite_restore"
@@ -580,46 +561,43 @@
                             android:layout_height="46dp"
                             android:layout_marginStart="5dp"
                             android:layout_weight="1"
-                            android:background="@drawable/bg_outline_button"
+                            android:background="@drawable/bg_app_outline_button"
                             android:text="增量恢复"
                             android:textAllCaps="false"
-                            android:textColor="@color/on_surface" />
+                            android:textColor="@color/app_button_outline_text" />
                     </LinearLayout>
                 </LinearLayout>
-                
-                <!-- Voice & Labs Section -->
+
                 <TextView
+                    style="@style/AppChromeSectionLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="4dp"
                     android:layout_marginBottom="10dp"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="听书设置"
-                    android:textColor="@color/primary"
-                    android:textSize="13sp" />
+                    android:text="听书设置" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="20dp"
-                    android:background="@drawable/bg_card"
+                    android:background="@drawable/bg_app_card"
                     android:elevation="2dp"
                     android:orientation="vertical"
                     android:padding="18dp">
 
                     <TextView
+                        style="@style/AppChromeBody"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="朗读引擎"
-                        android:textColor="@color/on_surface"
-                        android:textSize="15sp" />
+                        android:text="朗读引擎" />
 
                     <Spinner
                         android:id="@+id/spinner_tts_engine"
                         android:layout_width="match_parent"
                         android:layout_height="48dp"
                         android:layout_marginTop="10dp"
-                        android:background="@drawable/bg_input" />
+                        android:background="@drawable/bg_app_input"
+                        android:popupBackground="@drawable/bg_app_dialog" />
 
                     <LinearLayout
                         android:id="@+id/layout_tts_mimo_key"
@@ -629,23 +607,22 @@
                         android:orientation="vertical">
 
                         <TextView
+                            style="@style/AppChromeBody"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                        android:text="MiMo TTS API 密钥"
-                        android:textColor="@color/on_surface"
-                        android:textSize="15sp" />
+                            android:text="MiMo TTS API 密钥" />
 
                         <EditText
                             android:id="@+id/input_mimo_api_key"
+                            style="@style/AppChromeInputText"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="10dp"
-                            android:background="@drawable/bg_input"
+                            android:background="@drawable/bg_app_input"
                             android:hint="输入 API Key 以启用在线语音"
                             android:inputType="textPassword"
                             android:minHeight="48dp"
-                            android:padding="12dp"
-                            android:textSize="14sp" />
+                            android:padding="12dp" />
                     </LinearLayout>
                 </LinearLayout>
 

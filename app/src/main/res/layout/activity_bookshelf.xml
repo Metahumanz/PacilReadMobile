@@ -3,7 +3,8 @@
     android:id="@+id/main_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_window_backdrop">
+    android:background="@drawable/bg_window_backdrop"
+    android:theme="@style/AppChromeSurfaceTheme">
 
     <LinearLayout
         android:id="@+id/content_shell"
@@ -31,35 +32,31 @@
                 android:minHeight="0dp"
                 android:padding="0dp"
                 android:text="☰"
-                android:textColor="@color/on_surface"
+                android:textColor="@color/app_text_primary"
                 android:textSize="18sp" />
 
             <TextView
                 android:id="@+id/text_section_title"
+                style="@style/AppChromeBarTitle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:layout_weight="1"
-                android:fontFamily="sans-serif-medium"
                 android:text="书架大厅"
-                android:textColor="@color/on_surface"
-                android:textSize="18sp"
                 android:visibility="visible" />
 
             <Button
                 android:id="@+id/button_header_action"
                 android:layout_width="wrap_content"
                 android:layout_height="38dp"
-                android:background="@drawable/bg_primary_button"
-                android:fontFamily="sans-serif-medium"
+                android:background="@drawable/bg_app_primary_button"
                 android:minHeight="0dp"
                 android:minWidth="0dp"
                 android:paddingStart="14dp"
                 android:paddingEnd="14dp"
                 android:text="+ 添加"
                 android:textAllCaps="false"
-                android:textColor="@android:color/white"
-                android:textSize="13sp" />
+                android:textColor="@color/app_button_primary_text" />
         </LinearLayout>
 
         <!-- ========== Bookshelf Content ========== -->
@@ -86,7 +83,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:background="@drawable/bg_input"
+                    android:background="@drawable/bg_app_input"
                     android:elevation="2dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
@@ -108,6 +105,7 @@
 
                     <EditText
                         android:id="@+id/input_search"
+                        style="@style/AppChromeInputText"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="8dp"
@@ -116,17 +114,14 @@
                         android:imeOptions="actionSearch"
                         android:paddingTop="10dp"
                         android:paddingBottom="10dp"
-                        android:singleLine="true"
-                        android:textColor="@color/on_surface"
-                        android:textColorHint="@color/on_surface_muted"
-                        android:textSize="14sp" />
+                        android:singleLine="true" />
                 </LinearLayout>
 
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="10dp"
-                    android:background="@drawable/bg_card"
+                    android:background="@drawable/bg_app_card"
                     android:elevation="2dp"
                     android:orientation="horizontal"
                     android:padding="3dp">
@@ -135,36 +130,33 @@
                         android:id="@+id/button_mode_card"
                         android:layout_width="38dp"
                         android:layout_height="34dp"
-                        android:background="@drawable/bg_primary_button"
+                        android:background="@drawable/bg_app_primary_button"
                         android:minHeight="0dp"
                         android:minWidth="0dp"
                         android:padding="0dp"
                         android:text="▦"
-                        android:textColor="@android:color/white"
-                        android:textSize="13sp" />
+                        android:textColor="@color/app_button_primary_text" />
 
                     <Button
                         android:id="@+id/button_mode_list"
                         android:layout_width="38dp"
                         android:layout_height="34dp"
                         android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_outline_button"
+                        android:background="@drawable/bg_app_outline_button"
                         android:minHeight="0dp"
                         android:minWidth="0dp"
                         android:padding="0dp"
                         android:text="☰"
-                        android:textColor="@color/on_surface"
-                        android:textSize="13sp" />
+                        android:textColor="@color/app_button_outline_text" />
                 </LinearLayout>
             </LinearLayout>
 
             <TextView
                 android:id="@+id/text_stats"
+                style="@style/AppChromeMicro"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:textColor="@color/on_surface_muted"
-                android:textSize="11sp" />
+                android:layout_marginTop="6dp" />
 
             <!-- Book grid / list / empty -->
             <FrameLayout
@@ -215,7 +207,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginHorizontal="8dp"
-                        android:background="@drawable/bg_card"
+                        android:background="@drawable/bg_app_card"
                         android:elevation="6dp"
                         android:gravity="center"
                         android:orientation="vertical"
@@ -227,39 +219,35 @@
                         <TextView
                             android:layout_width="68dp"
                             android:layout_height="68dp"
-                            android:background="@drawable/bg_primary_button"
+                            android:background="@drawable/bg_app_primary_button"
                             android:gravity="center"
                             android:text="+"
-                            android:textColor="@android:color/white"
+                            android:textColor="@color/app_button_primary_text"
                             android:textSize="31sp" />
 
                         <TextView
                             android:id="@+id/text_empty_title"
+                            style="@style/AppChromePageTitle"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="16dp"
-                            android:fontFamily="sans-serif-medium"
-                            android:text="@string/empty_bookshelf"
-                            android:textColor="@color/on_surface"
-                            android:textSize="20sp" />
+                            android:text="@string/empty_bookshelf" />
 
                         <TextView
                             android:id="@+id/text_empty_hint"
+                            style="@style/AppChromeBodyMuted"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="10dp"
                             android:gravity="center"
-                            android:text="@string/empty_bookshelf_hint"
-                            android:textColor="@color/on_surface_muted"
-                            android:textSize="14sp" />
+                            android:text="@string/empty_bookshelf_hint" />
 
                         <Button
                             android:id="@+id/button_empty_action"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="18dp"
-                            android:background="@drawable/bg_primary_button"
-                            android:fontFamily="sans-serif-medium"
+                            android:background="@drawable/bg_app_primary_button"
                             android:minHeight="44dp"
                             android:minWidth="0dp"
                             android:paddingStart="18dp"
@@ -268,8 +256,7 @@
                             android:paddingBottom="10dp"
                             android:text="添加书籍"
                             android:textAllCaps="false"
-                            android:textColor="@android:color/white"
-                            android:textSize="14sp" />
+                            android:textColor="@color/app_button_primary_text" />
                     </LinearLayout>
                 </LinearLayout>
             </FrameLayout>
@@ -282,7 +269,7 @@
         android:id="@+id/layout_loading"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#66F4F8FD"
+        android:background="@color/app_scrim"
         android:gravity="center"
         android:orientation="vertical"
         android:visibility="gone">
@@ -290,7 +277,7 @@
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_card"
+            android:background="@drawable/bg_app_card"
             android:elevation="8dp"
             android:gravity="center"
             android:orientation="vertical"
@@ -305,12 +292,11 @@
 
             <TextView
                 android:id="@+id/text_loading"
+                style="@style/AppChromeBody"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="处理中..."
-                android:textColor="@color/on_surface"
-                android:textSize="14sp" />
+                android:text="处理中..." />
         </LinearLayout>
     </LinearLayout>
 

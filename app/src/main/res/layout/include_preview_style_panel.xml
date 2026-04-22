@@ -2,54 +2,50 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/bg_card"
+    android:background="@drawable/bg_app_card"
     android:elevation="4dp"
     android:orientation="vertical"
     android:padding="18dp">
 
     <TextView
+        style="@style/AppChromeCardTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:fontFamily="sans-serif-medium"
-        android:text="排版设置"
-        android:textColor="@color/on_surface"
-        android:textSize="18sp" />
+        android:text="排版设置" />
 
     <TextView
+        style="@style/AppChromeCaption"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:text="这里的调整会即时作用到下面的阅读样张，并同步到正式阅读页。"
-        android:textColor="@color/on_surface_muted"
-        android:textSize="12sp" />
+        android:text="这里的调整会即时作用到下面的阅读样张，并同步到正式阅读页。" />
 
     <TextView
+        style="@style/AppChromeFieldLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="界面明暗"
-        android:textColor="@color/on_surface"
-        android:textStyle="bold" />
+        android:text="界面明暗" />
 
     <Spinner
         android:id="@+id/preview_style_spinner_ui_theme_mode"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:background="@drawable/bg_input"
+        android:background="@drawable/bg_app_input"
         android:minHeight="48dp"
         android:paddingStart="10dp"
         android:paddingTop="8dp"
         android:paddingEnd="10dp"
-        android:paddingBottom="8dp" />
+        android:paddingBottom="8dp"
+        android:popupBackground="@drawable/bg_app_dialog" />
 
     <TextView
+        style="@style/AppChromeFieldLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="阅读预设"
-        android:textColor="@color/on_surface"
-        android:textStyle="bold" />
+        android:text="阅读预设" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -63,13 +59,13 @@
             android:layout_height="wrap_content"
             android:layout_marginEnd="8dp"
             android:layout_weight="1"
-            android:background="@drawable/bg_outline_button"
+            android:background="@drawable/bg_app_outline_button"
             android:minHeight="44dp"
             android:paddingTop="10dp"
             android:paddingBottom="10dp"
             android:text="纸控"
             android:textAllCaps="false"
-            android:textColor="@color/on_surface" />
+            android:textColor="@color/app_button_outline_text" />
 
         <Button
             android:id="@+id/preview_style_button_theme_forest"
@@ -77,55 +73,54 @@
             android:layout_height="wrap_content"
             android:layout_marginEnd="8dp"
             android:layout_weight="1"
-            android:background="@drawable/bg_outline_button"
+            android:background="@drawable/bg_app_outline_button"
             android:minHeight="44dp"
             android:paddingTop="10dp"
             android:paddingBottom="10dp"
             android:text="护眼"
             android:textAllCaps="false"
-            android:textColor="@color/on_surface" />
+            android:textColor="@color/app_button_outline_text" />
 
         <Button
             android:id="@+id/preview_style_button_theme_night"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:background="@drawable/bg_outline_button"
+            android:background="@drawable/bg_app_outline_button"
             android:minHeight="44dp"
             android:paddingTop="10dp"
             android:paddingBottom="10dp"
             android:text="夜航"
             android:textAllCaps="false"
-            android:textColor="@color/on_surface" />
+            android:textColor="@color/app_button_outline_text" />
     </LinearLayout>
 
     <TextView
+        style="@style/AppChromeFieldLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="字体"
-        android:textColor="@color/on_surface"
-        android:textStyle="bold" />
+        android:text="字体" />
 
     <Spinner
         android:id="@+id/preview_style_spinner_font_family"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:background="@drawable/bg_input"
+        android:background="@drawable/bg_app_input"
         android:minHeight="48dp"
         android:paddingStart="10dp"
         android:paddingTop="8dp"
         android:paddingEnd="10dp"
-        android:paddingBottom="8dp" />
+        android:paddingBottom="8dp"
+        android:popupBackground="@drawable/bg_app_dialog" />
 
     <TextView
+        style="@style/AppChromeFieldLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="字号"
-        android:textColor="@color/on_surface"
-        android:textStyle="bold" />
+        android:text="字号" />
 
     <SeekBar
         android:id="@+id/preview_style_seek_font"
@@ -135,17 +130,16 @@
 
     <TextView
         android:id="@+id/preview_style_text_font"
+        style="@style/AppChromeCaption"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/on_surface_muted" />
+        android:layout_height="wrap_content" />
 
     <TextView
+        style="@style/AppChromeFieldLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="字重"
-        android:textColor="@color/on_surface"
-        android:textStyle="bold" />
+        android:text="字重" />
 
     <SeekBar
         android:id="@+id/preview_style_seek_font_weight"
@@ -155,17 +149,16 @@
 
     <TextView
         android:id="@+id/preview_style_text_font_weight"
+        style="@style/AppChromeCaption"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/on_surface_muted" />
+        android:layout_height="wrap_content" />
 
     <TextView
+        style="@style/AppChromeFieldLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="行距"
-        android:textColor="@color/on_surface"
-        android:textStyle="bold" />
+        android:text="行距" />
 
     <SeekBar
         android:id="@+id/preview_style_seek_line_spacing"
@@ -175,17 +168,16 @@
 
     <TextView
         android:id="@+id/preview_style_text_line_spacing"
+        style="@style/AppChromeCaption"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/on_surface_muted" />
+        android:layout_height="wrap_content" />
 
     <TextView
+        style="@style/AppChromeFieldLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="左边距"
-        android:textColor="@color/on_surface"
-        android:textStyle="bold" />
+        android:text="左边距" />
 
     <SeekBar
         android:id="@+id/preview_style_seek_left_padding"
@@ -195,17 +187,16 @@
 
     <TextView
         android:id="@+id/preview_style_text_left_padding"
+        style="@style/AppChromeCaption"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/on_surface_muted" />
+        android:layout_height="wrap_content" />
 
     <TextView
+        style="@style/AppChromeFieldLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="右边距"
-        android:textColor="@color/on_surface"
-        android:textStyle="bold" />
+        android:text="右边距" />
 
     <SeekBar
         android:id="@+id/preview_style_seek_right_padding"
@@ -215,17 +206,16 @@
 
     <TextView
         android:id="@+id/preview_style_text_right_padding"
+        style="@style/AppChromeCaption"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/on_surface_muted" />
+        android:layout_height="wrap_content" />
 
     <TextView
+        style="@style/AppChromeFieldLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="上边距"
-        android:textColor="@color/on_surface"
-        android:textStyle="bold" />
+        android:text="上边距" />
 
     <SeekBar
         android:id="@+id/preview_style_seek_top_padding"
@@ -235,17 +225,16 @@
 
     <TextView
         android:id="@+id/preview_style_text_top_padding"
+        style="@style/AppChromeCaption"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/on_surface_muted" />
+        android:layout_height="wrap_content" />
 
     <TextView
+        style="@style/AppChromeFieldLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="下边距"
-        android:textColor="@color/on_surface"
-        android:textStyle="bold" />
+        android:text="下边距" />
 
     <SeekBar
         android:id="@+id/preview_style_seek_bottom_padding"
@@ -255,33 +244,32 @@
 
     <TextView
         android:id="@+id/preview_style_text_bottom_padding"
+        style="@style/AppChromeCaption"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/on_surface_muted" />
+        android:layout_height="wrap_content" />
 
     <CheckBox
         android:id="@+id/preview_style_check_keep_screen_on"
+        style="@style/AppChromeCheckBox"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="阅读时保持屏幕常亮"
-        android:textColor="@color/on_surface" />
+        android:text="阅读时保持屏幕常亮" />
 
     <CheckBox
         android:id="@+id/preview_style_check_show_title"
+        style="@style/AppChromeCheckBox"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="章节首页显示标题"
-        android:textColor="@color/on_surface" />
+        android:text="章节首页显示标题" />
 
     <TextView
+        style="@style/AppChromeFieldLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="背景图"
-        android:textColor="@color/on_surface"
-        android:textStyle="bold" />
+        android:text="背景图" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -295,50 +283,48 @@
             android:layout_height="wrap_content"
             android:layout_marginEnd="8dp"
             android:layout_weight="1"
-            android:background="@drawable/bg_outline_button"
+            android:background="@drawable/bg_app_outline_button"
             android:minHeight="44dp"
             android:paddingTop="10dp"
             android:paddingBottom="10dp"
             android:text="选择背景"
             android:textAllCaps="false"
-            android:textColor="@color/primary" />
+            android:textColor="@color/app_button_outline_text" />
 
         <Button
             android:id="@+id/preview_style_button_clear_background"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:background="@drawable/bg_outline_button"
+            android:background="@drawable/bg_app_outline_button"
             android:minHeight="44dp"
             android:paddingTop="10dp"
             android:paddingBottom="10dp"
             android:text="恢复预设"
             android:textAllCaps="false"
-            android:textColor="@color/primary" />
+            android:textColor="@color/app_button_outline_text" />
     </LinearLayout>
 
     <TextView
         android:id="@+id/preview_style_text_background"
+        style="@style/AppChromeCaption"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:textColor="@color/on_surface_muted"
-        android:textSize="12sp" />
+        android:layout_marginTop="8dp" />
 
     <TextView
+        style="@style/AppChromeFieldLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="自定义主题"
-        android:textColor="@color/on_surface"
-        android:textStyle="bold" />
+        android:text="自定义主题" />
 
     <Button
         android:id="@+id/preview_style_button_save_theme"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
-        android:background="@drawable/bg_outline_button"
+        android:background="@drawable/bg_app_outline_button"
         android:minHeight="44dp"
         android:paddingStart="20dp"
         android:paddingTop="10dp"
@@ -346,7 +332,7 @@
         android:paddingBottom="10dp"
         android:text="保存当前主题"
         android:textAllCaps="false"
-        android:textColor="@color/primary" />
+        android:textColor="@color/app_button_outline_text" />
 
     <LinearLayout
         android:id="@+id/preview_style_custom_theme_list"

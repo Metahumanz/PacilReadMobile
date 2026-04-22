@@ -6,7 +6,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:alpha="0"
-        android:background="#72000000"
+        android:background="@color/app_scrim"
         android:visibility="gone" />
 
     <LinearLayout
@@ -34,20 +34,19 @@
             <TextView
                 android:layout_width="36dp"
                 android:layout_height="36dp"
-                android:background="@drawable/bg_primary_button"
+                android:background="@drawable/bg_app_primary_button"
                 android:gravity="center"
                 android:text="P"
-                android:textColor="@android:color/white"
+                android:textColor="@color/app_button_primary_text"
                 android:textSize="18sp"
                 android:textStyle="bold|italic" />
 
             <TextView
+                style="@style/AppChromeDrawerBrand"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="12dp"
                 android:text="PacilRead"
-                android:textColor="@color/on_surface"
-                android:textSize="20sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
@@ -75,13 +74,11 @@
 
             <TextView
                 android:id="@+id/text_nav_bookshelf"
+                style="@style/AppChromeDrawerItem"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="12dp"
-                android:fontFamily="sans-serif-medium"
-                android:text="书架大厅"
-                android:textColor="@color/on_surface"
-                android:textSize="14sp" />
+                android:text="书架大厅" />
         </LinearLayout>
 
         <LinearLayout
@@ -108,13 +105,11 @@
 
             <TextView
                 android:id="@+id/text_nav_preview"
+                style="@style/AppChromeDrawerItem"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="12dp"
-                android:fontFamily="sans-serif-medium"
-                android:text="排版与预览"
-                android:textColor="@color/on_surface"
-                android:textSize="14sp" />
+                android:text="排版与预览" />
         </LinearLayout>
 
         <!-- Spacer -->
@@ -126,13 +121,12 @@
         <!-- Status -->
         <TextView
             android:id="@+id/text_drawer_status"
+            style="@style/AppChromeMicro"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_soft_button"
+            android:background="@drawable/bg_app_soft_button"
             android:lineSpacingExtra="2dp"
             android:padding="12dp"
-            android:textColor="@color/on_surface_muted"
-            android:textSize="11sp"
             android:visibility="gone" />
 
         <!-- Settings at bottom -->
@@ -160,13 +154,11 @@
 
             <TextView
                 android:id="@+id/text_nav_settings"
+                style="@style/AppChromeDrawerItem"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="12dp"
-                android:fontFamily="sans-serif-medium"
-                android:text="偏好设置"
-                android:textColor="@color/on_surface"
-                android:textSize="14sp" />
+                android:text="偏好设置" />
         </LinearLayout>
     </LinearLayout>
 </merge>

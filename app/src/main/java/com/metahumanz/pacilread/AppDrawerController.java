@@ -265,7 +265,7 @@ public class AppDrawerController {
         }
         container.setBackgroundResource(selected ? R.drawable.bg_nav_item_active : R.drawable.bg_nav_item_idle);
         if (textView != null) {
-            textView.setTextColor(activity.getColor(selected ? R.color.primary : R.color.on_surface));
+            textView.setTextColor(activity.getColor(selected ? R.color.app_nav_text_active : R.color.app_nav_text_idle));
         }
     }
 

@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginTop="8dp"
-    android:background="@drawable/bg_input"
+    android:background="@drawable/bg_app_input"
     android:clickable="true"
     android:focusable="true"
     android:minHeight="72dp"
@@ -18,36 +18,32 @@
 
         <TextView
             android:id="@+id/text_stat_row_title"
+            style="@style/AppChromeBodyStrong"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/on_surface"
-            android:textSize="15sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/text_stat_row_author"
+            style="@style/AppChromeBodyMuted"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:textColor="@color/on_surface_muted"
-            android:textSize="13sp" />
+            android:layout_marginTop="4dp" />
 
         <TextView
             android:id="@+id/text_stat_row_meta"
+            style="@style/AppChromeAccentCaption"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:textColor="@color/primary"
-            android:textSize="12sp" />
+            android:layout_marginTop="8dp" />
     </LinearLayout>
 
     <TextView
         android:id="@+id/text_stat_row_duration"
+        style="@style/AppChromeMetricValue"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center_vertical"
         android:layout_marginStart="12dp"
-        android:textColor="@color/on_surface"
-        android:textSize="15sp"
         android:textStyle="bold" />
 </LinearLayout>

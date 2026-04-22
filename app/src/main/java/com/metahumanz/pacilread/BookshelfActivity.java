@@ -310,8 +310,8 @@ public class BookshelfActivity extends ThemedActivity {
     }
 
     private void styleSelectionButton(Button button, boolean selected) {
-        button.setBackgroundResource(selected ? R.drawable.bg_primary_button : R.drawable.bg_outline_button);
-        button.setTextColor(getColor(selected ? android.R.color.white : R.color.on_surface));
+        button.setBackgroundResource(selected ? R.drawable.bg_app_primary_button : R.drawable.bg_app_outline_button);
+        button.setTextColor(getColor(selected ? R.color.app_button_primary_text : R.color.app_button_outline_text));
     }
 
     private void refreshBooks() {

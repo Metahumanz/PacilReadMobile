@@ -23,4 +23,46 @@
     <color name="reader_stage_stroke">#22FFFFFF</color>
     <color name="positive">#55B48B</color>
     <color name="danger">#EF8585</color>
+
+    <color name="app_background">#201D1D</color>
+    <color name="app_surface">#302C2C</color>
+    <color name="app_surface_secondary">#282424</color>
+    <color name="app_surface_raised">#2B2727</color>
+    <color name="app_backdrop_top">#201D1D</color>
+    <color name="app_backdrop_bottom">#241F1F</color>
+
+    <color name="app_text_primary">#FDFCFC</color>
+    <color name="app_text_secondary">#9A9898</color>
+    <color name="app_text_muted">#6E6E73</color>
+    <color name="app_text_on_primary">#FDFCFC</color>
+
+    <color name="app_primary">#007AFF</color>
+    <color name="app_primary_variant">#0056B3</color>
+    <color name="app_primary_hover">#0056B3</color>
+    <color name="app_primary_tint">#13243A</color>
+
+    <color name="app_border">#1F0F0000</color>
+    <color name="app_border_strong">#646262</color>
+    <color name="app_glass_fill">#E6302C2C</color>
+    <color name="app_glass_fill_strong">#F0302C2C</color>
+    <color name="app_glass_stroke">#33646262</color>
+
+    <color name="app_button_primary_text">#FDFCFC</color>
+    <color name="app_button_outline_text">#FDFCFC</color>
+    <color name="app_button_secondary_text">#FDFCFC</color>
+    <color name="app_button_positive_text">#0C1A0E</color>
+    <color name="app_button_danger_text">#FDFCFC</color>
+
+    <color name="app_nav_text_active">#FDFCFC</color>
+    <color name="app_nav_text_idle">#9A9898</color>
+    <color name="app_nav_active_bg">#302C2C</color>
+    <color name="app_nav_idle_bg">#00000000</color>
+    <color name="app_scrim">#7A000000</color>
+
+    <color name="app_badge_fill">#1AFDFCFC</color>
+    <color name="app_badge_stroke">#35FDFCFC</color>
+    <color name="app_badge_text">#FDFCFC</color>
+
+    <color name="app_positive">#30D158</color>
+    <color name="app_danger">#FF3B30</color>
 </resources>
