@@ -569,6 +569,7 @@ public final class ReaderPagingAnimator {
         views.pageIncoming.setVisibility(View.GONE);
         resetInteractiveTouchState();
         state.isAnimating = false;
+        activity.markReadingActivity();
         chrome.updateUiAfterPageChange();
         content.scheduleProgressSave();
         chrome.scheduleAutoHide();

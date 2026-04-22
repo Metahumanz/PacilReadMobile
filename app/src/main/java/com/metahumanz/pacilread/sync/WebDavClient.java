@@ -17,11 +17,17 @@ import java.io.OutputStream;
 import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class WebDavClient {
+    private static final Pattern HREF_PATTERN = Pattern.compile("(?i)<[^>]*href[^>]*>(.*?)</[^>]*href>");
     private final SettingsStore settingsStore;
 
     public WebDavClient(SettingsStore settingsStore) {
@@ -52,12 +58,22 @@ public class WebDavClient {
         requireSuccessfulResponse(request(base + "backgrounds/", "MKCOL", null, null), "初始化背景备份目录", true);
     }
 
+    public void ensureReadingStatsDirectory() throws Exception {
+        String base = backupBaseUrl();
+        requireSuccessfulResponse(request(base, "MKCOL", null, null), "初始化备份目录", true);
+        requireSuccessfulResponse(request(readingStatsBaseUrl(), "MKCOL", null, null), "初始化阅读统计目录", true);
+    }
+
     public String backupBaseUrl() {
         String base = requireConfiguredProgressBaseUrl();
         if (!base.endsWith("/")) {
             base += "/";
         }
         return base + "PacilRead/";
+    }
+
+    public String readingStatsBaseUrl() {
+        return backupBaseUrl() + "readingStats/";
     }
 
     public ProgressPayload downloadProgress(BookRecord book) throws Exception {
@@ -108,6 +124,43 @@ public class WebDavClient {
 
     public Response head(String url) throws Exception {
         return request(url, "HEAD", null, null);
+    }
+
+    public void delete(String remoteUrl) throws Exception {
+        Response response = request(remoteUrl, "DELETE", null, null);
+        requireSuccessfulResponse(response, "删除云端文件", true);
+    }
+
+    public List<String> listFiles(String remoteDirectoryUrl) throws Exception {
+        Response response = request(remoteDirectoryUrl, "PROPFIND", null, "1");
+        if (response.code == 404) {
+            return new ArrayList<>();
+        }
+        requireSuccessfulResponse(response, "列出云端目录", false);
+        List<String> results = new ArrayList<>();
+        Matcher matcher = HREF_PATTERN.matcher(response.body == null ? "" : response.body);
+        while (matcher.find()) {
+            String rawHref = decodeXmlEntities(matcher.group(1));
+            if (rawHref == null || rawHref.isBlank()) {
+                continue;
+            }
+            try {
+                String absoluteUrl = new URL(new URL(remoteDirectoryUrl), rawHref).toString();
+                if (sameDirectory(remoteDirectoryUrl, absoluteUrl)) {
+                    continue;
+                }
+                if (absoluteUrl.startsWith(remoteDirectoryUrl)) {
+                    results.add(absoluteUrl);
+                    continue;
+                }
+                String decodedAbsolute = URLDecoder.decode(absoluteUrl, StandardCharsets.UTF_8.name());
+                if (decodedAbsolute.startsWith(remoteDirectoryUrl)) {
+                    results.add(decodedAbsolute);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return results;
     }
 
     public void uploadText(String remoteUrl, String content, String contentType) throws Exception {
@@ -219,6 +272,21 @@ public class WebDavClient {
     private String authorizationHeader() {
         String raw = settingsStore.getWebDavUser() + ":" + settingsStore.getWebDavPassword();
         return "Basic " + Base64.encodeToString(raw.getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP);
+    }
+
+    private boolean sameDirectory(String directoryUrl, String absoluteUrl) {
+        String normalizedDirectory = directoryUrl.endsWith("/") ? directoryUrl : directoryUrl + "/";
+        String normalizedAbsolute = absoluteUrl.endsWith("/") ? absoluteUrl : absoluteUrl + "/";
+        return normalizedDirectory.equals(normalizedAbsolute);
+    }
+
+    private String decodeXmlEntities(String value) {
+        return value
+                .replace("&amp;", "&")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&#39;", "'");
     }
 
     private String requireConfiguredServerUrl() {

@@ -16,6 +16,7 @@ import android.widget.SeekBar;
 import androidx.core.view.WindowCompat;
 
 import com.metahumanz.pacilread.R;
+import com.metahumanz.pacilread.ReadingStatsActivity;
 import com.metahumanz.pacilread.reader.modern.content.ReaderContentController;
 import com.metahumanz.pacilread.reader.modern.dialog.ReaderDialogSupport;
 import com.metahumanz.pacilread.reader.modern.dialog.ReaderLibraryDialogs;
@@ -24,6 +25,7 @@ import com.metahumanz.pacilread.reader.modern.dialog.ReaderStyleDialogController
 import com.metahumanz.pacilread.reader.modern.paging.ReaderNavigationController;
 import com.metahumanz.pacilread.reader.modern.paging.ReaderPagingAnimator;
 import com.metahumanz.pacilread.reader.modern.playback.ReaderAutoPageController;
+import com.metahumanz.pacilread.reader.modern.stats.ReaderReadingStatsTracker;
 import com.metahumanz.pacilread.reader.modern.tts.ReaderTtsController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderStyleController;
@@ -47,6 +49,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private ReaderLibraryDialogs libraryDialogs;
     private ReaderStyleDialogController styleDialogs;
     private ReaderOptionsDialogController optionsDialogs;
+    private ReaderReadingStatsTracker readingStatsTracker;
     private GestureDetector gestureDetector;
     private BroadcastReceiver sysMetricsReceiver;
 
@@ -58,6 +61,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
 
         runtime = new ReaderRuntime(this);
         state = new ReaderSessionState();
+        readingStatsTracker = new ReaderReadingStatsTracker(runtime, state);
         state.pagingTouchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
         state.bookId = getIntent().getLongExtra("book_id", -1L);
         if (savedInstanceState != null) {
@@ -84,6 +88,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (readingStatsTracker != null) {
+            readingStatsTracker.resume();
+        }
         chrome.updateSystemBarsVisibility(state.controlsVisible);
         chrome.applyGlassOpacity();
         if (state.controlsVisible) {
@@ -103,6 +110,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     @Override
     protected void onPause() {
         super.onPause();
+        if (readingStatsTracker != null) {
+            readingStatsTracker.pause();
+        }
         chrome.cancelAutoHide();
         paging.cancelInteractiveAnimator();
         paging.cancelInteractivePaging();
@@ -110,7 +120,6 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         tts.stopTts();
         content.cancelPendingProgressSave();
         content.persistProgress();
-        content.recordSessionStats();
         state.pendingTapPagingDelta = 0;
         paging.removeWarmupCallbacks();
     }
@@ -120,6 +129,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         super.onDestroy();
         if (sysMetricsReceiver != null) {
             unregisterReceiver(sysMetricsReceiver);
+        }
+        if (readingStatsTracker != null) {
+            readingStatsTracker.shutdown();
         }
         runtime.shutdown();
         paging.cancelInteractiveAnimator();
@@ -138,6 +150,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            markReadingActivity();
+        }
         if (paging.handleReaderPagingTouchEvent(event)) {
             return true;
         }
@@ -218,6 +233,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         views.themeToggleButton.setOnClickListener(v -> chrome.toggleReaderUiTheme());
         views.ttsButton.setOnClickListener(v -> tts.showTtsDialog());
         views.autoPageButton.setOnClickListener(v -> autoPage.showAutoPageDialog());
+        views.readerTitle.setOnClickListener(v -> openReadingStatsForCurrentBook());
 
         View.OnTouchListener keepMenuAliveListener = (view, event) -> {
             if (state.controlsVisible && event.getActionMasked() == MotionEvent.ACTION_DOWN) {
@@ -305,5 +321,26 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 return false;
             }
         });
+    }
+
+    public void markReadingActivity() {
+        if (readingStatsTracker != null) {
+            readingStatsTracker.markActivity();
+        }
+    }
+
+    public void onReaderBookLoaded() {
+        if (readingStatsTracker != null) {
+            readingStatsTracker.bindBook(state.book);
+        }
+    }
+
+    public void openReadingStatsForCurrentBook() {
+        if (!runtime.settingsStore.isReadingTimeTrackingEnabled() || state.book == null) {
+            return;
+        }
+        Intent intent = new Intent(this, ReadingStatsActivity.class);
+        intent.putExtra("book_id", state.book.id);
+        startActivity(intent);
     }
 }

@@ -17,12 +17,13 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.ImageButton;
-import android.view.MenuItem;
 
 import com.metahumanz.pacilread.importer.BookImportService;
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
+import com.metahumanz.pacilread.stats.ReadingStatsUtils;
 import com.metahumanz.pacilread.sync.WebDavBackupManager;
+import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
 import com.metahumanz.pacilread.sync.WebDavClient;
 import com.metahumanz.pacilread.theme.ThemedActivity;
 
@@ -46,6 +47,7 @@ public class SettingsActivity extends ThemedActivity {
     private SettingsStore settingsStore;
     private WebDavClient webDavClient;
     private WebDavBackupManager backupManager;
+    private ReadingStatsSyncManager readingStatsSyncManager;
     private BookImportService importService;
 
     private TextView statusText;
@@ -54,6 +56,7 @@ public class SettingsActivity extends ThemedActivity {
 
     private CheckBox autoOpenCheck;
     private CheckBox readerMenuAutoHideCheck;
+    private CheckBox readingTimeTrackingCheck;
     private CheckBox webDavEnabledCheck;
     private EditText urlInput;
     private EditText dirInput;
@@ -77,10 +80,19 @@ public class SettingsActivity extends ThemedActivity {
     private Button webDavSyncUiButton;
     private Button webDavSyncThemesButton;
     private Button webDavSyncBackgroundsButton;
+    private Button webDavSyncReadingStatsButton;
+    private Button statsPeriodTodayButton;
+    private Button statsPeriodWeekButton;
+    private Button statsPeriodYearButton;
+    private Button openReadingStatsButton;
     private View webDavSyncOptionsLayout;
     private View ttsMimoKeyLayout;
+    private View readingStatsContentLayout;
+    private TextView readingStatsHintText;
+    private TextView readingStatsTotalText;
     private boolean bindingSettingsValues = false;
     private boolean settingsBusy = false;
+    private String selectedReadingStatsPeriod = ReadingStatsUtils.PERIOD_TODAY;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -93,11 +105,13 @@ public class SettingsActivity extends ThemedActivity {
         settingsStore = new SettingsStore(this);
         webDavClient = new WebDavClient(settingsStore);
         backupManager = new WebDavBackupManager(this, databaseHelper, settingsStore, webDavClient);
+        readingStatsSyncManager = new ReadingStatsSyncManager(this, databaseHelper, settingsStore, webDavClient);
         importService = new BookImportService(this);
 
 
         autoOpenCheck = findViewById(R.id.check_auto_open);
         readerMenuAutoHideCheck = findViewById(R.id.check_reader_menu_auto_hide);
+        readingTimeTrackingCheck = findViewById(R.id.check_reading_time_tracking);
         webDavEnabledCheck = findViewById(R.id.check_webdav_enabled);
         urlInput = findViewById(R.id.input_webdav_url);
         dirInput = findViewById(R.id.input_webdav_dir);
@@ -125,12 +139,21 @@ public class SettingsActivity extends ThemedActivity {
         webDavSyncUiButton = findViewById(R.id.button_webdav_sync_ui);
         webDavSyncThemesButton = findViewById(R.id.button_webdav_sync_themes);
         webDavSyncBackgroundsButton = findViewById(R.id.button_webdav_sync_backgrounds);
+        webDavSyncReadingStatsButton = findViewById(R.id.button_webdav_sync_reading_stats);
+        statsPeriodTodayButton = findViewById(R.id.button_stats_period_today);
+        statsPeriodWeekButton = findViewById(R.id.button_stats_period_week);
+        statsPeriodYearButton = findViewById(R.id.button_stats_period_year);
+        openReadingStatsButton = findViewById(R.id.button_open_reading_stats);
         ttsMimoKeyLayout = findViewById(R.id.layout_tts_mimo_key);
+        readingStatsContentLayout = findViewById(R.id.layout_reading_stats_content);
+        readingStatsHintText = findViewById(R.id.text_reading_stats_hint);
+        readingStatsTotalText = findViewById(R.id.text_reading_stats_total);
 
         setupThemeSpinners();
         bindCurrentValues();
         setupGlassOpacityControl();
         setupAutoSaveListeners();
+        setupReadingStatsControls();
         setupWebDavSyncButtons();
         refreshBackupLabels();
 
@@ -161,6 +184,12 @@ public class SettingsActivity extends ThemedActivity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        refreshReadingStatsSummary(true);
+    }
+
+    @Override
     protected void onPause() {
         persistSettingsIfReady();
         super.onPause();
@@ -185,6 +214,7 @@ public class SettingsActivity extends ThemedActivity {
         bindingSettingsValues = true;
         autoOpenCheck.setChecked(settingsStore.isAutoOpenLastBook());
         readerMenuAutoHideCheck.setChecked(settingsStore.isReaderMenuAutoHideEnabled());
+        readingTimeTrackingCheck.setChecked(settingsStore.isReadingTimeTrackingEnabled());
         webDavEnabledCheck.setChecked(settingsStore.isWebDavEnabled());
         urlInput.setText(settingsStore.getWebDavUrl());
         dirInput.setText(settingsStore.getWebDavDir());
@@ -205,6 +235,8 @@ public class SettingsActivity extends ThemedActivity {
         glassOpacitySeekBar.setProgress(settingsStore.getGlassOpacityPercent() - 20);
         updateGlassOpacityLabel(settingsStore.getGlassOpacityPercent());
         updateWebDavSyncButtons();
+        updateReadingStatsPeriodButtons();
+        updateReadingStatsVisibility();
         updateTtsSettingsVisibility();
         bindingSettingsValues = false;
         refreshStatusSummary();
@@ -219,6 +251,7 @@ public class SettingsActivity extends ThemedActivity {
         String previousAppThemeMode = settingsStore.getAppThemeMode();
         settingsStore.setAutoOpenLastBook(autoOpenCheck.isChecked());
         settingsStore.setReaderMenuAutoHideEnabled(readerMenuAutoHideCheck.isChecked());
+        settingsStore.setReadingTimeTrackingEnabled(readingTimeTrackingCheck.isChecked());
         settingsStore.setWebDavEnabled(webDavEnabledCheck.isChecked());
         settingsStore.setWebDavUrl(urlInput.getText().toString());
         settingsStore.setWebDavDir(dirInput.getText().toString());
@@ -242,7 +275,9 @@ public class SettingsActivity extends ThemedActivity {
         settingsStore.setWebDavSyncUiSettingsEnabled(webDavSyncUiButton.isSelected());
         settingsStore.setWebDavSyncThemesEnabled(webDavSyncThemesButton.isSelected());
         settingsStore.setWebDavSyncBackgroundsEnabled(webDavSyncBackgroundsButton.isSelected());
+        settingsStore.setWebDavSyncReadingStatsEnabled(webDavSyncReadingStatsButton.isSelected());
         updateTtsSettingsVisibility();
+        updateReadingStatsVisibility();
         refreshStatusSummary();
         if (!previousAppThemeMode.equals(settingsStore.getAppThemeMode())) {
             recreate();
@@ -357,6 +392,7 @@ public class SettingsActivity extends ThemedActivity {
         mimoApiKeyInput.addTextChangedListener(autoSaveTextWatcher);
         autoOpenCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsChanged());
         readerMenuAutoHideCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsChanged());
+        readingTimeTrackingCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleReadingTimeTrackingToggle(isChecked));
         webDavEnabledCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsChanged());
     }
 
@@ -366,6 +402,22 @@ public class SettingsActivity extends ThemedActivity {
         if (webDavSyncUiButton != null) webDavSyncUiButton.setOnClickListener(v -> toggleWebDavSyncButton(webDavSyncUiButton));
         if (webDavSyncThemesButton != null) webDavSyncThemesButton.setOnClickListener(v -> toggleWebDavSyncButton(webDavSyncThemesButton));
         if (webDavSyncBackgroundsButton != null) webDavSyncBackgroundsButton.setOnClickListener(v -> toggleWebDavSyncButton(webDavSyncBackgroundsButton));
+        if (webDavSyncReadingStatsButton != null) webDavSyncReadingStatsButton.setOnClickListener(v -> toggleWebDavSyncButton(webDavSyncReadingStatsButton));
+    }
+
+    private void setupReadingStatsControls() {
+        if (statsPeriodTodayButton != null) {
+            statsPeriodTodayButton.setOnClickListener(v -> selectReadingStatsPeriod(ReadingStatsUtils.PERIOD_TODAY));
+        }
+        if (statsPeriodWeekButton != null) {
+            statsPeriodWeekButton.setOnClickListener(v -> selectReadingStatsPeriod(ReadingStatsUtils.PERIOD_WEEK));
+        }
+        if (statsPeriodYearButton != null) {
+            statsPeriodYearButton.setOnClickListener(v -> selectReadingStatsPeriod(ReadingStatsUtils.PERIOD_YEAR));
+        }
+        if (openReadingStatsButton != null) {
+            openReadingStatsButton.setOnClickListener(v -> startActivity(new Intent(this, ReadingStatsActivity.class)));
+        }
     }
 
     private void handleSettingsChanged() {
@@ -384,7 +436,8 @@ public class SettingsActivity extends ThemedActivity {
             statusText.setText("当前未启用云同步");
             return;
         }
-        statusText.setText("已启用自动进度同步\n手动备份范围：" + buildWebDavScopeSummary());
+        statusText.setText("已启用自动进度同步\n手动备份范围：" + buildWebDavScopeSummary()
+                + "\n阅读时长累计：" + (settingsStore.isWebDavSyncReadingStatsEnabled() ? "已启用" : "已关闭"));
     }
 
     private void openPicker() {
@@ -491,7 +544,13 @@ public class SettingsActivity extends ThemedActivity {
         webDavSyncUiButton.setEnabled(!busy);
         webDavSyncThemesButton.setEnabled(!busy);
         webDavSyncBackgroundsButton.setEnabled(!busy);
+        webDavSyncReadingStatsButton.setEnabled(!busy);
+        readingTimeTrackingCheck.setEnabled(!busy);
+        if (openReadingStatsButton != null) {
+            openReadingStatsButton.setEnabled(!busy);
+        }
     }
+
     private void persistSettingsIfReady() {
         if (settingsStore == null || autoOpenCheck == null) {
             return;
@@ -519,6 +578,7 @@ public class SettingsActivity extends ThemedActivity {
         styleWebDavSyncButton(webDavSyncUiButton, settingsStore.isWebDavSyncUiSettingsEnabled());
         styleWebDavSyncButton(webDavSyncThemesButton, settingsStore.isWebDavSyncThemesEnabled());
         styleWebDavSyncButton(webDavSyncBackgroundsButton, settingsStore.isWebDavSyncBackgroundsEnabled());
+        styleWebDavSyncButton(webDavSyncReadingStatsButton, settingsStore.isWebDavSyncReadingStatsEnabled());
     }
 
     private void styleWebDavSyncButton(Button button, boolean selected) {
@@ -542,6 +602,131 @@ public class SettingsActivity extends ThemedActivity {
             return;
         }
         ttsMimoKeyLayout.setVisibility("mimo".equals(settingsStore.getTtsEngine()) ? View.VISIBLE : View.GONE);
+    }
+
+    private void selectReadingStatsPeriod(String periodKey) {
+        selectedReadingStatsPeriod = ReadingStatsUtils.normalizePeriodKey(periodKey);
+        updateReadingStatsPeriodButtons();
+        refreshReadingStatsSummary(false);
+    }
+
+    private void updateReadingStatsPeriodButtons() {
+        styleWebDavSyncButton(statsPeriodTodayButton, ReadingStatsUtils.PERIOD_TODAY.equals(selectedReadingStatsPeriod));
+        styleWebDavSyncButton(statsPeriodWeekButton, ReadingStatsUtils.PERIOD_WEEK.equals(selectedReadingStatsPeriod));
+        styleWebDavSyncButton(statsPeriodYearButton, ReadingStatsUtils.PERIOD_YEAR.equals(selectedReadingStatsPeriod));
+    }
+
+    private void updateReadingStatsVisibility() {
+        if (readingStatsContentLayout == null) {
+            return;
+        }
+        boolean enabled = readingTimeTrackingCheck != null && readingTimeTrackingCheck.isChecked();
+        readingStatsContentLayout.setVisibility(enabled ? View.VISIBLE : View.GONE);
+    }
+
+    private void refreshReadingStatsSummary(boolean syncFirst) {
+        updateReadingStatsVisibility();
+        if (readingStatsTotalText == null || !settingsStore.isReadingTimeTrackingEnabled()) {
+            return;
+        }
+        readingStatsTotalText.setText("正在加载...");
+        executor.execute(() -> {
+            String syncError = null;
+            if (syncFirst && settingsStore.isWebDavEnabled() && settingsStore.isWebDavSyncReadingStatsEnabled()) {
+                try {
+                    readingStatsSyncManager.downloadAndMergeReadingStats();
+                } catch (Exception error) {
+                    syncError = error.getMessage();
+                }
+            }
+            ReadingStatsUtils.Range range = ReadingStatsUtils.rangeForPeriod(selectedReadingStatsPeriod, java.time.ZoneId.systemDefault());
+            int totalSeconds = databaseHelper.getReadingDurationSeconds(range.startDateString(), range.endDateString(), null);
+            String finalSyncError = syncError;
+            runOnUiThread(() -> {
+                if (readingStatsHintText != null) {
+                    String label = ReadingStatsUtils.PERIOD_WEEK.equals(selectedReadingStatsPeriod)
+                            ? "本周阅读总时长"
+                            : ReadingStatsUtils.PERIOD_YEAR.equals(selectedReadingStatsPeriod)
+                            ? "本年阅读总时长"
+                            : "本日阅读总时长";
+                    if (finalSyncError != null && !finalSyncError.isBlank()) {
+                        label += " · 云端同步失败";
+                    }
+                    readingStatsHintText.setText(label);
+                }
+                readingStatsTotalText.setText(ReadingStatsUtils.formatDuration(totalSeconds));
+            });
+        });
+    }
+
+    private void handleReadingTimeTrackingToggle(boolean enabled) {
+        if (bindingSettingsValues || settingsBusy) {
+            return;
+        }
+        if (enabled) {
+            saveSettings();
+            refreshReadingStatsSummary(true);
+            return;
+        }
+        setBusy(true);
+        executor.execute(() -> {
+            boolean hasStats = databaseHelper.hasAnyReadingStats();
+            runOnUiThread(() -> {
+                setBusy(false);
+                if (!hasStats) {
+                    saveSettings();
+                    updateReadingStatsVisibility();
+                    return;
+                }
+                showDisableReadingStatsDialog();
+            });
+        });
+    }
+
+    private void showDisableReadingStatsDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle("关闭阅读时长记录")
+                .setMessage("已有阅读统计数据。你可以只隐藏历史，或同时清空本地与云端统计。")
+                .setNegativeButton("取消", (dialog, which) -> revertReadingTrackingToggle(true))
+                .setNeutralButton("只隐藏", (dialog, which) -> {
+                    saveSettings();
+                    updateReadingStatsVisibility();
+                })
+                .setPositiveButton("清空历史", (dialog, which) -> clearReadingStatsHistory())
+                .show();
+    }
+
+    private void clearReadingStatsHistory() {
+        setBusy(true);
+        statusText.setText("正在清理阅读统计...");
+        executor.execute(() -> {
+            try {
+                readingStatsSyncManager.clearRemoteReadingStats();
+                databaseHelper.clearReadingStats();
+                runOnUiThread(() -> {
+                    setBusy(false);
+                    saveSettings();
+                    updateReadingStatsVisibility();
+                    refreshReadingStatsSummary(false);
+                    statusText.setText("阅读统计已清空");
+                    showToast("已清空阅读统计");
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    setBusy(false);
+                    revertReadingTrackingToggle(true);
+                    statusText.setText("清理失败: " + error.getMessage());
+                    showToast("清理阅读统计失败");
+                });
+            }
+        });
+    }
+
+    private void revertReadingTrackingToggle(boolean checked) {
+        bindingSettingsValues = true;
+        readingTimeTrackingCheck.setChecked(checked);
+        bindingSettingsValues = false;
+        updateReadingStatsVisibility();
     }
 
     private String buildWebDavScopeSummary() {

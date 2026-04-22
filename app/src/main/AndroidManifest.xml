@@ -26,6 +26,9 @@
             android:name="com.metahumanz.pacilread.SettingsActivity"
             android:exported="false" />
         <activity
+            android:name="com.metahumanz.pacilread.ReadingStatsActivity"
+            android:exported="false" />
+        <activity
             android:name="com.metahumanz.pacilread.ReaderActivity"
             android:exported="false"
             android:screenOrientation="portrait" />

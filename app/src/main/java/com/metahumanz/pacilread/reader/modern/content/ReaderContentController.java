@@ -24,12 +24,9 @@ import com.metahumanz.pacilread.reader.modern.paging.ReaderPagingAnimator;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderStyleController;
 
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 public final class ReaderContentController {
@@ -112,6 +109,7 @@ public final class ReaderContentController {
             );
             state.currentChapterIndex = targetChapterIndex;
             style.applyReaderSettings();
+            activity.onReaderBookLoaded();
             if (state.restoredChapterIndex >= 0) {
                 navigation.showPage(
                         ui.clamp(state.restoredChapterIndex, 0, state.chapters.size() - 1),
@@ -161,6 +159,7 @@ public final class ReaderContentController {
                     );
                     state.currentChapterIndex = targetChapterIndex;
                     style.applyReaderSettings();
+                    activity.onReaderBookLoaded();
                     if (state.restoredChapterIndex >= 0) {
                         navigation.showPage(
                                 ui.clamp(state.restoredChapterIndex, 0, state.chapters.size() - 1),
@@ -427,19 +426,5 @@ public final class ReaderContentController {
             return "未知错误";
         }
         return error.getMessage();
-    }
-
-    public void recordSessionStats() {
-        if (state.sessionStartTime <= 0) {
-            return;
-        }
-        long durationMs = System.currentTimeMillis() - state.sessionStartTime;
-        if (durationMs < 2000) {
-            return;
-        }
-        int seconds = (int) (durationMs / 1000);
-        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
-        runtime.executor.execute(() -> runtime.databaseHelper.recordReadingStats(today, seconds, 0));
-        state.sessionStartTime = System.currentTimeMillis();
     }
 }

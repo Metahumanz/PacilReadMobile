@@ -160,7 +160,11 @@ public final class ReaderChromeController {
         List<PageSlice> pages = content.getPagesForChapter(state.currentChapterIndex);
         com.metahumanz.pacilread.model.ChapterRecord chapter = state.chapters.get(state.currentChapterIndex);
         int safePageCount = Math.max(pages.size(), 1);
-        views.readerTitle.setText(state.book.title);
+        boolean statsEnabled = runtime.settingsStore.isReadingTimeTrackingEnabled();
+        views.readerTitle.setText(state.book.title == null || state.book.title.isBlank() ? "未命名书籍" : state.book.title);
+        views.readerTitle.setEnabled(statsEnabled);
+        views.readerTitle.setClickable(statsEnabled);
+        views.readerTitle.setAlpha(statsEnabled ? 1f : 0.9f);
         views.chapterMeta.setText(String.format(
                 Locale.SIMPLIFIED_CHINESE,
                 "第 %d/%d 章 · %s",

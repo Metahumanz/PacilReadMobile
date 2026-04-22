@@ -7,6 +7,7 @@ import org.json.JSONObject;
 
 import java.util.Map;
 import java.util.Iterator;
+import java.util.UUID;
 
 public class SettingsStore {
     private static final String PREFS_NAME = "pacil_read_settings";
@@ -24,6 +25,7 @@ public class SettingsStore {
     private static final String KEY_WEB_DAV_SYNC_UI_SETTINGS = "webdav_sync_ui_settings";
     private static final String KEY_WEB_DAV_SYNC_THEMES = "webdav_sync_themes";
     private static final String KEY_WEB_DAV_SYNC_BACKGROUNDS = "webdav_sync_backgrounds";
+    private static final String KEY_WEB_DAV_SYNC_READING_STATS = "webdav_sync_reading_stats";
     private static final String KEY_FONT_SIZE = "font_size_sp";
     private static final String KEY_FONT_FAMILY = "font_family";
     private static final String KEY_FONT_WEIGHT = "font_weight";
@@ -64,6 +66,8 @@ public class SettingsStore {
     private static final String KEY_FLIP_SPEED = "flip_speed";
     private static final String KEY_HUD_VERTICAL_MARGIN = "hud_vertical_margin";
     private static final String KEY_READER_MENU_AUTO_HIDE = "reader_menu_auto_hide";
+    private static final String KEY_READING_TIME_TRACKING_ENABLED = "reading_time_tracking_enabled";
+    private static final String KEY_READING_STATS_DEVICE_ID = "reading_stats_device_id";
 
     private final SharedPreferences preferences;
 
@@ -173,6 +177,32 @@ public class SettingsStore {
 
     public void setWebDavSyncBackgroundsEnabled(boolean enabled) {
         preferences.edit().putBoolean(KEY_WEB_DAV_SYNC_BACKGROUNDS, enabled).apply();
+    }
+
+    public boolean isWebDavSyncReadingStatsEnabled() {
+        return preferences.getBoolean(KEY_WEB_DAV_SYNC_READING_STATS, true);
+    }
+
+    public void setWebDavSyncReadingStatsEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_WEB_DAV_SYNC_READING_STATS, enabled).apply();
+    }
+
+    public boolean isReadingTimeTrackingEnabled() {
+        return preferences.getBoolean(KEY_READING_TIME_TRACKING_ENABLED, false);
+    }
+
+    public void setReadingTimeTrackingEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_READING_TIME_TRACKING_ENABLED, enabled).apply();
+    }
+
+    public String getReadingStatsDeviceId() {
+        String value = preferences.getString(KEY_READING_STATS_DEVICE_ID, "");
+        if (value != null && !value.isBlank()) {
+            return value;
+        }
+        String created = UUID.randomUUID().toString();
+        preferences.edit().putString(KEY_READING_STATS_DEVICE_ID, created).apply();
+        return created;
     }
 
     public float getFontSizeSp() {

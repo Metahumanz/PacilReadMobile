@@ -9,8 +9,11 @@ import android.database.sqlite.SQLiteOpenHelper;
 import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.model.ChapterRecord;
 import com.metahumanz.pacilread.model.ImportedBook;
+import com.metahumanz.pacilread.model.ReadingBookStatRecord;
+import com.metahumanz.pacilread.model.ReadingTimeEntryRecord;
 import com.metahumanz.pacilread.model.ReaderThemeRecord;
 import com.metahumanz.pacilread.model.ReplacementRuleRecord;
+import com.metahumanz.pacilread.stats.ReadingStatsUtils;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -23,7 +26,7 @@ import java.util.Locale;
 
 public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     private static final String DATABASE_NAME = "reader.db";
-    private static final int DATABASE_VERSION = 3;
+    private static final int DATABASE_VERSION = 4;
 
     private static ReaderDatabaseHelper instance;
 
@@ -72,6 +75,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 "local_path TEXT NOT NULL," +
                 "cover_path TEXT," +
                 "book_type TEXT NOT NULL DEFAULT 'text'," +
+                "reading_stats_key TEXT NOT NULL DEFAULT ''," +
                 "progress_index INTEGER NOT NULL DEFAULT 0," +
                 "progress_offset INTEGER NOT NULL DEFAULT 0," +
                 "last_read_at INTEGER NOT NULL," +
@@ -109,16 +113,23 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE IF NOT EXISTS reading_stats (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT," +
                 "date TEXT NOT NULL," +
+                "source_device_id TEXT NOT NULL DEFAULT '" + ReadingStatsUtils.LEGACY_DEVICE_ID + "'," +
+                "book_identity TEXT NOT NULL DEFAULT '" + ReadingStatsUtils.LEGACY_BOOK_IDENTITY + "'," +
+                "book_title TEXT NOT NULL DEFAULT '" + ReadingStatsUtils.LEGACY_BOOK_TITLE + "'," +
+                "book_author TEXT NOT NULL DEFAULT ''," +
                 "duration_seconds INTEGER NOT NULL DEFAULT 0," +
-                "char_count INTEGER NOT NULL DEFAULT 0" +
+                "char_count INTEGER NOT NULL DEFAULT 0," +
+                "updated_at INTEGER NOT NULL DEFAULT 0" +
                 ")");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_reading_stats_date ON reading_stats(date)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_books_reading_stats_key ON books(reading_stats_key)");
     }
 
     private void ensureSchema(SQLiteDatabase db) {
         createAllTables(db);
         ensureColumn(db, "books", "cover_path", "cover_path TEXT");
         ensureColumn(db, "books", "book_type", "book_type TEXT NOT NULL DEFAULT 'text'");
+        ensureColumn(db, "books", "reading_stats_key", "reading_stats_key TEXT NOT NULL DEFAULT ''");
         ensureColumn(db, "books", "progress_index", "progress_index INTEGER NOT NULL DEFAULT 0");
         ensureColumn(db, "books", "progress_offset", "progress_offset INTEGER NOT NULL DEFAULT 0");
         ensureColumn(db, "books", "last_read_at", "last_read_at INTEGER NOT NULL DEFAULT 0");
@@ -135,6 +146,21 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
 
         ensureColumn(db, "custom_themes", "config_json", "config_json TEXT NOT NULL DEFAULT '{}'");
         ensureColumn(db, "custom_themes", "updated_at", "updated_at INTEGER NOT NULL DEFAULT 0");
+
+        ensureColumn(db, "reading_stats", "source_device_id",
+                "source_device_id TEXT NOT NULL DEFAULT '" + ReadingStatsUtils.LEGACY_DEVICE_ID + "'");
+        ensureColumn(db, "reading_stats", "book_identity",
+                "book_identity TEXT NOT NULL DEFAULT '" + ReadingStatsUtils.LEGACY_BOOK_IDENTITY + "'");
+        ensureColumn(db, "reading_stats", "book_title",
+                "book_title TEXT NOT NULL DEFAULT '" + ReadingStatsUtils.LEGACY_BOOK_TITLE + "'");
+        ensureColumn(db, "reading_stats", "book_author", "book_author TEXT NOT NULL DEFAULT ''");
+        ensureColumn(db, "reading_stats", "updated_at", "updated_at INTEGER NOT NULL DEFAULT 0");
+
+        backfillBookStatsKeys(db);
+        migrateLegacyReadingStats(db);
+        deduplicateReadingStats(db);
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_books_reading_stats_key ON books(reading_stats_key)");
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_reading_stats_identity ON reading_stats(source_device_id, date, book_identity)");
     }
 
     private void ensureColumn(SQLiteDatabase db, String tableName, String columnName, String definition) {
@@ -164,6 +190,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
             bookValues.put("author", importedBook.author);
             bookValues.put("local_path", importedBook.storedPath);
             bookValues.put("book_type", importedBook.bookType == null ? "text" : importedBook.bookType);
+            bookValues.put("reading_stats_key", buildReadingStatsKey(importedBook.title, importedBook.author));
             bookValues.put("progress_index", 0);
             bookValues.put("progress_offset", 0);
             bookValues.put("last_read_at", System.currentTimeMillis());
@@ -419,24 +446,192 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     }
 
     public synchronized void recordReadingStats(String date, int durationSeconds, int charCount) {
+        recordReadingDuration(
+                ReadingStatsUtils.LEGACY_DEVICE_ID,
+                date,
+                ReadingStatsUtils.LEGACY_BOOK_IDENTITY,
+                ReadingStatsUtils.LEGACY_BOOK_TITLE,
+                "",
+                durationSeconds,
+                charCount,
+                System.currentTimeMillis()
+        );
+    }
+
+    public synchronized void recordReadingDuration(
+            String sourceDeviceId,
+            String date,
+            String bookIdentity,
+            String bookTitle,
+            String bookAuthor,
+            int durationSeconds,
+            int charCount,
+            long updatedAt
+    ) {
+        if (durationSeconds <= 0 && charCount <= 0) {
+            return;
+        }
         SQLiteDatabase db = getWritableDatabase();
-        // 检查当天是否已有记录
-        try (Cursor cursor = db.query("reading_stats", new String[]{"id", "duration_seconds", "char_count"}, "date=?", new String[]{date}, null, null, null)) {
+        try (Cursor cursor = db.query(
+                "reading_stats",
+                new String[]{"id", "duration_seconds", "char_count"},
+                "source_device_id=? AND date=? AND book_identity=?",
+                new String[]{safeDeviceId(sourceDeviceId), date, safeBookIdentity(bookIdentity)},
+                null,
+                null,
+                null,
+                "1"
+        )) {
             if (cursor.moveToFirst()) {
-                int id = cursor.getInt(0);
-                int oldDuration = cursor.getInt(1);
-                int oldCharCount = cursor.getInt(2);
                 ContentValues values = new ContentValues();
-                values.put("duration_seconds", oldDuration + durationSeconds);
-                values.put("char_count", oldCharCount + charCount);
-                db.update("reading_stats", values, "id=?", new String[]{String.valueOf(id)});
-            } else {
-                ContentValues values = new ContentValues();
-                values.put("date", date);
-                values.put("duration_seconds", durationSeconds);
-                values.put("char_count", charCount);
-                db.insert("reading_stats", null, values);
+                values.put("book_title", ReadingStatsUtils.safeBookTitle(bookTitle));
+                values.put("book_author", normalizeAuthor(bookAuthor));
+                values.put("duration_seconds", cursor.getInt(1) + Math.max(durationSeconds, 0));
+                values.put("char_count", cursor.getInt(2) + Math.max(charCount, 0));
+                values.put("updated_at", Math.max(updatedAt, 0L));
+                db.update("reading_stats", values, "id=?", new String[]{String.valueOf(cursor.getLong(0))});
+                return;
             }
+        }
+
+        ContentValues values = new ContentValues();
+        values.put("date", date);
+        values.put("source_device_id", safeDeviceId(sourceDeviceId));
+        values.put("book_identity", safeBookIdentity(bookIdentity));
+        values.put("book_title", ReadingStatsUtils.safeBookTitle(bookTitle));
+        values.put("book_author", normalizeAuthor(bookAuthor));
+        values.put("duration_seconds", Math.max(durationSeconds, 0));
+        values.put("char_count", Math.max(charCount, 0));
+        values.put("updated_at", Math.max(updatedAt, 0L));
+        db.insert("reading_stats", null, values);
+    }
+
+    public synchronized int getReadingDurationSeconds(String startDate, String endDate, String bookIdentity) {
+        String selection = "date>=? AND date<=?";
+        List<String> args = new ArrayList<>();
+        args.add(startDate);
+        args.add(endDate);
+        if (bookIdentity != null && !bookIdentity.isBlank()) {
+            selection += " AND book_identity=?";
+            args.add(bookIdentity);
+        }
+        try (Cursor cursor = getReadableDatabase().query(
+                "reading_stats",
+                new String[]{"COALESCE(SUM(duration_seconds), 0)"},
+                selection,
+                args.toArray(new String[0]),
+                null,
+                null,
+                null
+        )) {
+            return cursor.moveToFirst() ? cursor.getInt(0) : 0;
+        }
+    }
+
+    public synchronized List<ReadingBookStatRecord> getReadingBookStats(String startDate, String endDate) {
+        List<ReadingBookStatRecord> results = new ArrayList<>();
+        String query = "SELECT rs.book_identity, " +
+                "COALESCE((SELECT s.book_title FROM reading_stats s " +
+                " WHERE s.book_identity = rs.book_identity ORDER BY s.updated_at DESC, s.id DESC LIMIT 1), '') AS latest_title, " +
+                "COALESCE((SELECT s.book_author FROM reading_stats s " +
+                " WHERE s.book_identity = rs.book_identity ORDER BY s.updated_at DESC, s.id DESC LIMIT 1), '') AS latest_author, " +
+                "COALESCE((SELECT b.id FROM books b WHERE b.reading_stats_key = rs.book_identity LIMIT 1), -1) AS local_book_id, " +
+                "COALESCE((SELECT b.cover_path FROM books b WHERE b.reading_stats_key = rs.book_identity LIMIT 1), '') AS local_cover_path, " +
+                "SUM(rs.duration_seconds) AS total_duration_seconds, " +
+                "MAX(rs.updated_at) AS latest_updated_at " +
+                "FROM reading_stats rs " +
+                "WHERE rs.date>=? AND rs.date<=? AND rs.book_identity<>? " +
+                "GROUP BY rs.book_identity " +
+                "ORDER BY total_duration_seconds DESC, latest_updated_at DESC, latest_title COLLATE NOCASE ASC";
+        try (Cursor cursor = getReadableDatabase().rawQuery(query, new String[]{
+                startDate,
+                endDate,
+                ReadingStatsUtils.LEGACY_BOOK_IDENTITY
+        })) {
+            while (cursor.moveToNext()) {
+                ReadingBookStatRecord record = new ReadingBookStatRecord();
+                record.bookIdentity = cursor.getString(cursor.getColumnIndexOrThrow("book_identity"));
+                record.bookTitle = cursor.getString(cursor.getColumnIndexOrThrow("latest_title"));
+                record.bookAuthor = cursor.getString(cursor.getColumnIndexOrThrow("latest_author"));
+                record.localBookId = cursor.getLong(cursor.getColumnIndexOrThrow("local_book_id"));
+                String coverPath = cursor.getString(cursor.getColumnIndexOrThrow("local_cover_path"));
+                record.localCoverPath = coverPath == null || coverPath.isBlank() ? null : coverPath;
+                record.totalDurationSeconds = cursor.getInt(cursor.getColumnIndexOrThrow("total_duration_seconds"));
+                record.updatedAt = cursor.getLong(cursor.getColumnIndexOrThrow("latest_updated_at"));
+                results.add(record);
+            }
+        }
+        return results;
+    }
+
+    public synchronized List<ReadingTimeEntryRecord> getReadingStatsRowsForSync(String sourceDeviceId) {
+        List<ReadingTimeEntryRecord> rows = new ArrayList<>();
+        try (Cursor cursor = getReadableDatabase().query(
+                "reading_stats",
+                null,
+                "source_device_id=?",
+                new String[]{safeDeviceId(sourceDeviceId)},
+                null,
+                null,
+                "date ASC, book_identity ASC"
+        )) {
+            while (cursor.moveToNext()) {
+                rows.add(readReadingTimeEntry(cursor));
+            }
+        }
+        return rows;
+    }
+
+    public synchronized void mergeReadingStatsRows(List<ReadingTimeEntryRecord> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            for (ReadingTimeEntryRecord row : rows) {
+                mergeReadingStatsRow(db, row);
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    public synchronized boolean hasAnyReadingStats() {
+        try (Cursor cursor = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM reading_stats", null)) {
+            return cursor.moveToFirst() && cursor.getLong(0) > 0L;
+        }
+    }
+
+    public synchronized void clearReadingStats() {
+        getWritableDatabase().delete("reading_stats", null, null);
+    }
+
+    public synchronized BookRecord findBookByReadingStatsKey(String readingStatsKey) {
+        if (readingStatsKey == null || readingStatsKey.isBlank()) {
+            return null;
+        }
+        try (Cursor cursor = getReadableDatabase().query(
+                "books",
+                null,
+                "reading_stats_key=?",
+                new String[]{readingStatsKey},
+                null,
+                null,
+                null,
+                "1"
+        )) {
+            return cursor.moveToFirst() ? readBook(cursor) : null;
+        }
+    }
+
+    public synchronized int getChapterCount(long bookId) {
+        try (Cursor cursor = getReadableDatabase().rawQuery(
+                "SELECT COUNT(*) FROM chapters WHERE book_id=?",
+                new String[]{String.valueOf(bookId)}
+        )) {
+            return cursor.moveToFirst() ? cursor.getInt(0) : 0;
         }
     }
 
@@ -460,6 +655,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                     "local_path TEXT NOT NULL," +
                     "cover_path TEXT," +
                     "book_type TEXT NOT NULL DEFAULT 'text'," +
+                    "reading_stats_key TEXT NOT NULL DEFAULT ''," +
                     "progress_index INTEGER NOT NULL DEFAULT 0," +
                     "progress_offset INTEGER NOT NULL DEFAULT 0," +
                     "last_read_at INTEGER NOT NULL," +
@@ -480,10 +676,22 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                     "config_json TEXT NOT NULL," +
                     "updated_at INTEGER NOT NULL" +
                     ")");
+            liteDb.execSQL("CREATE TABLE reading_stats (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                    "date TEXT NOT NULL," +
+                    "source_device_id TEXT NOT NULL," +
+                    "book_identity TEXT NOT NULL," +
+                    "book_title TEXT NOT NULL," +
+                    "book_author TEXT NOT NULL DEFAULT ''," +
+                    "duration_seconds INTEGER NOT NULL DEFAULT 0," +
+                    "char_count INTEGER NOT NULL DEFAULT 0," +
+                    "updated_at INTEGER NOT NULL DEFAULT 0" +
+                    ")");
 
             copyRows(getReadableDatabase(), liteDb, "books");
             copyRows(getReadableDatabase(), liteDb, "replacement_rules");
             copyRows(getReadableDatabase(), liteDb, "custom_themes");
+            copyRows(getReadableDatabase(), liteDb, "reading_stats");
         } finally {
             liteDb.close();
         }
@@ -543,7 +751,11 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 while (sourceBooks.moveToNext()) {
                     String title = sourceBooks.getString(sourceBooks.getColumnIndexOrThrow("title"));
                     String author = sourceBooks.getString(sourceBooks.getColumnIndexOrThrow("author"));
-                    BookRecord match = findBook(existingBooks, title, author);
+                    int statsKeyIndex = sourceBooks.getColumnIndex("reading_stats_key");
+                    String readingStatsKey = statsKeyIndex >= 0
+                            ? sourceBooks.getString(statsKeyIndex)
+                            : buildReadingStatsKey(title, author);
+                    BookRecord match = findBook(existingBooks, title, author, readingStatsKey);
 
                     ContentValues values = new ContentValues();
                     values.put("title", title);
@@ -557,6 +769,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                     }
                     int typeIndex = sourceBooks.getColumnIndex("book_type");
                     values.put("book_type", typeIndex >= 0 ? sourceBooks.getString(typeIndex) : "text");
+                    values.put("reading_stats_key", readingStatsKey);
                     
                     // 进度一致性校验：确保章节存在
                     int progressIndex = sourceBooks.getInt(sourceBooks.getColumnIndexOrThrow("progress_index"));
@@ -572,6 +785,14 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                         target.update("books", values, "id=?", new String[]{String.valueOf(match.id)});
                     } else {
                         target.insert("books", null, values);
+                    }
+                }
+            }
+
+            if (tableExists(sourceDb, "reading_stats")) {
+                try (Cursor sourceReadingStats = sourceDb.query("reading_stats", null, null, null, null, null, null)) {
+                    while (sourceReadingStats.moveToNext()) {
+                        mergeReadingStatsRow(target, readReadingTimeEntry(sourceReadingStats));
                     }
                 }
             }
@@ -622,15 +843,15 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         }
     }
 
-    private BookRecord findBook(List<BookRecord> books, String title, String author) {
-        String targetKey = (title == null ? "" : title.trim().toLowerCase(Locale.ROOT))
-                + "::"
-                + (author == null ? "" : author.trim().toLowerCase(Locale.ROOT));
+    private BookRecord findBook(List<BookRecord> books, String title, String author, String readingStatsKey) {
         for (BookRecord book : books) {
-            String currentKey = (book.title == null ? "" : book.title.trim().toLowerCase(Locale.ROOT))
-                    + "::"
-                    + (book.author == null ? "" : book.author.trim().toLowerCase(Locale.ROOT));
-            if (targetKey.equals(currentKey)) {
+            if (readingStatsKey != null && !readingStatsKey.isBlank() && readingStatsKey.equals(book.readingStatsKey)) {
+                return book;
+            }
+        }
+        String targetKey = normalizedTitleAuthorKey(title, author);
+        for (BookRecord book : books) {
+            if (targetKey.equals(normalizedTitleAuthorKey(book.title, book.author))) {
                 return book;
             }
         }
@@ -658,11 +879,42 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         book.coverPath = coverIndex >= 0 ? cursor.getString(coverIndex) : null;
         int typeIndex = cursor.getColumnIndex("book_type");
         book.bookType = typeIndex >= 0 ? cursor.getString(typeIndex) : "text";
+        int readingStatsKeyIndex = cursor.getColumnIndex("reading_stats_key");
+        book.readingStatsKey = readingStatsKeyIndex >= 0
+                ? cursor.getString(readingStatsKeyIndex)
+                : buildReadingStatsKey(book.title, book.author);
         book.progressIndex = cursor.getInt(cursor.getColumnIndexOrThrow("progress_index"));
         book.progressOffset = cursor.getInt(cursor.getColumnIndexOrThrow("progress_offset"));
         book.lastReadAt = cursor.getLong(cursor.getColumnIndexOrThrow("last_read_at"));
         book.pinned = cursor.getInt(cursor.getColumnIndexOrThrow("pinned")) == 1;
         return book;
+    }
+
+    private ReadingTimeEntryRecord readReadingTimeEntry(Cursor cursor) {
+        ReadingTimeEntryRecord record = new ReadingTimeEntryRecord();
+        int idIndex = cursor.getColumnIndex("id");
+        record.id = idIndex >= 0 ? cursor.getLong(idIndex) : -1L;
+        record.date = cursor.getString(cursor.getColumnIndexOrThrow("date"));
+        int sourceDeviceIndex = cursor.getColumnIndex("source_device_id");
+        record.sourceDeviceId = sourceDeviceIndex >= 0
+                ? cursor.getString(sourceDeviceIndex)
+                : ReadingStatsUtils.LEGACY_DEVICE_ID;
+        int bookIdentityIndex = cursor.getColumnIndex("book_identity");
+        record.bookIdentity = bookIdentityIndex >= 0
+                ? cursor.getString(bookIdentityIndex)
+                : ReadingStatsUtils.LEGACY_BOOK_IDENTITY;
+        int bookTitleIndex = cursor.getColumnIndex("book_title");
+        record.bookTitle = bookTitleIndex >= 0
+                ? cursor.getString(bookTitleIndex)
+                : ReadingStatsUtils.LEGACY_BOOK_TITLE;
+        int bookAuthorIndex = cursor.getColumnIndex("book_author");
+        record.bookAuthor = bookAuthorIndex >= 0 ? cursor.getString(bookAuthorIndex) : "";
+        record.durationSeconds = cursor.getInt(cursor.getColumnIndexOrThrow("duration_seconds"));
+        int charCountIndex = cursor.getColumnIndex("char_count");
+        record.charCount = charCountIndex >= 0 ? cursor.getInt(charCountIndex) : 0;
+        int updatedAtIndex = cursor.getColumnIndex("updated_at");
+        record.updatedAt = updatedAtIndex >= 0 ? cursor.getLong(updatedAtIndex) : 0L;
+        return record;
     }
 
     private void copyFile(File source, File destination) throws IOException {
@@ -683,5 +935,166 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         if (file.exists()) {
             file.delete();
         }
+    }
+
+    private void backfillBookStatsKeys(SQLiteDatabase db) {
+        try (Cursor cursor = db.query("books", new String[]{"id", "title", "author", "reading_stats_key"}, null, null, null, null, null)) {
+            while (cursor.moveToNext()) {
+                String currentKey = cursor.getString(cursor.getColumnIndexOrThrow("reading_stats_key"));
+                if (currentKey != null && !currentKey.isBlank()) {
+                    continue;
+                }
+                ContentValues values = new ContentValues();
+                values.put("reading_stats_key", buildReadingStatsKey(cursor.getString(1), cursor.getString(2)));
+                db.update("books", values, "id=?", new String[]{String.valueOf(cursor.getLong(0))});
+            }
+        }
+    }
+
+    private void migrateLegacyReadingStats(SQLiteDatabase db) {
+        ContentValues defaults = new ContentValues();
+        defaults.put("source_device_id", ReadingStatsUtils.LEGACY_DEVICE_ID);
+        defaults.put("book_identity", ReadingStatsUtils.LEGACY_BOOK_IDENTITY);
+        defaults.put("book_title", ReadingStatsUtils.LEGACY_BOOK_TITLE);
+        defaults.put("book_author", "");
+        defaults.put("updated_at", System.currentTimeMillis());
+        db.update(
+                "reading_stats",
+                defaults,
+                "(source_device_id IS NULL OR TRIM(source_device_id)='') OR " +
+                        "(book_identity IS NULL OR TRIM(book_identity)='') OR " +
+                        "(book_title IS NULL OR TRIM(book_title)='') OR updated_at<=0",
+                null
+        );
+    }
+
+    private void deduplicateReadingStats(SQLiteDatabase db) {
+        List<ReadingTimeEntryRecord> mergedRows = new ArrayList<>();
+        try (Cursor cursor = db.rawQuery(
+                "SELECT source_device_id, date, book_identity, " +
+                        "SUM(duration_seconds) AS total_duration, SUM(char_count) AS total_char_count, " +
+                        "MAX(updated_at) AS latest_updated_at, COUNT(*) AS bucket_count " +
+                        "FROM reading_stats GROUP BY source_device_id, date, book_identity HAVING bucket_count > 1",
+                null
+        )) {
+            while (cursor.moveToNext()) {
+                String sourceDeviceId = cursor.getString(cursor.getColumnIndexOrThrow("source_device_id"));
+                String date = cursor.getString(cursor.getColumnIndexOrThrow("date"));
+                String bookIdentity = cursor.getString(cursor.getColumnIndexOrThrow("book_identity"));
+                try (Cursor latestCursor = db.query(
+                        "reading_stats",
+                        new String[]{"book_title", "book_author"},
+                        "source_device_id=? AND date=? AND book_identity=?",
+                        new String[]{sourceDeviceId, date, bookIdentity},
+                        null,
+                        null,
+                        "updated_at DESC, id DESC",
+                        "1"
+                )) {
+                    ReadingTimeEntryRecord record = new ReadingTimeEntryRecord();
+                    record.sourceDeviceId = sourceDeviceId;
+                    record.date = date;
+                    record.bookIdentity = bookIdentity;
+                    record.durationSeconds = cursor.getInt(cursor.getColumnIndexOrThrow("total_duration"));
+                    record.charCount = cursor.getInt(cursor.getColumnIndexOrThrow("total_char_count"));
+                    record.updatedAt = cursor.getLong(cursor.getColumnIndexOrThrow("latest_updated_at"));
+                    if (latestCursor.moveToFirst()) {
+                        record.bookTitle = latestCursor.getString(0);
+                        record.bookAuthor = latestCursor.getString(1);
+                    } else {
+                        record.bookTitle = ReadingStatsUtils.LEGACY_BOOK_TITLE;
+                        record.bookAuthor = "";
+                    }
+                    mergedRows.add(record);
+                }
+            }
+        }
+        if (mergedRows.isEmpty()) {
+            return;
+        }
+        for (ReadingTimeEntryRecord row : mergedRows) {
+            db.delete(
+                    "reading_stats",
+                    "source_device_id=? AND date=? AND book_identity=?",
+                    new String[]{safeDeviceId(row.sourceDeviceId), row.date, safeBookIdentity(row.bookIdentity)}
+            );
+            ContentValues values = new ContentValues();
+            values.put("date", row.date);
+            values.put("source_device_id", safeDeviceId(row.sourceDeviceId));
+            values.put("book_identity", safeBookIdentity(row.bookIdentity));
+            values.put("book_title", ReadingStatsUtils.safeBookTitle(row.bookTitle));
+            values.put("book_author", normalizeAuthor(row.bookAuthor));
+            values.put("duration_seconds", Math.max(row.durationSeconds, 0));
+            values.put("char_count", Math.max(row.charCount, 0));
+            values.put("updated_at", Math.max(row.updatedAt, 0L));
+            db.insert("reading_stats", null, values);
+        }
+    }
+
+    private void mergeReadingStatsRow(SQLiteDatabase db, ReadingTimeEntryRecord row) {
+        if (row == null || row.date == null || row.date.isBlank()) {
+            return;
+        }
+        String sourceDeviceId = safeDeviceId(row.sourceDeviceId);
+        String bookIdentity = safeBookIdentity(row.bookIdentity);
+        try (Cursor cursor = db.query(
+                "reading_stats",
+                new String[]{"id", "updated_at"},
+                "source_device_id=? AND date=? AND book_identity=?",
+                new String[]{sourceDeviceId, row.date, bookIdentity},
+                null,
+                null,
+                null,
+                "1"
+        )) {
+            ContentValues values = new ContentValues();
+            values.put("date", row.date);
+            values.put("source_device_id", sourceDeviceId);
+            values.put("book_identity", bookIdentity);
+            values.put("book_title", ReadingStatsUtils.safeBookTitle(row.bookTitle));
+            values.put("book_author", normalizeAuthor(row.bookAuthor));
+            values.put("duration_seconds", Math.max(row.durationSeconds, 0));
+            values.put("char_count", Math.max(row.charCount, 0));
+            values.put("updated_at", Math.max(row.updatedAt, 0L));
+            if (cursor.moveToFirst()) {
+                long existingUpdatedAt = cursor.getLong(cursor.getColumnIndexOrThrow("updated_at"));
+                if (row.updatedAt >= existingUpdatedAt) {
+                    db.update("reading_stats", values, "id=?", new String[]{String.valueOf(cursor.getLong(0))});
+                }
+                return;
+            }
+            db.insert("reading_stats", null, values);
+        }
+    }
+
+    private boolean tableExists(SQLiteDatabase db, String tableName) {
+        try (Cursor cursor = db.rawQuery(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                new String[]{tableName}
+        )) {
+            return cursor.moveToFirst();
+        }
+    }
+
+    private String buildReadingStatsKey(String title, String author) {
+        return ReadingStatsUtils.buildBookIdentity(title, author);
+    }
+
+    private String safeDeviceId(String value) {
+        return value == null || value.isBlank() ? ReadingStatsUtils.LEGACY_DEVICE_ID : value;
+    }
+
+    private String safeBookIdentity(String value) {
+        return value == null || value.isBlank() ? ReadingStatsUtils.LEGACY_BOOK_IDENTITY : value;
+    }
+
+    private String normalizeAuthor(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private String normalizedTitleAuthorKey(String title, String author) {
+        return (title == null ? "" : title.trim().toLowerCase(Locale.ROOT))
+                + "::"
+                + (author == null ? "" : author.trim().toLowerCase(Locale.ROOT));
     }
 }

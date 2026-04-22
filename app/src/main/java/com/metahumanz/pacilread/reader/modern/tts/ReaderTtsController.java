@@ -239,6 +239,7 @@ public final class ReaderTtsController {
         state.ttsHighlightStart = unit.start - highlightSlice.start;
         state.ttsHighlightEnd = unit.end - highlightSlice.start;
         updateTtsHighlight();
+        activity.markReadingActivity();
         speakCurrentTtsGroup();
     }
 

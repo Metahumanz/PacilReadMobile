@@ -7,6 +7,7 @@ public class BookRecord {
     public String localPath;
     public String coverPath;
     public String bookType;
+    public String readingStatsKey;
     public int progressIndex;
     public int progressOffset;
     public long lastReadAt;

@@ -82,6 +82,7 @@ public final class ReaderNavigationController {
             bindPage(views.pageTitleCurrent, views.pageBodyCurrent, safeChapterIndex, safePageIndex);
             state.currentChapterIndex = safeChapterIndex;
             state.currentPageIndex = safePageIndex;
+            activity.markReadingActivity();
             paging.restoreLivePageLayers(false);
             paging.resetAnimatedPage(views.pageCurrent);
             paging.resetAnimatedPage(views.pageIncoming);
