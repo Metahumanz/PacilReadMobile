@@ -65,4 +65,9 @@
 
     <color name="app_positive">#30D158</color>
     <color name="app_danger">#FF3B30</color>
+
+    <color name="reader_menu_text">#FDFCFC</color>
+    <color name="reader_menu_text_muted">#94A3B8</color>
+    <color name="reader_menu_button_text">#FDFCFC</color>
+    <color name="reader_menu_button_active_text">#FDFCFC</color>
 </resources>

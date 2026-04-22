@@ -19,18 +19,18 @@
         <item name="android:insetBottom">0dp</item>
         <item name="android:insetLeft">0dp</item>
         <item name="android:insetRight">0dp</item>
-        <item name="android:minHeight">42dp</item>
+        <item name="android:minHeight">40dp</item>
         <item name="android:minWidth">64dp</item>
         <item name="android:paddingLeft">18dp</item>
         <item name="android:paddingTop">10dp</item>
         <item name="android:paddingRight">18dp</item>
         <item name="android:paddingBottom">10dp</item>
-        <item name="android:textSize">14sp</item>
+        <item name="android:textSize">15sp</item>
         <item name="android:textStyle">normal</item>
         <item name="android:fontFamily">sans-serif-medium</item>
-        <item name="android:letterSpacing">0.02</item>
+        <item name="android:letterSpacing">0.01</item>
         <item name="android:textAllCaps">false</item>
-        <item name="cornerRadius">0dp</item>
+        <item name="cornerRadius">12dp</item>
         <item name="backgroundTint">@null</item>
     </style>
 
@@ -46,18 +46,21 @@
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textColor">@color/app_text_primary</item>
         <item name="android:textSize">18sp</item>
+        <item name="android:letterSpacing">0.005</item>
     </style>
 
     <style name="AppChromePageTitle">
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textColor">@color/app_text_primary</item>
         <item name="android:textSize">22sp</item>
+        <item name="android:letterSpacing">0.005</item>
     </style>
 
     <style name="AppChromeCardTitle">
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textColor">@color/app_text_primary</item>
         <item name="android:textSize">18sp</item>
+        <item name="android:letterSpacing">0.008</item>
     </style>
 
     <style name="AppChromeSectionLabel">
@@ -71,48 +74,56 @@
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textColor">@color/app_text_primary</item>
         <item name="android:textSize">14sp</item>
+        <item name="android:letterSpacing">0.01</item>
     </style>
 
     <style name="AppChromeBody">
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:textColor">@color/app_text_primary</item>
         <item name="android:textSize">15sp</item>
+        <item name="android:letterSpacing">0.01</item>
     </style>
 
     <style name="AppChromeBodyStrong">
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textColor">@color/app_text_primary</item>
         <item name="android:textSize">15sp</item>
+        <item name="android:letterSpacing">0.008</item>
     </style>
 
     <style name="AppChromeBodyMuted">
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:textColor">@color/app_text_secondary</item>
         <item name="android:textSize">13sp</item>
+        <item name="android:letterSpacing">0.012</item>
     </style>
 
     <style name="AppChromeCaption">
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textColor">@color/app_text_muted</item>
         <item name="android:textSize">12sp</item>
+        <item name="android:letterSpacing">0.014</item>
     </style>
 
     <style name="AppChromeMicro">
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textColor">@color/app_text_muted</item>
         <item name="android:textSize">11sp</item>
+        <item name="android:letterSpacing">0.02</item>
     </style>
 
     <style name="AppChromeAccentCaption">
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textColor">@color/app_primary</item>
         <item name="android:textSize">12sp</item>
+        <item name="android:letterSpacing">0.014</item>
     </style>
 
     <style name="AppChromeCheckBox">
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:textColor">@color/app_text_primary</item>
         <item name="android:textSize">15sp</item>
+        <item name="android:letterSpacing">0.01</item>
     </style>
 
     <style name="AppChromeInputText">
@@ -120,23 +131,27 @@
         <item name="android:textColor">@color/app_text_primary</item>
         <item name="android:textColorHint">@color/app_text_secondary</item>
         <item name="android:textSize">15sp</item>
+        <item name="android:letterSpacing">0.01</item>
     </style>
 
     <style name="AppChromeDrawerBrand">
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textColor">@color/app_text_primary</item>
         <item name="android:textSize">20sp</item>
+        <item name="android:letterSpacing">0.008</item>
     </style>
 
     <style name="AppChromeDrawerItem">
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textColor">@color/app_nav_text_idle</item>
         <item name="android:textSize">14sp</item>
+        <item name="android:letterSpacing">0.01</item>
     </style>
 
     <style name="AppChromeMetricValue">
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textColor">@color/app_text_primary</item>
         <item name="android:textSize">16sp</item>
+        <item name="android:letterSpacing">0.006</item>
     </style>
 </resources>
