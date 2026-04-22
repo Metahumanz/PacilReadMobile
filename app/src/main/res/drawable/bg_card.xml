@@ -2,10 +2,10 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     <gradient
         android:angle="270"
-        android:endColor="@color/card"
-        android:startColor="@color/glass_fill_strong" />
-    <corners android:radius="28dp" />
+        android:endColor="?attr/themeColorReaderCardEnd"
+        android:startColor="?attr/themeColorReaderCardStart" />
+    <corners android:radius="?attr/themeRadiusReaderPanel" />
     <stroke
         android:width="1dp"
-        android:color="@color/glass_stroke" />
+        android:color="?attr/themeColorReaderCardStroke" />
 </shape>

@@ -29,6 +29,7 @@ import com.metahumanz.pacilread.reader.modern.theme.ReaderThemePalette;
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedActivity;
+import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.ui.GlassUiHelper;
 import com.metahumanz.pacilread.util.FileAssetHelper;
 
@@ -249,7 +250,7 @@ public class PreviewActivity extends ThemedActivity {
 
     private void updatePreviewPanels() {
         previewTheme.setText(
-                "界面: " + labelForReaderUiTheme(settingsStore.getReaderUiThemeMode())
+                "界面: " + ThemeModeHelper.getResolvedReaderAppearanceLabel(this)
                         + " · 阅读预设: " + labelForReaderPreset(settingsStore.getReaderTheme())
                         + " · 字体 " + labelForReaderFontFamily(settingsStore.getReaderFontFamily())
                         + " · 字重 " + labelForReaderFontWeight(settingsStore.getReaderFontWeight())
@@ -517,14 +518,6 @@ public class PreviewActivity extends ThemedActivity {
         }
         return fallback;
     }
-
-    private String labelForReaderUiTheme(String v) {
-        if ("system".equals(v)) return "跟随系统";
-        if ("light".equals(v)) return "浅色";
-        if ("dark".equals(v)) return "深色";
-        return "跟随应用";
-    }
-
     private String labelForReaderPreset(String v) {
         if ("forest".equals(v)) return "护眼";
         if ("night".equals(v)) return "夜航";

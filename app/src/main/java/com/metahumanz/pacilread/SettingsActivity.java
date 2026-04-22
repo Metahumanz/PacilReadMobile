@@ -26,6 +26,7 @@ import com.metahumanz.pacilread.sync.WebDavBackupManager;
 import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
 import com.metahumanz.pacilread.sync.WebDavClient;
 import com.metahumanz.pacilread.theme.ThemedActivity;
+import com.metahumanz.pacilread.theme.ThemeModeHelper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -66,6 +67,10 @@ public class SettingsActivity extends ThemedActivity {
     private EditText mimoApiKeyInput;
     private Spinner appThemeSpinner;
     private Spinner readerUiThemeSpinner;
+    private Button lightStyleYaobaiButton;
+    private Button lightStyleYunbaiButton;
+    private Button darkStyleYemuButton;
+    private Button darkStyleJiyeButton;
     private Spinner ttsEngineSpinner;
     private Spinner volumeKeyUpActionSpinner;
     private Spinner volumeKeyDownActionSpinner;
@@ -94,6 +99,8 @@ public class SettingsActivity extends ThemedActivity {
     private boolean bindingSettingsValues = false;
     private boolean settingsBusy = false;
     private String selectedReadingStatsPeriod = ReadingStatsUtils.PERIOD_TODAY;
+    private String selectedLightStyleVariant = ThemeModeHelper.LIGHT_STYLE_YUNBAI;
+    private String selectedDarkStyleVariant = ThemeModeHelper.DARK_STYLE_YEMU;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -122,6 +129,10 @@ public class SettingsActivity extends ThemedActivity {
         mimoApiKeyInput = findViewById(R.id.input_mimo_api_key);
         appThemeSpinner = findViewById(R.id.spinner_app_theme_mode);
         readerUiThemeSpinner = findViewById(R.id.spinner_reader_ui_theme_mode);
+        lightStyleYaobaiButton = findViewById(R.id.button_light_style_yaobai);
+        lightStyleYunbaiButton = findViewById(R.id.button_light_style_yunbai);
+        darkStyleYemuButton = findViewById(R.id.button_dark_style_yemu);
+        darkStyleJiyeButton = findViewById(R.id.button_dark_style_jiye);
         ttsEngineSpinner = findViewById(R.id.spinner_tts_engine);
         volumeKeyUpActionSpinner = findViewById(R.id.spinner_volume_key_up_action);
         volumeKeyDownActionSpinner = findViewById(R.id.spinner_volume_key_down_action);
@@ -152,6 +163,7 @@ public class SettingsActivity extends ThemedActivity {
         readingStatsTotalText = findViewById(R.id.text_reading_stats_total);
 
         setupThemeSpinners();
+        setupStyleVariantButtons();
         bindCurrentValues();
         setupGlassOpacityControl();
         setupAutoSaveListeners();
@@ -226,6 +238,9 @@ public class SettingsActivity extends ThemedActivity {
         mimoApiKeyInput.setText(settingsStore.getTtsMimoApiKey());
         appThemeSpinner.setSelection(indexOf(APP_THEME_KEYS, settingsStore.getAppThemeMode(), 0));
         readerUiThemeSpinner.setSelection(indexOf(READER_THEME_KEYS, settingsStore.getReaderUiThemeMode(), 0));
+        selectedLightStyleVariant = settingsStore.getAppLightStyleVariant();
+        selectedDarkStyleVariant = settingsStore.getAppDarkStyleVariant();
+        updateStyleVariantButtons();
         if (ttsEngineSpinner != null) {
             ttsEngineSpinner.setSelection(indexOf(TTS_ENGINE_KEYS, settingsStore.getTtsEngine(), 0));
         }
@@ -251,7 +266,8 @@ public class SettingsActivity extends ThemedActivity {
     }
 
     private void saveSettings() {
-        String previousAppThemeMode = settingsStore.getAppThemeMode();
+        String previousAppBucket = ThemeModeHelper.getResolvedAppBucket(this);
+        String previousAppStyleVariant = ThemeModeHelper.getResolvedAppStyleVariant(this);
         settingsStore.setAutoOpenLastBook(autoOpenCheck.isChecked());
         settingsStore.setReaderMenuAutoHideEnabled(readerMenuAutoHideCheck.isChecked());
         settingsStore.setReadingTimeTrackingEnabled(readingTimeTrackingCheck.isChecked());
@@ -267,6 +283,8 @@ public class SettingsActivity extends ThemedActivity {
         settingsStore.setTtsMimoApiKey(mimoApiKeyInput.getText().toString());
         settingsStore.setAppThemeMode(APP_THEME_KEYS[appThemeSpinner.getSelectedItemPosition()]);
         settingsStore.setReaderUiThemeMode(READER_THEME_KEYS[readerUiThemeSpinner.getSelectedItemPosition()]);
+        settingsStore.setAppLightStyleVariant(selectedLightStyleVariant);
+        settingsStore.setAppDarkStyleVariant(selectedDarkStyleVariant);
         if (volumeKeyUpActionSpinner != null) {
             settingsStore.setVolumeKeyUpAction(VOLUME_KEY_ACTION_KEYS[volumeKeyUpActionSpinner.getSelectedItemPosition()]);
         }
@@ -283,7 +301,9 @@ public class SettingsActivity extends ThemedActivity {
         updateTtsSettingsVisibility();
         updateReadingStatsVisibility();
         refreshStatusSummary();
-        if (!previousAppThemeMode.equals(settingsStore.getAppThemeMode())) {
+        String nextAppBucket = ThemeModeHelper.getResolvedAppBucket(this);
+        String nextAppStyleVariant = ThemeModeHelper.getResolvedAppStyleVariant(this);
+        if (!previousAppBucket.equals(nextAppBucket) || !previousAppStyleVariant.equals(nextAppStyleVariant)) {
             recreate();
         }
     }
@@ -372,6 +392,21 @@ public class SettingsActivity extends ThemedActivity {
                 handleSettingsChanged();
             }
         });
+    }
+
+    private void setupStyleVariantButtons() {
+        if (lightStyleYaobaiButton != null) {
+            lightStyleYaobaiButton.setOnClickListener(v -> selectLightStyleVariant(ThemeModeHelper.LIGHT_STYLE_YAOBAI));
+        }
+        if (lightStyleYunbaiButton != null) {
+            lightStyleYunbaiButton.setOnClickListener(v -> selectLightStyleVariant(ThemeModeHelper.LIGHT_STYLE_YUNBAI));
+        }
+        if (darkStyleYemuButton != null) {
+            darkStyleYemuButton.setOnClickListener(v -> selectDarkStyleVariant(ThemeModeHelper.DARK_STYLE_YEMU));
+        }
+        if (darkStyleJiyeButton != null) {
+            darkStyleJiyeButton.setOnClickListener(v -> selectDarkStyleVariant(ThemeModeHelper.DARK_STYLE_JIYE));
+        }
     }
 
     private void setupAutoSaveListeners() {
@@ -574,26 +609,51 @@ public class SettingsActivity extends ThemedActivity {
 
     private void toggleWebDavSyncButton(Button button) {
         button.setSelected(!button.isSelected());
-        styleWebDavSyncButton(button, button.isSelected());
+        styleToggleButton(button, button.isSelected());
         handleSettingsChanged();
     }
 
     private void updateWebDavSyncButtons() {
-        styleWebDavSyncButton(webDavSyncBookshelfButton, settingsStore.isWebDavSyncBookshelfEnabled());
-        styleWebDavSyncButton(webDavSyncFilesButton, settingsStore.isWebDavSyncFilesEnabled());
-        styleWebDavSyncButton(webDavSyncUiButton, settingsStore.isWebDavSyncUiSettingsEnabled());
-        styleWebDavSyncButton(webDavSyncThemesButton, settingsStore.isWebDavSyncThemesEnabled());
-        styleWebDavSyncButton(webDavSyncBackgroundsButton, settingsStore.isWebDavSyncBackgroundsEnabled());
-        styleWebDavSyncButton(webDavSyncReadingStatsButton, settingsStore.isWebDavSyncReadingStatsEnabled());
+        styleToggleButton(webDavSyncBookshelfButton, settingsStore.isWebDavSyncBookshelfEnabled());
+        styleToggleButton(webDavSyncFilesButton, settingsStore.isWebDavSyncFilesEnabled());
+        styleToggleButton(webDavSyncUiButton, settingsStore.isWebDavSyncUiSettingsEnabled());
+        styleToggleButton(webDavSyncThemesButton, settingsStore.isWebDavSyncThemesEnabled());
+        styleToggleButton(webDavSyncBackgroundsButton, settingsStore.isWebDavSyncBackgroundsEnabled());
+        styleToggleButton(webDavSyncReadingStatsButton, settingsStore.isWebDavSyncReadingStatsEnabled());
     }
 
-    private void styleWebDavSyncButton(Button button, boolean selected) {
+    private void styleToggleButton(Button button, boolean selected) {
         if (button == null) {
             return;
         }
         button.setSelected(selected);
         button.setBackgroundResource(selected ? R.drawable.bg_app_primary_button : R.drawable.bg_app_outline_button);
         button.setTextColor(getColor(selected ? R.color.app_button_primary_text : R.color.app_button_outline_text));
+    }
+
+    private void selectLightStyleVariant(String styleVariant) {
+        if (styleVariant.equals(selectedLightStyleVariant)) {
+            return;
+        }
+        selectedLightStyleVariant = SettingsStore.normalizeAppLightStyleVariant(styleVariant);
+        updateStyleVariantButtons();
+        handleSettingsChanged();
+    }
+
+    private void selectDarkStyleVariant(String styleVariant) {
+        if (styleVariant.equals(selectedDarkStyleVariant)) {
+            return;
+        }
+        selectedDarkStyleVariant = SettingsStore.normalizeAppDarkStyleVariant(styleVariant);
+        updateStyleVariantButtons();
+        handleSettingsChanged();
+    }
+
+    private void updateStyleVariantButtons() {
+        styleToggleButton(lightStyleYaobaiButton, ThemeModeHelper.LIGHT_STYLE_YAOBAI.equals(selectedLightStyleVariant));
+        styleToggleButton(lightStyleYunbaiButton, ThemeModeHelper.LIGHT_STYLE_YUNBAI.equals(selectedLightStyleVariant));
+        styleToggleButton(darkStyleYemuButton, ThemeModeHelper.DARK_STYLE_YEMU.equals(selectedDarkStyleVariant));
+        styleToggleButton(darkStyleJiyeButton, ThemeModeHelper.DARK_STYLE_JIYE.equals(selectedDarkStyleVariant));
     }
 
     private void updateWebDavSyncOptionsVisibility() {
@@ -617,9 +677,9 @@ public class SettingsActivity extends ThemedActivity {
     }
 
     private void updateReadingStatsPeriodButtons() {
-        styleWebDavSyncButton(statsPeriodTodayButton, ReadingStatsUtils.PERIOD_TODAY.equals(selectedReadingStatsPeriod));
-        styleWebDavSyncButton(statsPeriodWeekButton, ReadingStatsUtils.PERIOD_WEEK.equals(selectedReadingStatsPeriod));
-        styleWebDavSyncButton(statsPeriodYearButton, ReadingStatsUtils.PERIOD_YEAR.equals(selectedReadingStatsPeriod));
+        styleToggleButton(statsPeriodTodayButton, ReadingStatsUtils.PERIOD_TODAY.equals(selectedReadingStatsPeriod));
+        styleToggleButton(statsPeriodWeekButton, ReadingStatsUtils.PERIOD_WEEK.equals(selectedReadingStatsPeriod));
+        styleToggleButton(statsPeriodYearButton, ReadingStatsUtils.PERIOD_YEAR.equals(selectedReadingStatsPeriod));
     }
 
     private void updateReadingStatsVisibility() {

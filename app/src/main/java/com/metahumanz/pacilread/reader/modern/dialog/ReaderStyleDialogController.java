@@ -274,7 +274,7 @@ public final class ReaderStyleDialogController {
     private Runnable buildAutoApply(StyleDialogViews refs, String[] selectedReaderTheme, Runnable refreshTextColorPreview) {
         return () -> {
             int anchorOffset = content.currentCharOffset();
-            String previousResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(activity);
+            String previousResolvedAppearance = ThemeModeHelper.getResolvedReaderAppearanceLabel(activity);
             runtime.settingsStore.setReaderFontFamily(ReaderOptionCatalog.READER_FONT_FAMILY_KEYS[refs.fontFamilySpinner.getSelectedItemPosition()]);
             runtime.settingsStore.setReaderTextColor(ReaderOptionCatalog.READER_TEXT_COLOR_KEYS[refs.textColorSpinner.getSelectedItemPosition()]);
             runtime.settingsStore.setFontSizeSp(refs.fontSeek.getProgress() + 12);
@@ -292,8 +292,8 @@ public final class ReaderStyleDialogController {
             runtime.settingsStore.setReaderTheme(selectedReaderTheme[0]);
             runtime.settingsStore.setReaderUiThemeMode(ReaderOptionCatalog.UI_THEME_KEYS[refs.uiThemeSpinner.getSelectedItemPosition()]);
             refreshTextColorPreview.run();
-            String nextResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(activity);
-            if (!previousResolvedUiMode.equals(nextResolvedUiMode)) {
+            String nextResolvedAppearance = ThemeModeHelper.getResolvedReaderAppearanceLabel(activity);
+            if (!previousResolvedAppearance.equals(nextResolvedAppearance)) {
                 activity.recreate();
                 return;
             }

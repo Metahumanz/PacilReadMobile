@@ -22,6 +22,7 @@ import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedActivity;
+import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.util.FileAssetHelper;
 
 import java.io.File;
@@ -384,7 +385,7 @@ public class BookshelfActivity extends ThemedActivity {
                 "已导入 %d 本书\n%s · %s",
                 allBooks.size(),
                 isCardMode() ? "网格书架" : "列表书架",
-                labelForAppTheme(settingsStore.getAppThemeMode())
+                ThemeModeHelper.getResolvedAppAppearanceLabel(this)
         );
         if (drawerController != null) {
             drawerController.setStatusText(status);
@@ -571,11 +572,5 @@ public class BookshelfActivity extends ThemedActivity {
             return "未知错误";
         }
         return error.getMessage();
-    }
-
-    private String labelForAppTheme(String value) {
-        if ("light".equals(value)) return "浅色";
-        if ("dark".equals(value)) return "深色";
-        return "跟随系统";
     }
 }

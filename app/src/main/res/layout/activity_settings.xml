@@ -100,6 +100,76 @@
                         android:popupBackground="@drawable/bg_app_dialog" />
 
                     <TextView
+                        style="@style/AppChromeBody"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="18dp"
+                        android:text="浅色风格" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/button_light_style_yaobai"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_app_outline_button"
+                            android:text="曜白"
+                            android:textAllCaps="false"
+                            android:textColor="@color/app_button_outline_text" />
+
+                        <Button
+                            android:id="@+id/button_light_style_yunbai"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_app_outline_button"
+                            android:text="云白"
+                            android:textAllCaps="false"
+                            android:textColor="@color/app_button_outline_text" />
+                    </LinearLayout>
+
+                    <TextView
+                        style="@style/AppChromeBody"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="18dp"
+                        android:text="深色风格" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/button_dark_style_yemu"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_app_outline_button"
+                            android:text="夜幕"
+                            android:textAllCaps="false"
+                            android:textColor="@color/app_button_outline_text" />
+
+                        <Button
+                            android:id="@+id/button_dark_style_jiye"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_app_outline_button"
+                            android:text="极夜"
+                            android:textAllCaps="false"
+                            android:textColor="@color/app_button_outline_text" />
+                    </LinearLayout>
+
+                    <TextView
                         android:id="@+id/text_glass_opacity"
                         style="@style/AppChromeBody"
                         android:layout_width="wrap_content"

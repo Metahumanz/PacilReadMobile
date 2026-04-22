@@ -38,6 +38,8 @@ public class SettingsStore {
     private static final String KEY_BOTTOM_PADDING = "bottom_padding_dp";
     private static final String KEY_APP_THEME_MODE = "app_theme_mode";
     private static final String KEY_READER_UI_THEME_MODE = "reader_ui_theme_mode";
+    private static final String KEY_APP_LIGHT_STYLE_VARIANT = "app_light_style_variant";
+    private static final String KEY_APP_DARK_STYLE_VARIANT = "app_dark_style_variant";
     private static final String KEY_THEME = "reader_theme";
     private static final String KEY_BACKGROUND_PATH = "reader_background_path";
     private static final String KEY_KEEP_SCREEN_ON = "keep_screen_on";
@@ -304,6 +306,22 @@ public class SettingsStore {
 
     public void setReaderUiThemeMode(String value) {
         preferences.edit().putString(KEY_READER_UI_THEME_MODE, normalizeReaderUiThemeMode(value)).apply();
+    }
+
+    public String getAppLightStyleVariant() {
+        return normalizeAppLightStyleVariant(preferences.getString(KEY_APP_LIGHT_STYLE_VARIANT, "yunbai"));
+    }
+
+    public void setAppLightStyleVariant(String value) {
+        preferences.edit().putString(KEY_APP_LIGHT_STYLE_VARIANT, normalizeAppLightStyleVariant(value)).apply();
+    }
+
+    public String getAppDarkStyleVariant() {
+        return normalizeAppDarkStyleVariant(preferences.getString(KEY_APP_DARK_STYLE_VARIANT, "yemu"));
+    }
+
+    public void setAppDarkStyleVariant(String value) {
+        preferences.edit().putString(KEY_APP_DARK_STYLE_VARIANT, normalizeAppDarkStyleVariant(value)).apply();
     }
 
     public String getReaderTheme() {
@@ -639,18 +657,26 @@ public class SettingsStore {
         return Math.max(min, Math.min(max, value));
     }
 
-    private static String normalizeAppThemeMode(String value) {
+    public static String normalizeAppThemeMode(String value) {
         if ("light".equals(value) || "dark".equals(value)) {
             return value;
         }
         return "system";
     }
 
-    private static String normalizeReaderUiThemeMode(String value) {
+    public static String normalizeReaderUiThemeMode(String value) {
         if ("system".equals(value) || "light".equals(value) || "dark".equals(value)) {
             return value;
         }
         return "follow_app";
+    }
+
+    public static String normalizeAppLightStyleVariant(String value) {
+        return "yaobai".equals(value) ? "yaobai" : "yunbai";
+    }
+
+    public static String normalizeAppDarkStyleVariant(String value) {
+        return "jiye".equals(value) ? "jiye" : "yemu";
     }
 
     private static String normalizeTtsEngine(String value) {
