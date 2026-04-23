@@ -13,6 +13,6 @@
         android:minHeight="52dp"
         android:text="添加书籍"
         android:textAllCaps="false"
-        android:textColor="@color/app_button_primary_text" />
+        android:textColor="?attr/themeColorAppButtonPrimaryText" />
 
 </FrameLayout>

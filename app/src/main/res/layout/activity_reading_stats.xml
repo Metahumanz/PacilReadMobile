@@ -25,7 +25,7 @@
                 android:contentDescription="返回"
                 android:padding="12dp"
                 android:src="@drawable/ic_arrow_back"
-                android:tint="@color/app_text_primary" />
+                android:tint="?attr/themeColorAppTextPrimary" />
 
             <TextView
                 android:id="@+id/text_page_title"
@@ -71,7 +71,7 @@
                         android:background="@drawable/bg_app_primary_button"
                         android:text="本日"
                         android:textAllCaps="false"
-                        android:textColor="@color/app_button_primary_text" />
+                        android:textColor="?attr/themeColorAppButtonPrimaryText" />
 
                     <Button
                         android:id="@+id/button_period_week"
@@ -82,7 +82,7 @@
                         android:background="@drawable/bg_app_outline_button"
                         android:text="本周"
                         android:textAllCaps="false"
-                        android:textColor="@color/app_button_outline_text" />
+                        android:textColor="?attr/themeColorAppButtonOutlineText" />
 
                     <Button
                         android:id="@+id/button_period_year"
@@ -93,7 +93,7 @@
                         android:background="@drawable/bg_app_outline_button"
                         android:text="本年"
                         android:textAllCaps="false"
-                        android:textColor="@color/app_button_outline_text" />
+                        android:textColor="?attr/themeColorAppButtonOutlineText" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -157,7 +157,7 @@
                                 android:layout_height="match_parent"
                                 android:gravity="center"
                                 android:text="PR"
-                                android:textColor="@color/app_button_primary_text"
+                                android:textColor="?attr/themeColorAppButtonPrimaryText"
                                 android:textSize="22sp"
                                 android:textStyle="bold" />
                         </FrameLayout>

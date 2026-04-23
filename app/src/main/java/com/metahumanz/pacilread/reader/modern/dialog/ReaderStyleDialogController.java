@@ -316,7 +316,7 @@ public final class ReaderStyleDialogController {
                     Button applyButton = new Button(activity);
                     applyButton.setText(theme.name);
                     applyButton.setBackgroundResource(R.drawable.bg_outline_button);
-                    applyButton.setTextColor(activity.getColor(R.color.primary));
+                    applyButton.setTextColor(ThemeModeHelper.resolveColor(activity, R.color.primary));
                     com.metahumanz.pacilread.ui.GlassUiHelper.applyToView(activity, applyButton, runtime.settingsStore.getGlassOpacityPercent());
                     Button deleteButton = new Button(activity);
                     deleteButton.setText("删除");

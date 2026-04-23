@@ -65,7 +65,7 @@
             android:paddingBottom="10dp"
             android:text="纸控"
             android:textAllCaps="false"
-            android:textColor="@color/app_button_outline_text" />
+            android:textColor="?attr/themeColorAppButtonOutlineText" />
 
         <Button
             android:id="@+id/preview_style_button_theme_forest"
@@ -79,7 +79,7 @@
             android:paddingBottom="10dp"
             android:text="护眼"
             android:textAllCaps="false"
-            android:textColor="@color/app_button_outline_text" />
+            android:textColor="?attr/themeColorAppButtonOutlineText" />
 
         <Button
             android:id="@+id/preview_style_button_theme_night"
@@ -92,7 +92,7 @@
             android:paddingBottom="10dp"
             android:text="夜航"
             android:textAllCaps="false"
-            android:textColor="@color/app_button_outline_text" />
+            android:textColor="?attr/themeColorAppButtonOutlineText" />
     </LinearLayout>
 
     <TextView
@@ -289,7 +289,7 @@
             android:paddingBottom="10dp"
             android:text="选择背景"
             android:textAllCaps="false"
-            android:textColor="@color/app_button_outline_text" />
+            android:textColor="?attr/themeColorAppButtonOutlineText" />
 
         <Button
             android:id="@+id/preview_style_button_clear_background"
@@ -302,7 +302,7 @@
             android:paddingBottom="10dp"
             android:text="恢复预设"
             android:textAllCaps="false"
-            android:textColor="@color/app_button_outline_text" />
+            android:textColor="?attr/themeColorAppButtonOutlineText" />
     </LinearLayout>
 
     <TextView
@@ -332,7 +332,7 @@
         android:paddingBottom="10dp"
         android:text="保存当前主题"
         android:textAllCaps="false"
-        android:textColor="@color/app_button_outline_text" />
+        android:textColor="?attr/themeColorAppButtonOutlineText" />
 
     <LinearLayout
         android:id="@+id/preview_style_custom_theme_list"

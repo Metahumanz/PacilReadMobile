@@ -32,7 +32,7 @@
                 android:minHeight="0dp"
                 android:padding="0dp"
                 android:text="☰"
-                android:textColor="@color/app_text_primary"
+                android:textColor="?attr/themeColorAppTextPrimary"
                 android:textSize="18sp" />
 
             <TextView
@@ -54,7 +54,7 @@
                 android:paddingEnd="14dp"
                 android:text="+ 添加"
                 android:textAllCaps="false"
-                android:textColor="@color/app_button_primary_text" />
+                android:textColor="?attr/themeColorAppButtonPrimaryText" />
         </LinearLayout>
 
         <!-- ========== Bookshelf Content ========== -->
@@ -133,7 +133,7 @@
                         android:minWidth="0dp"
                         android:padding="0dp"
                         android:text="▦"
-                        android:textColor="@color/app_button_primary_text" />
+                        android:textColor="?attr/themeColorAppButtonPrimaryText" />
 
                     <Button
                         android:id="@+id/button_mode_list"
@@ -145,7 +145,7 @@
                         android:minWidth="0dp"
                         android:padding="0dp"
                         android:text="☰"
-                        android:textColor="@color/app_button_outline_text" />
+                        android:textColor="?attr/themeColorAppButtonOutlineText" />
                 </LinearLayout>
             </LinearLayout>
 
@@ -220,7 +220,7 @@
                             android:background="@drawable/bg_app_primary_button"
                             android:gravity="center"
                             android:text="+"
-                            android:textColor="@color/app_button_primary_text"
+                            android:textColor="?attr/themeColorAppButtonPrimaryText"
                             android:textSize="31sp" />
 
                         <TextView
@@ -254,7 +254,7 @@
                             android:paddingBottom="10dp"
                             android:text="添加书籍"
                             android:textAllCaps="false"
-                            android:textColor="@color/app_button_primary_text" />
+                            android:textColor="?attr/themeColorAppButtonPrimaryText" />
                     </LinearLayout>
                 </LinearLayout>
             </FrameLayout>
@@ -267,7 +267,7 @@
         android:id="@+id/layout_loading"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@color/app_scrim"
+        android:background="?attr/themeColorAppScrim"
         android:gravity="center"
         android:orientation="vertical"
         android:visibility="gone">

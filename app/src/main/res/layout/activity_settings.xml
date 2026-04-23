@@ -4,7 +4,7 @@
     android:id="@+id/settings_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/app_background"
+    android:background="?attr/themeColorAppBackground"
     android:theme="@style/AppChromeSurfaceTheme">
 
     <LinearLayout
@@ -27,7 +27,7 @@
                 android:contentDescription="返回"
                 android:padding="12dp"
                 android:src="@drawable/ic_arrow_back"
-                app:tint="@color/app_text_primary" />
+                app:tint="?attr/themeColorAppTextPrimary" />
 
             <TextView
                 style="@style/AppChromeBarTitle"
@@ -120,7 +120,7 @@
                             android:background="@drawable/bg_app_outline_button"
                             android:text="曜白"
                             android:textAllCaps="false"
-                            android:textColor="@color/app_button_outline_text" />
+                            android:textColor="?attr/themeColorAppButtonOutlineText" />
 
                         <Button
                             android:id="@+id/button_light_style_yunbai"
@@ -131,7 +131,7 @@
                             android:background="@drawable/bg_app_outline_button"
                             android:text="云白"
                             android:textAllCaps="false"
-                            android:textColor="@color/app_button_outline_text" />
+                            android:textColor="?attr/themeColorAppButtonOutlineText" />
                     </LinearLayout>
 
                     <TextView
@@ -155,7 +155,7 @@
                             android:background="@drawable/bg_app_outline_button"
                             android:text="夜幕"
                             android:textAllCaps="false"
-                            android:textColor="@color/app_button_outline_text" />
+                            android:textColor="?attr/themeColorAppButtonOutlineText" />
 
                         <Button
                             android:id="@+id/button_dark_style_jiye"
@@ -166,7 +166,7 @@
                             android:background="@drawable/bg_app_outline_button"
                             android:text="极夜"
                             android:textAllCaps="false"
-                            android:textColor="@color/app_button_outline_text" />
+                            android:textColor="?attr/themeColorAppButtonOutlineText" />
                     </LinearLayout>
 
                     <TextView
@@ -306,7 +306,7 @@
                                 android:background="@drawable/bg_app_primary_button"
                                 android:text="本日"
                                 android:textAllCaps="false"
-                                android:textColor="@color/app_button_primary_text" />
+                                android:textColor="?attr/themeColorAppButtonPrimaryText" />
 
                             <Button
                                 android:id="@+id/button_stats_period_week"
@@ -317,7 +317,7 @@
                                 android:background="@drawable/bg_app_outline_button"
                                 android:text="本周"
                                 android:textAllCaps="false"
-                                android:textColor="@color/app_button_outline_text" />
+                                android:textColor="?attr/themeColorAppButtonOutlineText" />
 
                             <Button
                                 android:id="@+id/button_stats_period_year"
@@ -328,7 +328,7 @@
                                 android:background="@drawable/bg_app_outline_button"
                                 android:text="本年"
                                 android:textAllCaps="false"
-                                android:textColor="@color/app_button_outline_text" />
+                                android:textColor="?attr/themeColorAppButtonOutlineText" />
                         </LinearLayout>
 
                         <TextView
@@ -349,7 +349,7 @@
                             android:background="@drawable/bg_app_outline_button"
                             android:text="查看详细统计"
                             android:textAllCaps="false"
-                            android:textColor="@color/app_button_outline_text" />
+                            android:textColor="?attr/themeColorAppButtonOutlineText" />
                     </LinearLayout>
                 </LinearLayout>
 
@@ -423,7 +423,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
                             android:text="仅隔离 settings.json。留空时会与电脑共享设置，填写 mobile / android 等可分开同步手机设置。"
-                            android:textColor="@color/app_text_secondary" />
+                            android:textColor="?attr/themeColorAppTextSecondary" />
 
                         <LinearLayout
                             android:layout_width="match_parent"
@@ -480,7 +480,7 @@
                                 android:background="@drawable/bg_app_outline_button"
                                 android:text="书架"
                                 android:textAllCaps="false"
-                                android:textColor="@color/app_button_outline_text"
+                                android:textColor="?attr/themeColorAppButtonOutlineText"
                                 android:textSize="13sp" />
 
                             <Button
@@ -492,7 +492,7 @@
                                 android:background="@drawable/bg_app_outline_button"
                                 android:text="文件"
                                 android:textAllCaps="false"
-                                android:textColor="@color/app_button_outline_text"
+                                android:textColor="?attr/themeColorAppButtonOutlineText"
                                 android:textSize="13sp" />
 
                             <Button
@@ -504,7 +504,7 @@
                                 android:background="@drawable/bg_app_outline_button"
                                 android:text="界面"
                                 android:textAllCaps="false"
-                                android:textColor="@color/app_button_outline_text"
+                                android:textColor="?attr/themeColorAppButtonOutlineText"
                                 android:textSize="13sp" />
 
                             <Button
@@ -516,7 +516,7 @@
                                 android:background="@drawable/bg_app_outline_button"
                                 android:text="主题"
                                 android:textAllCaps="false"
-                                android:textColor="@color/app_button_outline_text"
+                                android:textColor="?attr/themeColorAppButtonOutlineText"
                                 android:textSize="13sp" />
 
                             <Button
@@ -528,7 +528,7 @@
                                 android:background="@drawable/bg_app_outline_button"
                                 android:text="背景"
                                 android:textAllCaps="false"
-                                android:textColor="@color/app_button_outline_text"
+                                android:textColor="?attr/themeColorAppButtonOutlineText"
                                 android:textSize="13sp" />
 
                             <Button
@@ -540,7 +540,7 @@
                                 android:background="@drawable/bg_app_outline_button"
                                 android:text="阅读时长"
                                 android:textAllCaps="false"
-                                android:textColor="@color/app_button_outline_text"
+                                android:textColor="?attr/themeColorAppButtonOutlineText"
                                 android:textSize="13sp" />
                         </GridLayout>
 
@@ -552,7 +552,7 @@
                             android:background="@drawable/bg_app_outline_button"
                             android:text="测试 WebDAV 连接"
                             android:textAllCaps="false"
-                            android:textColor="@color/app_button_outline_text" />
+                            android:textColor="?attr/themeColorAppButtonOutlineText" />
 
                         <TextView
                             android:id="@+id/text_status"
@@ -562,7 +562,7 @@
                             android:layout_marginTop="8dp"
                             android:text="状态：就绪"
                             android:textAlignment="center"
-                            android:textColor="@color/app_primary" />
+                            android:textColor="?attr/themeColorAppPrimary" />
                     </LinearLayout>
                 </LinearLayout>
 
@@ -605,7 +605,7 @@
                             android:background="@drawable/bg_app_positive_button"
                             android:text="全量备份"
                             android:textAllCaps="false"
-                            android:textColor="@color/app_button_positive_text" />
+                            android:textColor="?attr/themeColorAppButtonPositiveText" />
 
                         <Button
                             android:id="@+id/button_full_restore"
@@ -616,7 +616,7 @@
                             android:background="@drawable/bg_app_outline_button"
                             android:text="全量恢复"
                             android:textAllCaps="false"
-                            android:textColor="@color/app_button_outline_text" />
+                            android:textColor="?attr/themeColorAppButtonOutlineText" />
                     </LinearLayout>
 
                     <TextView
@@ -642,7 +642,7 @@
                             android:background="@drawable/bg_app_positive_button"
                             android:text="增量备份"
                             android:textAllCaps="false"
-                            android:textColor="@color/app_button_positive_text" />
+                            android:textColor="?attr/themeColorAppButtonPositiveText" />
 
                         <Button
                             android:id="@+id/button_lite_restore"
@@ -653,7 +653,7 @@
                             android:background="@drawable/bg_app_outline_button"
                             android:text="增量恢复"
                             android:textAllCaps="false"
-                            android:textColor="@color/app_button_outline_text" />
+                            android:textColor="?attr/themeColorAppButtonOutlineText" />
                     </LinearLayout>
                 </LinearLayout>
 
@@ -722,7 +722,7 @@
                         android:background="@drawable/bg_app_outline_button"
                         android:text="测试朗读"
                         android:textAllCaps="false"
-                        android:textColor="@color/app_button_outline_text" />
+                        android:textColor="?attr/themeColorAppButtonOutlineText" />
                 </LinearLayout>
 
             </LinearLayout>

@@ -235,9 +235,10 @@ public final class ReaderChromeController {
     public void styleReaderMenuButton(Button button, boolean active) {
         button.setBackgroundResource(active ? R.drawable.bg_reader_menu_button_active : R.drawable.bg_reader_menu_button_solid);
         button.setTag(R.id.tag_glass_background, Boolean.FALSE);
-        button.setTextColor(activity.getColor(active
-                ? R.color.reader_menu_button_active_text
-                : R.color.reader_menu_button_text));
+        button.setTextColor(ThemeModeHelper.resolveColor(
+                activity,
+                active ? R.color.reader_menu_button_active_text : R.color.reader_menu_button_text
+        ));
     }
 
     public void applyGlassOpacity() {
@@ -254,9 +255,10 @@ public final class ReaderChromeController {
 
     public void styleThemeButton(Button button, boolean active) {
         button.setBackgroundResource(active ? R.drawable.bg_reader_menu_button_active : R.drawable.bg_reader_menu_button_solid);
-        button.setTextColor(activity.getColor(active
-                ? R.color.reader_menu_button_active_text
-                : R.color.reader_menu_text_muted));
+        button.setTextColor(ThemeModeHelper.resolveColor(
+                activity,
+                active ? R.color.reader_menu_button_active_text : R.color.reader_menu_text_muted
+        ));
         button.setTag(R.id.tag_glass_background, !active);
     }
 

@@ -10,7 +10,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="听书设置"
-        android:textColor="@color/on_surface"
+        android:textColor="?attr/themeColorOnSurface"
         android:textSize="20sp"
         android:textStyle="bold" />
 
@@ -19,7 +19,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:text="引擎"
-        android:textColor="@color/on_surface"
+        android:textColor="?attr/themeColorOnSurface"
         android:textStyle="bold" />
 
         <Spinner
@@ -36,7 +36,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:text="语速"
-        android:textColor="@color/on_surface"
+        android:textColor="?attr/themeColorOnSurface"
         android:textStyle="bold" />
 
     <SeekBar
@@ -49,7 +49,7 @@
         android:id="@+id/tts_text_rate"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textColor="@color/on_surface_muted" />
+        android:textColor="?attr/themeColorOnSurfaceMuted" />
 
     <LinearLayout
         android:id="@+id/tts_layout_mimo_voice"
@@ -62,7 +62,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="MiMo 音色"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textStyle="bold" />
 
         <Spinner
@@ -81,7 +81,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
         android:text="选择朗读引擎后即可开始听书。"
-        android:textColor="@color/on_surface_muted"
+        android:textColor="?attr/themeColorOnSurfaceMuted"
         android:textSize="13sp" />
 
     <Button

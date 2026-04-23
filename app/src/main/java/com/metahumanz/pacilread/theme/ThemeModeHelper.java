@@ -4,8 +4,13 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.util.TypedValue;
 
+import androidx.annotation.AttrRes;
+import androidx.annotation.ColorInt;
+import androidx.annotation.ColorRes;
 import androidx.annotation.StyleRes;
+import androidx.core.content.ContextCompat;
 
 import com.metahumanz.pacilread.R;
 import com.metahumanz.pacilread.storage.SettingsStore;
@@ -144,6 +149,41 @@ public final class ThemeModeHelper {
         return isDark(resources);
     }
 
+    @ColorInt
+    public static int resolveColor(Context context, @ColorRes int colorResId) {
+        if (context == null) {
+            return 0;
+        }
+        TypedValue value = new TypedValue();
+        Resources resources = context.getResources();
+        resources.getValue(colorResId, value, true);
+        if (isInlineColor(value)) {
+            return value.data;
+        }
+        if (value.type == TypedValue.TYPE_ATTRIBUTE) {
+            return resolveThemeAttrColor(context, value.data);
+        }
+        if (value.resourceId != 0) {
+            return ContextCompat.getColor(context, value.resourceId);
+        }
+        return ContextCompat.getColor(context, colorResId);
+    }
+
+    @ColorInt
+    public static int resolveThemeAttrColor(Context context, @AttrRes int attrResId) {
+        TypedValue value = new TypedValue();
+        if (!context.getTheme().resolveAttribute(attrResId, value, true)) {
+            return 0;
+        }
+        if (isInlineColor(value)) {
+            return value.data;
+        }
+        if (value.resourceId != 0) {
+            return ContextCompat.getColor(context, value.resourceId);
+        }
+        return 0;
+    }
+
     private static Context wrap(Context base, String bucket) {
         Configuration configuration = new Configuration(base.getResources().getConfiguration());
         configuration.uiMode = (configuration.uiMode & ~Configuration.UI_MODE_NIGHT_MASK)
@@ -165,5 +205,10 @@ public final class ThemeModeHelper {
 
     private static SharedPreferences preferences(Context context) {
         return context.getApplicationContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+    }
+
+    private static boolean isInlineColor(TypedValue value) {
+        return value.type >= TypedValue.TYPE_FIRST_COLOR_INT
+                && value.type <= TypedValue.TYPE_LAST_COLOR_INT;
     }
 }

@@ -6,7 +6,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:alpha="0"
-        android:background="@color/app_scrim"
+        android:background="?attr/themeColorAppScrim"
         android:visibility="gone" />
 
     <LinearLayout
@@ -37,7 +37,7 @@
                 android:background="@drawable/bg_app_primary_button"
                 android:gravity="center"
                 android:text="P"
-                android:textColor="@color/app_button_primary_text"
+                android:textColor="?attr/themeColorAppButtonPrimaryText"
                 android:textSize="18sp"
                 android:textStyle="bold|italic" />
 

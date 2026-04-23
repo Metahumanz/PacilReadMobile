@@ -10,7 +10,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="自定义字色"
-        android:textColor="@color/on_surface"
+        android:textColor="?attr/themeColorOnSurface"
         android:textSize="20sp"
         android:textStyle="bold" />
 
@@ -19,7 +19,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:text="红色 (R)"
-        android:textColor="@color/on_surface"
+        android:textColor="?attr/themeColorOnSurface"
         android:textStyle="bold" />
 
     <SeekBar
@@ -32,14 +32,14 @@
         android:id="@+id/color_text_red"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textColor="@color/on_surface_muted" />
+        android:textColor="?attr/themeColorOnSurfaceMuted" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:text="绿色 (G)"
-        android:textColor="@color/on_surface"
+        android:textColor="?attr/themeColorOnSurface"
         android:textStyle="bold" />
 
     <SeekBar
@@ -52,14 +52,14 @@
         android:id="@+id/color_text_green"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textColor="@color/on_surface_muted" />
+        android:textColor="?attr/themeColorOnSurfaceMuted" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:text="蓝色 (B)"
-        android:textColor="@color/on_surface"
+        android:textColor="?attr/themeColorOnSurface"
         android:textStyle="bold" />
 
     <SeekBar
@@ -72,7 +72,7 @@
         android:id="@+id/color_text_blue"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textColor="@color/on_surface_muted" />
+        android:textColor="?attr/themeColorOnSurfaceMuted" />
 
     <View
         android:id="@+id/color_preview"

@@ -33,7 +33,7 @@
                 android:layout_height="match_parent"
                 android:gravity="center"
                 android:text="PR"
-                android:textColor="@color/app_button_primary_text"
+                android:textColor="?attr/themeColorAppButtonPrimaryText"
                 android:textSize="18sp" />
 
             <TextView
@@ -47,7 +47,7 @@
                 android:paddingTop="3dp"
                 android:paddingRight="6dp"
                 android:paddingBottom="3dp"
-                android:textColor="@color/app_badge_text"
+                android:textColor="?attr/themeColorAppBadgeText"
                 android:textSize="9sp" />
         </FrameLayout>
 
@@ -85,7 +85,7 @@
                     android:paddingRight="9dp"
                     android:paddingBottom="4dp"
                     android:text="置顶"
-                    android:textColor="@color/app_button_primary_text"
+                    android:textColor="?attr/themeColorAppButtonPrimaryText"
                     android:textSize="10sp"
                     android:visibility="gone" />
             </LinearLayout>

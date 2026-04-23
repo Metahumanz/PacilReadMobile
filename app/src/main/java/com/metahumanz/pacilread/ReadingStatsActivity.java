@@ -20,6 +20,7 @@ import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
 import com.metahumanz.pacilread.sync.WebDavClient;
 import com.metahumanz.pacilread.theme.ThemedActivity;
+import com.metahumanz.pacilread.theme.ThemeModeHelper;
 
 import java.io.File;
 import java.text.DateFormat;
@@ -139,7 +140,10 @@ public class ReadingStatsActivity extends ThemedActivity {
             return;
         }
         button.setBackgroundResource(selected ? R.drawable.bg_app_primary_button : R.drawable.bg_app_outline_button);
-        button.setTextColor(getColor(selected ? R.color.app_button_primary_text : R.color.app_button_outline_text));
+        button.setTextColor(ThemeModeHelper.resolveColor(
+                this,
+                selected ? R.color.app_button_primary_text : R.color.app_button_outline_text
+        ));
     }
 
     private void loadStats(boolean syncFirst) {

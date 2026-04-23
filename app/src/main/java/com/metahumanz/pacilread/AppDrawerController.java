@@ -10,6 +10,8 @@ import android.view.ViewGroup;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.TextView;
 
+import com.metahumanz.pacilread.theme.ThemeModeHelper;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -265,7 +267,10 @@ public class AppDrawerController {
         }
         container.setBackgroundResource(selected ? R.drawable.bg_nav_item_active : R.drawable.bg_nav_item_idle);
         if (textView != null) {
-            textView.setTextColor(activity.getColor(selected ? R.color.app_nav_text_active : R.color.app_nav_text_idle));
+            textView.setTextColor(ThemeModeHelper.resolveColor(
+                    activity,
+                    selected ? R.color.app_nav_text_active : R.color.app_nav_text_idle
+            ));
         }
     }
 

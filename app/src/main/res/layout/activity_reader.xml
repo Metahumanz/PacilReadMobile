@@ -34,7 +34,7 @@
                 android:layout_height="wrap_content"
                 android:fontFamily="serif"
                 android:includeFontPadding="false"
-                android:textColor="@color/on_surface"
+                android:textColor="?attr/themeColorOnSurface"
                 android:textSize="20sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
@@ -47,7 +47,7 @@
                 android:fontFamily="serif"
                 android:gravity="start|top"
                 android:lineSpacingExtra="9sp"
-                android:textColor="@color/on_surface"
+                android:textColor="?attr/themeColorOnSurface"
                 android:textSize="19sp" />
         </LinearLayout>
 
@@ -69,7 +69,7 @@
                 android:layout_height="wrap_content"
                 android:fontFamily="serif"
                 android:includeFontPadding="false"
-                android:textColor="@color/on_surface"
+                android:textColor="?attr/themeColorOnSurface"
                 android:textSize="20sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
@@ -82,7 +82,7 @@
                 android:fontFamily="serif"
                 android:gravity="start|top"
                 android:lineSpacingExtra="9sp"
-                android:textColor="@color/on_surface"
+                android:textColor="?attr/themeColorOnSurface"
                 android:textSize="19sp" />
         </LinearLayout>
 
@@ -157,7 +157,7 @@
             android:paddingTop="5dp"
             android:paddingRight="10dp"
             android:paddingBottom="5dp"
-            android:textColor="@color/on_surface_muted"
+            android:textColor="?attr/themeColorOnSurfaceMuted"
             android:textSize="10sp"
             android:visibility="gone" />
 
@@ -173,7 +173,7 @@
             android:paddingTop="5dp"
             android:paddingRight="10dp"
             android:paddingBottom="5dp"
-            android:textColor="@color/on_surface_muted"
+            android:textColor="?attr/themeColorOnSurfaceMuted"
             android:textSize="10sp"
             android:visibility="gone" />
 
@@ -189,7 +189,7 @@
             android:paddingTop="5dp"
             android:paddingRight="10dp"
             android:paddingBottom="5dp"
-            android:textColor="@color/on_surface_muted"
+            android:textColor="?attr/themeColorOnSurfaceMuted"
             android:textSize="10sp"
             android:visibility="gone" />
     </FrameLayout>
@@ -217,7 +217,7 @@
             android:paddingTop="5dp"
             android:paddingRight="10dp"
             android:paddingBottom="5dp"
-            android:textColor="@color/on_surface_muted"
+            android:textColor="?attr/themeColorOnSurfaceMuted"
             android:textSize="10sp"
             android:visibility="gone" />
 
@@ -233,7 +233,7 @@
             android:paddingTop="5dp"
             android:paddingRight="10dp"
             android:paddingBottom="5dp"
-            android:textColor="@color/on_surface_muted"
+            android:textColor="?attr/themeColorOnSurfaceMuted"
             android:textSize="10sp"
             android:visibility="gone" />
 
@@ -249,7 +249,7 @@
             android:paddingTop="5dp"
             android:paddingRight="10dp"
             android:paddingBottom="5dp"
-            android:textColor="@color/on_surface_muted"
+            android:textColor="?attr/themeColorOnSurfaceMuted"
             android:textSize="10sp"
             android:visibility="gone" />
     </FrameLayout>
@@ -288,7 +288,7 @@
                 android:paddingBottom="10dp"
                 android:text="@string/reader_back"
                 android:textAllCaps="false"
-                android:textColor="@color/reader_menu_button_text"
+                android:textColor="?attr/themeColorReaderMenuButtonText"
                 android:textSize="12sp" />
 
             <LinearLayout
@@ -310,7 +310,7 @@
                     android:paddingTop="6dp"
                     android:paddingRight="4dp"
                     android:paddingBottom="6dp"
-                    android:textColor="@color/reader_menu_text"
+                    android:textColor="?attr/themeColorReaderMenuText"
                     android:textSize="16sp"
                     android:textStyle="bold" />
             </LinearLayout>
@@ -324,7 +324,7 @@
                 android:paddingTop="6dp"
                 android:paddingRight="12dp"
                 android:paddingBottom="6dp"
-                android:textColor="@color/reader_menu_text"
+                android:textColor="?attr/themeColorReaderMenuText"
                 android:textSize="11sp" />
         </LinearLayout>
 
@@ -358,7 +358,7 @@
                     android:paddingBottom="10dp"
                     android:text="@string/reader_search"
                     android:textAllCaps="false"
-                    android:textColor="@color/reader_menu_button_text"
+                    android:textColor="?attr/themeColorReaderMenuButtonText"
                     android:textSize="12sp" />
 
                 <Button
@@ -376,7 +376,7 @@
                     android:paddingBottom="10dp"
                     android:text="替换"
                     android:textAllCaps="false"
-                    android:textColor="@color/reader_menu_button_text"
+                    android:textColor="?attr/themeColorReaderMenuButtonText"
                     android:textSize="12sp" />
 
                 <Button
@@ -394,7 +394,7 @@
                     android:paddingBottom="10dp"
                     android:text="@string/reader_style"
                     android:textAllCaps="false"
-                    android:textColor="@color/reader_menu_button_text"
+                    android:textColor="?attr/themeColorReaderMenuButtonText"
                     android:textSize="12sp" />
 
                 <Button
@@ -412,7 +412,7 @@
                     android:paddingBottom="10dp"
                     android:text="翻页"
                     android:textAllCaps="false"
-                    android:textColor="@color/reader_menu_button_text"
+                    android:textColor="?attr/themeColorReaderMenuButtonText"
                     android:textSize="12sp" />
 
                 <Button
@@ -430,7 +430,7 @@
                     android:paddingBottom="10dp"
                     android:text="@string/reader_tts"
                     android:textAllCaps="false"
-                    android:textColor="@color/reader_menu_button_text"
+                    android:textColor="?attr/themeColorReaderMenuButtonText"
                     android:textSize="12sp" />
 
                 <Button
@@ -447,7 +447,7 @@
                     android:paddingBottom="8dp"
                     android:text="明暗"
                     android:textAllCaps="false"
-                    android:textColor="@color/reader_menu_button_text"
+                    android:textColor="?attr/themeColorReaderMenuButtonText"
                     android:textSize="12sp"
                     android:visibility="gone" />
             </LinearLayout>
@@ -487,7 +487,7 @@
             android:paddingBottom="10dp"
             android:text="@string/reader_toc"
             android:textAllCaps="false"
-            android:textColor="@color/reader_menu_button_text"
+            android:textColor="?attr/themeColorReaderMenuButtonText"
             android:textSize="12sp" />
 
         <LinearLayout
@@ -507,7 +507,7 @@
                 android:gravity="center"
                 android:maxLines="1"
                 android:text=""
-                android:textColor="@color/reader_menu_text"
+                android:textColor="?attr/themeColorReaderMenuText"
                 android:textSize="12sp"
                 android:textStyle="bold" />
 
@@ -520,7 +520,7 @@
                 android:gravity="center"
                 android:maxLines="1"
                 android:text="进度调节"
-                android:textColor="@color/reader_menu_text_muted"
+                android:textColor="?attr/themeColorReaderMenuTextMuted"
                 android:textSize="11sp" />
         </LinearLayout>
 
@@ -538,7 +538,7 @@
             android:paddingBottom="10dp"
             android:text="设置"
             android:textAllCaps="false"
-            android:textColor="@color/reader_menu_button_text"
+            android:textColor="?attr/themeColorReaderMenuButtonText"
             android:textSize="12sp" />
     </LinearLayout>
 
@@ -577,7 +577,7 @@
                 android:paddingBottom="10dp"
                 android:text="上一章"
                 android:textAllCaps="false"
-                android:textColor="@color/reader_menu_button_text"
+                android:textColor="?attr/themeColorReaderMenuButtonText"
                 android:textSize="12sp" />
 
             <SeekBar
@@ -602,7 +602,7 @@
                 android:paddingBottom="10dp"
                 android:text="下一章"
                 android:textAllCaps="false"
-                android:textColor="@color/reader_menu_button_text"
+                android:textColor="?attr/themeColorReaderMenuButtonText"
                 android:textSize="12sp" />
         </LinearLayout>
     </LinearLayout>

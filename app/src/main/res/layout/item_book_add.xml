@@ -39,7 +39,7 @@
                 android:paddingRight="8dp"
                 android:paddingBottom="5dp"
                 android:text="导入"
-                android:textColor="@color/app_button_primary_text"
+                android:textColor="?attr/themeColorAppButtonPrimaryText"
                 android:textSize="10sp" />
         </FrameLayout>
 

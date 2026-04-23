@@ -3,10 +3,10 @@
     android:id="@android:id/text1"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@color/card"
+    android:background="?attr/themeColorCard"
     android:paddingStart="16dp"
     android:paddingTop="12dp"
     android:paddingEnd="16dp"
     android:paddingBottom="12dp"
-    android:textColor="@color/on_surface"
+    android:textColor="?attr/themeColorOnSurface"
     android:textSize="14sp" />
