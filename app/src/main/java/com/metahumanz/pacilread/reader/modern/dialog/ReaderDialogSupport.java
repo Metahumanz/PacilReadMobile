@@ -2,6 +2,7 @@ package com.metahumanz.pacilread.reader.modern.dialog;
 
 import android.app.AlertDialog;
 import android.graphics.Color;
+import android.graphics.Insets;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.view.View;
@@ -69,6 +70,37 @@ public final class ReaderDialogSupport {
         if (window != null) {
             window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         }
+    }
+
+    public void applyTocStyleFullscreenInsets(View root, View contentContainer) {
+        if (root == null || contentContainer == null) {
+            return;
+        }
+        root.setOnApplyWindowInsetsListener((view, windowInsets) -> {
+            int leftInset;
+            int topInset;
+            int rightInset;
+            int bottomInset;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Insets insets = windowInsets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                leftInset = insets.left;
+                topInset = insets.top;
+                rightInset = insets.right;
+                bottomInset = insets.bottom;
+            } else {
+                leftInset = windowInsets.getSystemWindowInsetLeft();
+                topInset = windowInsets.getSystemWindowInsetTop();
+                rightInset = windowInsets.getSystemWindowInsetRight();
+                bottomInset = windowInsets.getSystemWindowInsetBottom();
+            }
+            contentContainer.setPadding(
+                    ui.dp(20) + leftInset,
+                    ui.dp(18) + topInset,
+                    ui.dp(16) + rightInset,
+                    ui.dp(16) + bottomInset
+            );
+            return windowInsets;
+        });
     }
 
     public void showImmersiveFullscreenDialog(AlertDialog dialog, boolean restoreShowSystemBars) {

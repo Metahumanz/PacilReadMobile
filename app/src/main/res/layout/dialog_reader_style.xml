@@ -1,22 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/style_root"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:background="@drawable/bg_dialog">
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_toc_fullscreen">
+
+    <ScrollView
+        android:id="@+id/style_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:overScrollMode="never"
+        android:scrollbars="none">
 
     <LinearLayout
+        android:id="@+id/style_content"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:paddingLeft="20dp"
+        android:paddingTop="18dp"
+        android:paddingRight="16dp"
+        android:paddingBottom="16dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="阅读样式"
             android:textColor="?attr/themeColorOnSurface"
-            android:textSize="20sp"
+            android:textSize="24sp"
             android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="调整文字、边距和阅读主题，滑动时可直接预览效果。"
+            android:textColor="?attr/themeColorOnSurfaceMuted"
+            android:textSize="12sp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="16dp"
+            android:background="?attr/themeColorDivider" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -213,6 +240,26 @@
 
         <TextView
             android:id="@+id/style_text_line_spacing"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="?attr/themeColorOnSurfaceMuted" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="段间距"
+            android:textColor="?attr/themeColorOnSurface"
+            android:textStyle="bold" />
+
+        <SeekBar
+            android:id="@+id/style_seek_paragraph_spacing"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="32" />
+
+        <TextView
+            android:id="@+id/style_text_paragraph_spacing"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="?attr/themeColorOnSurfaceMuted" />
@@ -538,4 +585,5 @@
 
     </LinearLayout>
 
-</ScrollView>
+    </ScrollView>
+</FrameLayout>

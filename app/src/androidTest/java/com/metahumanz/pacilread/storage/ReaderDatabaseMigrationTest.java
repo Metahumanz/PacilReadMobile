@@ -11,6 +11,7 @@ import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
 import com.metahumanz.pacilread.model.BookRecord;
+import com.metahumanz.pacilread.model.ChapterRecord;
 
 import org.junit.After;
 import org.junit.Before;
@@ -114,6 +115,102 @@ public class ReaderDatabaseMigrationTest {
         } finally {
             upgradedDb.close();
         }
+    }
+
+    @Test
+    public void upgradeFromTypoLocalPathColumnRepairsAndRebasesBookPaths() throws Exception {
+        File dbFile = context.getDatabasePath(DATABASE_NAME);
+        File parent = dbFile.getParentFile();
+        if (parent != null && !parent.exists()) {
+            assertTrue(parent.mkdirs() || parent.exists());
+        }
+
+        SQLiteDatabase legacyDb = SQLiteDatabase.openOrCreateDatabase(dbFile, null);
+        try {
+            legacyDb.execSQL("CREATE TABLE books (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                    "title TEXT NOT NULL," +
+                    "author TEXT," +
+                    "loacl_path TEXT NOT NULL," +
+                    "cover_path TEXT," +
+                    "book_type TEXT NOT NULL DEFAULT 'text'," +
+                    "progress_index INTEGER NOT NULL DEFAULT 0," +
+                    "progress_offset INTEGER NOT NULL DEFAULT 0," +
+                    "last_read_at INTEGER NOT NULL," +
+                    "pinned INTEGER NOT NULL DEFAULT 0" +
+                    ")");
+            legacyDb.execSQL("INSERT INTO books(title, author, loacl_path, cover_path, book_type, progress_index, progress_offset, last_read_at, pinned) " +
+                    "VALUES ('Legacy Book', 'Legacy Author', '/tmp/legacy.txt', NULL, 'text', 2, 8, 123456789, 1)");
+            legacyDb.setVersion(4);
+        } finally {
+            legacyDb.close();
+        }
+
+        ReaderDatabaseHelper helper = ReaderDatabaseHelper.getInstance(context);
+        helper.rebaseLocalAssetPaths();
+
+        SQLiteDatabase upgradedDb = SQLiteDatabase.openDatabase(dbFile.getAbsolutePath(), null, SQLiteDatabase.OPEN_READONLY);
+        try {
+            assertTrue(hasColumn(upgradedDb, "books", "local_path"));
+            try (Cursor cursor = upgradedDb.query("books", new String[]{"local_path"}, null, null, null, null, null)) {
+                assertTrue(cursor.moveToFirst());
+                String rebasedPath = cursor.getString(0);
+                assertTrue(rebasedPath.contains(context.getFilesDir().getAbsolutePath()));
+                assertTrue(rebasedPath.endsWith("legacy.txt"));
+            }
+        } finally {
+            upgradedDb.close();
+        }
+    }
+
+    @Test
+    public void upgradeFromWin11SchemaCopiesChapterBodyIntoAndroidBodyText() throws Exception {
+        File dbFile = context.getDatabasePath(DATABASE_NAME);
+        File parent = dbFile.getParentFile();
+        if (parent != null && !parent.exists()) {
+            assertTrue(parent.mkdirs() || parent.exists());
+        }
+
+        SQLiteDatabase win11Db = SQLiteDatabase.openOrCreateDatabase(dbFile, null);
+        try {
+            win11Db.execSQL("CREATE TABLE books (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                    "title TEXT NOT NULL," +
+                    "author TEXT," +
+                    "cover_path TEXT," +
+                    "path TEXT," +
+                    "progress_index INTEGER DEFAULT 0," +
+                    "progress_offset INTEGER DEFAULT 0," +
+                    "last_read DATETIME DEFAULT CURRENT_TIMESTAMP," +
+                    "source_id INTEGER," +
+                    "pinned INTEGER DEFAULT 0" +
+                    ")");
+            win11Db.execSQL("CREATE TABLE chapters (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                    "book_id INTEGER NOT NULL," +
+                    "title TEXT NOT NULL," +
+                    "body TEXT NOT NULL," +
+                    "order_index INTEGER NOT NULL," +
+                    "link TEXT" +
+                    ")");
+            win11Db.execSQL("INSERT INTO books(title, author, path, progress_index, progress_offset, last_read, pinned) " +
+                    "VALUES ('Win11 Book', 'Win11 Author', 'C:/books/win11.txt', 0, 0, '2026-04-23T12:34:56.000Z', 0)");
+            win11Db.execSQL("INSERT INTO chapters(book_id, title, body, order_index) " +
+                    "VALUES (1, '第一章', '<p>第一段正文</p><p>第二段正文</p>', 0)");
+            win11Db.setVersion(4);
+        } finally {
+            win11Db.close();
+        }
+
+        ReaderDatabaseHelper helper = ReaderDatabaseHelper.getInstance(context);
+        BookRecord book = helper.getBook(1);
+        List<ChapterRecord> chapters = helper.getChapters(1, true);
+
+        assertEquals("C:/books/win11.txt", book.localPath);
+        assertEquals(1, chapters.size());
+        assertEquals("<p>第一段正文</p><p>第二段正文</p>", chapters.get(0).bodyHtml);
+        assertTrue(chapters.get(0).bodyText.contains("第一段正文"));
+        assertTrue(chapters.get(0).bodyText.contains("第二段正文"));
     }
 
     private boolean hasColumn(SQLiteDatabase db, String table, String column) {

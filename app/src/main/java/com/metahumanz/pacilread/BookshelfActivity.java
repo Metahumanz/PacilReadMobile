@@ -67,6 +67,8 @@ public class BookshelfActivity extends ThemedActivity {
     private View containerSearch;
     private View iconSearch;
     private long pendingCoverBookId = -1L;
+    private boolean booksLoaded = false;
+    private boolean booksLoading = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -81,6 +83,7 @@ public class BookshelfActivity extends ThemedActivity {
         setupAdapters();
         setupInteractions();
         configureDrawer();
+        showBookshelfLoadingState();
 
         if (savedInstanceState == null && settingsStore.isAutoOpenLastBook()) {
             maybeAutoOpenLastBook();
@@ -304,10 +307,16 @@ public class BookshelfActivity extends ThemedActivity {
         boolean usingCardMode = isCardMode();
         styleSelectionButton(buttonModeCard, usingCardMode);
         styleSelectionButton(buttonModeList, !usingCardMode);
-        if (!shouldShowBookshelfEmptyState(currentQuery())) {
-            gridBooks.setVisibility(usingCardMode ? View.VISIBLE : View.GONE);
-            listBooks.setVisibility(usingCardMode ? View.GONE : View.VISIBLE);
+        if (!booksLoaded) {
+            gridBooks.setVisibility(View.GONE);
+            listBooks.setVisibility(View.GONE);
+            return;
         }
+        if (shouldShowBookshelfEmptyState(currentQuery())) {
+            return;
+        }
+        gridBooks.setVisibility(usingCardMode ? View.VISIBLE : View.GONE);
+        listBooks.setVisibility(usingCardMode ? View.GONE : View.VISIBLE);
     }
 
     private void styleSelectionButton(Button button, boolean selected) {
@@ -319,16 +328,29 @@ public class BookshelfActivity extends ThemedActivity {
     }
 
     private void refreshBooks() {
+        booksLoading = true;
+        if (!booksLoaded) {
+            showBookshelfLoadingState();
+        }
         executor.execute(() -> {
             try {
                 List<BookRecord> books = databaseHelper.getBooks();
                 runOnUiThread(() -> {
+                    booksLoading = false;
+                    booksLoaded = true;
                     allBooks.clear();
                     allBooks.addAll(books);
                     applyFilter(currentQuery());
+                    updateDrawerStatus();
                 });
             } catch (Exception error) {
-                runOnUiThread(() -> showToast("加载书架失败: " + readableError(error)));
+                runOnUiThread(() -> {
+                    booksLoading = false;
+                    booksLoaded = true;
+                    applyFilter(currentQuery());
+                    updateDrawerStatus();
+                    showToast("加载书架失败: " + readableError(error));
+                });
             }
         });
     }
@@ -356,6 +378,12 @@ public class BookshelfActivity extends ThemedActivity {
     private void updateEmptyState(String query) {
         boolean showEmpty = shouldShowBookshelfEmptyState(query);
         emptyLayout.setVisibility(showEmpty ? View.VISIBLE : View.GONE);
+        if (!booksLoaded) {
+            emptyLayout.setVisibility(View.GONE);
+            gridBooks.setVisibility(View.GONE);
+            listBooks.setVisibility(View.GONE);
+            return;
+        }
         if (showEmpty) {
             gridBooks.setVisibility(View.GONE);
             listBooks.setVisibility(View.GONE);
@@ -375,10 +403,14 @@ public class BookshelfActivity extends ThemedActivity {
     }
 
     private boolean shouldShowBookshelfEmptyState(String query) {
-        return listAdapter.getCount() == 0;
+        return booksLoaded && listAdapter.getCount() == 0;
     }
 
     private void updateStats(List<BookRecord> filtered) {
+        if (!booksLoaded && booksLoading) {
+            statsText.setText("正在加载书架...");
+            return;
+        }
         statsText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "共 %d 本书籍", filtered.size()));
     }
 
@@ -544,6 +576,14 @@ public class BookshelfActivity extends ThemedActivity {
     }
 
     // ==================== UI Helpers ====================
+
+    private void showBookshelfLoadingState() {
+        emptyLayout.setVisibility(View.GONE);
+        gridBooks.setVisibility(View.GONE);
+        listBooks.setVisibility(View.GONE);
+        statsText.setText("正在加载书架...");
+        applyBookshelfMode();
+    }
 
     private void showLoading(String message) {
         loadingText.setText(message);

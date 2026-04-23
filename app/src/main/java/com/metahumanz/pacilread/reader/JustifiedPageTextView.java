@@ -8,6 +8,7 @@ import android.text.Layout;
 import android.text.Spanned;
 import android.text.TextPaint;
 import android.text.style.AlignmentSpan;
+import android.text.style.LeadingMarginSpan;
 import android.text.style.LineHeightSpan;
 import android.util.AttributeSet;
 
@@ -85,28 +86,30 @@ public class JustifiedPageTextView extends AppCompatTextView {
         for (int lineIndex = 0; lineIndex < lineCount; lineIndex++) {
             int start = layout.getLineStart(lineIndex);
             int end = layout.getLineEnd(lineIndex);
-            if (start >= end) {
+            int visibleEnd = layout.getLineVisibleEnd(lineIndex);
+            if (start >= visibleEnd) {
                 continue;
             }
             if (shouldUsePlatformLine(text, start, end)) {
-                drawLineHighlight(canvas, layout.getLineLeft(lineIndex), layout.getLineBaseline(lineIndex), paint, text, start, end);
+                float platformLineLeft = layout.getLineLeft(lineIndex) + getLeadingMargin(text, start, visibleEnd);
+                drawLineHighlight(canvas, platformLineLeft, layout.getLineBaseline(lineIndex), paint, text, start, visibleEnd);
                 drawPlatformLine(canvas, layout, lineIndex, availableWidth);
                 continue;
             }
-            String rawLine = text.subSequence(start, end).toString();
-            boolean paragraphEnd = rawLine.endsWith("\n") || rawLine.endsWith("\r");
+            boolean paragraphEnd = hasTrailingLineBreak(text, visibleEnd, end);
+            String rawLine = text.subSequence(start, visibleEnd).toString();
             String drawLine = trimLineBreaks(rawLine);
             if (drawLine.isEmpty()) {
                 continue;
             }
-            float lineLeft = layout.getLineLeft(lineIndex);
+            float lineLeft = layout.getLineLeft(lineIndex) + getLeadingMargin(text, start, visibleEnd);
             float baseline = layout.getLineBaseline(lineIndex);
             float lineAvailableWidth = Math.max(0f, availableWidth - Math.max(0f, lineLeft));
 
             if (shouldJustify(drawLine, paragraphEnd, lineAvailableWidth, paint)) {
-                drawJustifiedLineWithHighlight(canvas, drawLine, lineLeft, baseline, lineAvailableWidth, paint, text, start, end);
+                drawJustifiedLineWithHighlight(canvas, drawLine, lineLeft, baseline, lineAvailableWidth, paint, text, start, visibleEnd);
             } else {
-                drawLineHighlight(canvas, lineLeft, baseline, paint, text, start, end);
+                drawLineHighlight(canvas, lineLeft, baseline, paint, text, start, visibleEnd);
                 canvas.drawText(drawLine, lineLeft, baseline, paint);
             }
         }
@@ -121,6 +124,25 @@ public class JustifiedPageTextView extends AppCompatTextView {
         return spanned.getSpans(lineStart, lineEnd, ReaderTitleSpan.class).length > 0
                 || spanned.getSpans(lineStart, lineEnd, AlignmentSpan.class).length > 0
                 || spanned.getSpans(lineStart, lineEnd, LineHeightSpan.class).length > 0;
+    }
+
+    private int getLeadingMargin(CharSequence text, int lineStart, int lineEnd) {
+        if (!(text instanceof Spanned) || lineEnd <= lineStart) {
+            return 0;
+        }
+        Spanned spanned = (Spanned) text;
+        LeadingMarginSpan[] spans = spanned.getSpans(lineStart, lineEnd, LeadingMarginSpan.class);
+        int margin = 0;
+        for (LeadingMarginSpan span : spans) {
+            int spanStart = spanned.getSpanStart(span);
+            int spanEnd = spanned.getSpanEnd(span);
+            if (spanStart < 0 || spanEnd <= lineStart || spanStart >= lineEnd) {
+                continue;
+            }
+            boolean firstLine = lineStart <= spanStart;
+            margin += span.getLeadingMargin(firstLine);
+        }
+        return Math.max(0, margin);
     }
 
     private void drawPlatformLine(Canvas canvas, Layout layout, int lineIndex, int availableWidth) {
@@ -142,7 +164,12 @@ public class JustifiedPageTextView extends AppCompatTextView {
         for (int lineIndex = 0; lineIndex < lineCount; lineIndex++) {
             int start = layout.getLineStart(lineIndex);
             int end = layout.getLineEnd(lineIndex);
-            drawLineHighlight(canvas, layout.getLineLeft(lineIndex), layout.getLineBaseline(lineIndex), paint, text, start, end);
+            int visibleEnd = layout.getLineVisibleEnd(lineIndex);
+            if (start >= visibleEnd) {
+                continue;
+            }
+            float lineLeft = layout.getLineLeft(lineIndex) + getLeadingMargin(text, start, visibleEnd);
+            drawLineHighlight(canvas, lineLeft, layout.getLineBaseline(lineIndex), paint, text, start, visibleEnd);
         }
         canvas.restoreToCount(saveCount);
     }
@@ -340,6 +367,18 @@ public class JustifiedPageTextView extends AppCompatTextView {
             }
         }
         return line.substring(0, end);
+    }
+
+    private boolean hasTrailingLineBreak(CharSequence text, int visibleEnd, int lineEnd) {
+        int safeVisibleEnd = Math.max(0, Math.min(visibleEnd, text.length()));
+        int safeLineEnd = Math.max(safeVisibleEnd, Math.min(lineEnd, text.length()));
+        for (int i = safeVisibleEnd; i < safeLineEnd; i++) {
+            char c = text.charAt(i);
+            if (c == '\n' || c == '\r') {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static final class TextUnit {

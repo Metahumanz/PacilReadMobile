@@ -58,6 +58,7 @@ public final class ReaderOptionsDialogController {
     public void showReaderOptionsDialog() {
         View contentView = LayoutInflater.from(activity).inflate(R.layout.dialog_reader_options, null, false);
         OptionsDialogViews refs = OptionsDialogViews.bind(contentView);
+        dialogSupport.applyTocStyleFullscreenInsets(contentView, refs.contentContainer);
         refs.titleInput.setText(state.book == null ? "" : state.book.title);
         refs.authorInput.setText(state.book == null ? "" : state.book.author);
         refs.showTitleCheck.setChecked(runtime.settingsStore.isChapterTitleVisible());
@@ -211,7 +212,8 @@ public final class ReaderOptionsDialogController {
             autoApply.run();
         });
 
-        dialogSupport.showStyledDialog(dialog);
+        dialogSupport.showImmersiveFullscreenDialog(dialog, state.controlsVisible);
+        contentView.requestApplyInsets();
     }
 
     private void updateHudMarginLabels(OptionsDialogViews refs) {
@@ -222,6 +224,7 @@ public final class ReaderOptionsDialogController {
     private static final class OptionsDialogViews {
         final EditText titleInput;
         final EditText authorInput;
+        final View contentContainer;
         final CheckBox showTitleCheck;
         final Spinner flipSpinner;
         final Spinner flipSpeedSpinner;
@@ -239,6 +242,7 @@ public final class ReaderOptionsDialogController {
         final Spinner bottomRightSpinner;
 
         private OptionsDialogViews(View root) {
+            contentContainer = root.findViewById(R.id.options_content);
             titleInput = root.findViewById(R.id.options_input_title);
             authorInput = root.findViewById(R.id.options_input_author);
             showTitleCheck = root.findViewById(R.id.options_check_show_title);

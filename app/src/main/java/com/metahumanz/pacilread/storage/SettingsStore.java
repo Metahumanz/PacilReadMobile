@@ -63,6 +63,7 @@ public class SettingsStore {
     private static final String KEY_HUD_BOTTOM_RIGHT = "hud_bottom_right";
     private static final String KEY_LETTER_SPACING = "letter_spacing";
     private static final String KEY_FIRST_LINE_INDENT = "first_line_indent";
+    private static final String KEY_PARAGRAPH_SPACING = "paragraph_spacing_dp";
     private static final String KEY_BACKGROUND_BLUR_PERCENT = "background_blur_percent";
     private static final String KEY_CUSTOM_TEXT_COLOR = "custom_text_color";
     private static final String KEY_CHAPTER_TITLE_ALIGNMENT = "chapter_title_alignment";
@@ -564,6 +565,14 @@ public class SettingsStore {
 
     public void setFirstLineIndentDp(int value) {
         preferences.edit().putInt(KEY_FIRST_LINE_INDENT, clamp(value, 0, 8)).apply();
+    }
+
+    public int getParagraphSpacingDp() {
+        return clamp(preferences.getInt(KEY_PARAGRAPH_SPACING, 4), 0, 32);
+    }
+
+    public void setParagraphSpacingDp(int value) {
+        preferences.edit().putInt(KEY_PARAGRAPH_SPACING, clamp(value, 0, 32)).apply();
     }
 
     public int getBackgroundBlurPercent() {

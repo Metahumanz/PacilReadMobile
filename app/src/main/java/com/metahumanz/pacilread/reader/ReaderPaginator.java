@@ -2,8 +2,11 @@ package com.metahumanz.pacilread.reader;
 
 import android.graphics.text.LineBreaker;
 import android.text.Layout;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
 import android.text.StaticLayout;
 import android.text.TextPaint;
+import android.text.style.LeadingMarginSpan;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -118,7 +121,32 @@ public final class ReaderPaginator {
                 Math.max(0, bodyTextEnd - bodyStartIndex),
                 hasBodyText ? bodyTextStart - safeContentStart : -1,
                 hasBodyText ? bodyTextEnd - safeContentStart : -1,
-                source.subSequence(safeContentStart, safeContentEnd)
+                buildSliceText(source, safeContentStart, safeContentEnd)
         );
+    }
+
+    private static CharSequence buildSliceText(CharSequence source, int start, int end) {
+        if (!(source instanceof Spanned)) {
+            return source.subSequence(start, end);
+        }
+        Spanned spanned = (Spanned) source;
+        SpannableStringBuilder slice = new SpannableStringBuilder(source.subSequence(start, end).toString());
+        Object[] spans = spanned.getSpans(start, end, Object.class);
+        for (Object span : spans) {
+            int spanStart = spanned.getSpanStart(span);
+            int spanEnd = spanned.getSpanEnd(span);
+            int clippedStart = Math.max(spanStart, start) - start;
+            int clippedEnd = Math.min(spanEnd, end) - start;
+            if (spanStart < 0 || clippedStart >= clippedEnd) {
+                continue;
+            }
+            Object displaySpan = span;
+            if (span instanceof LeadingMarginSpan && spanStart < start) {
+                int continuationMargin = ((LeadingMarginSpan) span).getLeadingMargin(false);
+                displaySpan = new LeadingMarginSpan.Standard(continuationMargin, continuationMargin);
+            }
+            slice.setSpan(displaySpan, clippedStart, clippedEnd, spanned.getSpanFlags(span));
+        }
+        return slice;
     }
 }

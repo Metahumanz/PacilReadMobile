@@ -70,6 +70,7 @@ public final class ReaderStyleDialogController {
     public void showStyleDialog(int backgroundPickerRequestCode) {
         View contentView = LayoutInflater.from(activity).inflate(R.layout.dialog_reader_style, null, false);
         StyleDialogViews refs = StyleDialogViews.bind(contentView);
+        dialogSupport.applyTocStyleFullscreenInsets(contentView, refs.contentContainer);
         ArrayAdapter<String> uiThemeAdapter = dialogSupport.buildSpinnerAdapter(new String[]{"跟随应用", "跟随系统", "浅色", "深色"});
         ArrayAdapter<String> fontFamilyAdapter = dialogSupport.buildSpinnerAdapter(ReaderOptionCatalog.READER_FONT_FAMILY_LABELS);
         ArrayAdapter<String> textColorAdapter = dialogSupport.buildSpinnerAdapter(ReaderOptionCatalog.READER_TEXT_COLOR_LABELS);
@@ -93,6 +94,7 @@ public final class ReaderStyleDialogController {
         refs.bottomSeek.setProgress(runtime.settingsStore.getBottomPaddingDp());
         refs.letterSpacingSeek.setProgress(Math.round(runtime.settingsStore.getLetterSpacing() / LETTER_SPACING_STEP));
         refs.firstLineIndentSeek.setProgress(runtime.settingsStore.getFirstLineIndentDp());
+        refs.paragraphSpacingSeek.setProgress(runtime.settingsStore.getParagraphSpacingDp());
         refs.backgroundBlurSeek.setProgress(runtime.settingsStore.getBackgroundBlurPercent());
         refs.keepScreenOn.setChecked(runtime.settingsStore.isKeepScreenOn());
         refs.showTitleCheck.setChecked(runtime.settingsStore.isChapterTitleVisible());
@@ -110,6 +112,7 @@ public final class ReaderStyleDialogController {
         chrome.styleThemeButton(refs.bodyLeftButton, !runtime.settingsStore.isBodyTextJustified());
         style.updateLetterSpacingLabel(refs.letterSpacingValue, refs.letterSpacingSeek);
         style.updateFirstLineIndentLabel(refs.firstLineIndentValue, refs.firstLineIndentSeek);
+        style.updateParagraphSpacingLabel(refs.paragraphSpacingValue, refs.paragraphSpacingSeek);
         style.updateBackgroundBlurLabel(refs.backgroundBlurValue, refs.backgroundBlurSeek);
 
         Runnable refreshTextColorPreview = () -> style.updateTextColorPreview(
@@ -174,6 +177,8 @@ public final class ReaderStyleDialogController {
                     style.updateLetterSpacingLabel(refs.letterSpacingValue, refs.letterSpacingSeek);
                 } else if (seekBar == refs.firstLineIndentSeek) {
                     style.updateFirstLineIndentLabel(refs.firstLineIndentValue, refs.firstLineIndentSeek);
+                } else if (seekBar == refs.paragraphSpacingSeek) {
+                    style.updateParagraphSpacingLabel(refs.paragraphSpacingValue, refs.paragraphSpacingSeek);
                 } else if (seekBar == refs.backgroundBlurSeek) {
                     style.updateBackgroundBlurLabel(refs.backgroundBlurValue, refs.backgroundBlurSeek);
                 }
@@ -193,6 +198,7 @@ public final class ReaderStyleDialogController {
         };
         refs.letterSpacingSeek.setOnSeekBarChangeListener(simpleListener);
         refs.firstLineIndentSeek.setOnSeekBarChangeListener(simpleListener);
+        refs.paragraphSpacingSeek.setOnSeekBarChangeListener(simpleListener);
         refs.backgroundBlurSeek.setOnSeekBarChangeListener(simpleListener);
 
         refs.keepScreenOn.setOnCheckedChangeListener((buttonView, isChecked) -> autoApply.run());
@@ -259,7 +265,6 @@ public final class ReaderStyleDialogController {
         }));
 
         AlertDialog dialog = new AlertDialog.Builder(activity).setView(contentView).create();
-        renderThemeRows(refs.customThemeList, dialog, refs, selectedReaderTheme);
         contentView.findViewById(R.id.style_button_pick_background).setOnClickListener(v -> style.openBackgroundPicker(backgroundPickerRequestCode));
         contentView.findViewById(R.id.style_button_clear_background).setOnClickListener(v -> {
             FileAssetHelper.deleteIfExists(runtime.settingsStore.getReaderBackgroundPath());
@@ -268,7 +273,9 @@ public final class ReaderStyleDialogController {
             style.applyReaderSettings();
         });
         contentView.findViewById(R.id.style_button_save_theme).setOnClickListener(v -> promptSaveTheme(() -> renderThemeRows(refs.customThemeList, dialog, refs, selectedReaderTheme)));
-        dialogSupport.showStyledDialog(dialog);
+        dialogSupport.showImmersiveFullscreenDialog(dialog, state.controlsVisible);
+        contentView.requestApplyInsets();
+        renderThemeRows(refs.customThemeList, dialog, refs, selectedReaderTheme);
     }
 
     private Runnable buildAutoApply(StyleDialogViews refs, String[] selectedReaderTheme, Runnable refreshTextColorPreview) {
@@ -286,6 +293,7 @@ public final class ReaderStyleDialogController {
             runtime.settingsStore.setBottomPaddingDp(refs.bottomSeek.getProgress());
             runtime.settingsStore.setLetterSpacing(refs.letterSpacingSeek.getProgress() * LETTER_SPACING_STEP);
             runtime.settingsStore.setFirstLineIndentDp(refs.firstLineIndentSeek.getProgress());
+            runtime.settingsStore.setParagraphSpacingDp(refs.paragraphSpacingSeek.getProgress());
             runtime.settingsStore.setBackgroundBlurPercent(refs.backgroundBlurSeek.getProgress());
             runtime.settingsStore.setKeepScreenOn(refs.keepScreenOn.isChecked());
             runtime.settingsStore.setChapterTitleVisible(refs.showTitleCheck.isChecked());
@@ -452,6 +460,7 @@ public final class ReaderStyleDialogController {
     private static final class StyleDialogViews {
         final Spinner fontFamilySpinner;
         final Spinner textColorSpinner;
+        final View contentContainer;
         final SeekBar fontSeek;
         final SeekBar fontWeightSeek;
         final SeekBar lineSeek;
@@ -461,6 +470,7 @@ public final class ReaderStyleDialogController {
         final SeekBar bottomSeek;
         final SeekBar letterSpacingSeek;
         final SeekBar firstLineIndentSeek;
+        final SeekBar paragraphSpacingSeek;
         final SeekBar backgroundBlurSeek;
         final TextView textColorValue;
         final TextView fontValue;
@@ -472,6 +482,7 @@ public final class ReaderStyleDialogController {
         final TextView bottomValue;
         final TextView letterSpacingValue;
         final TextView firstLineIndentValue;
+        final TextView paragraphSpacingValue;
         final TextView backgroundBlurValue;
         final Spinner uiThemeSpinner;
         final CheckBox keepScreenOn;
@@ -488,6 +499,7 @@ public final class ReaderStyleDialogController {
         final Button customColorButton;
 
         private StyleDialogViews(View root) {
+            contentContainer = root.findViewById(R.id.style_content);
             fontFamilySpinner = root.findViewById(R.id.style_spinner_font_family);
             textColorSpinner = root.findViewById(R.id.style_spinner_text_color);
             fontSeek = root.findViewById(R.id.style_seek_font);
@@ -499,6 +511,7 @@ public final class ReaderStyleDialogController {
             bottomSeek = root.findViewById(R.id.style_seek_bottom_padding);
             letterSpacingSeek = root.findViewById(R.id.style_seek_letter_spacing);
             firstLineIndentSeek = root.findViewById(R.id.style_seek_first_line_indent);
+            paragraphSpacingSeek = root.findViewById(R.id.style_seek_paragraph_spacing);
             backgroundBlurSeek = root.findViewById(R.id.style_seek_background_blur);
             textColorValue = root.findViewById(R.id.style_text_text_color);
             fontValue = root.findViewById(R.id.style_text_font);
@@ -510,6 +523,7 @@ public final class ReaderStyleDialogController {
             bottomValue = root.findViewById(R.id.style_text_bottom_padding);
             letterSpacingValue = root.findViewById(R.id.style_text_letter_spacing);
             firstLineIndentValue = root.findViewById(R.id.style_text_first_line_indent);
+            paragraphSpacingValue = root.findViewById(R.id.style_text_paragraph_spacing);
             backgroundBlurValue = root.findViewById(R.id.style_text_background_blur);
             uiThemeSpinner = root.findViewById(R.id.style_spinner_ui_theme_mode);
             keepScreenOn = root.findViewById(R.id.style_check_keep_screen_on);

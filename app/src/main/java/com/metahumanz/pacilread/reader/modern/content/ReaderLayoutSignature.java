@@ -14,6 +14,7 @@ final class ReaderLayoutSignature {
     private final float lineSpacingExtraPx;
     private final float letterSpacing;
     private final int firstLineIndentDp;
+    private final int paragraphSpacingDp;
     private final int leftPaddingDp;
     private final int rightPaddingDp;
     private final int topPaddingDp;
@@ -33,6 +34,7 @@ final class ReaderLayoutSignature {
             float lineSpacingExtraPx,
             float letterSpacing,
             int firstLineIndentDp,
+            int paragraphSpacingDp,
             int leftPaddingDp,
             int rightPaddingDp,
             int topPaddingDp,
@@ -51,6 +53,7 @@ final class ReaderLayoutSignature {
         this.lineSpacingExtraPx = lineSpacingExtraPx;
         this.letterSpacing = letterSpacing;
         this.firstLineIndentDp = firstLineIndentDp;
+        this.paragraphSpacingDp = paragraphSpacingDp;
         this.leftPaddingDp = leftPaddingDp;
         this.rightPaddingDp = rightPaddingDp;
         this.topPaddingDp = topPaddingDp;
@@ -77,6 +80,7 @@ final class ReaderLayoutSignature {
                 && Float.compare(that.lineSpacingExtraPx, lineSpacingExtraPx) == 0
                 && Float.compare(that.letterSpacing, letterSpacing) == 0
                 && firstLineIndentDp == that.firstLineIndentDp
+                && paragraphSpacingDp == that.paragraphSpacingDp
                 && leftPaddingDp == that.leftPaddingDp
                 && rightPaddingDp == that.rightPaddingDp
                 && topPaddingDp == that.topPaddingDp
@@ -101,6 +105,7 @@ final class ReaderLayoutSignature {
                 lineSpacingExtraPx,
                 letterSpacing,
                 firstLineIndentDp,
+                paragraphSpacingDp,
                 leftPaddingDp,
                 rightPaddingDp,
                 topPaddingDp,

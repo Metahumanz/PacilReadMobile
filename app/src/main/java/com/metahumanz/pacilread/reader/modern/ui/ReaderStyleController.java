@@ -357,6 +357,10 @@ public final class ReaderStyleController {
         label.setText(seekBar.getProgress() + " 字符");
     }
 
+    public void updateParagraphSpacingLabel(TextView label, android.widget.SeekBar seekBar) {
+        label.setText(seekBar.getProgress() + " dp");
+    }
+
     public void updateBackgroundBlurLabel(TextView label, android.widget.SeekBar seekBar) {
         label.setText(seekBar.getProgress() + "%");
     }

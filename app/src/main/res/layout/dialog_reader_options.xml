@@ -1,23 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/options_root"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:background="@drawable/bg_dialog"
-    android:fillViewport="true">
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_toc_fullscreen">
+
+    <ScrollView
+        android:id="@+id/options_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:overScrollMode="never"
+        android:scrollbars="none">
 
     <LinearLayout
+        android:id="@+id/options_content"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:paddingLeft="20dp"
+        android:paddingTop="18dp"
+        android:paddingRight="16dp"
+        android:paddingBottom="16dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="阅读选项"
             android:textColor="?attr/themeColorOnSurface"
-            android:textSize="20sp"
+            android:textSize="24sp"
             android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="调整书籍信息、翻页与阅读 HUD，改动会即时应用。"
+            android:textColor="?attr/themeColorOnSurfaceMuted"
+            android:textSize="12sp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="16dp"
+            android:background="?attr/themeColorDivider" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -339,4 +366,5 @@
 
     </LinearLayout>
 
-</ScrollView>
+    </ScrollView>
+</FrameLayout>

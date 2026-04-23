@@ -156,6 +156,7 @@ exit /b 1
 :main
 set "MODE=%~1"
 if "%MODE%"=="" set "MODE=debug"
+set "INSTALL_APK="
 
 if /I "%MODE%"=="debug" (
   set "TASK=assembleDebug"
@@ -169,6 +170,14 @@ if /I "%MODE%"=="debug" (
 ) else if /I "%MODE%"=="install" (
   set "TASK=installDebug"
   set "OUTPUT=installed-to-device"
+) else if /I "%MODE%"=="install-release" (
+  set "TASK=assembleRelease"
+  set "INSTALL_APK=app\build\outputs\apk\release\app-release.apk"
+  set "OUTPUT=installed-to-device-release"
+) else if /I "%MODE%"=="release-install" (
+  set "TASK=assembleRelease"
+  set "INSTALL_APK=app\build\outputs\apk\release\app-release.apk"
+  set "OUTPUT=installed-to-device-release"
 ) else if /I "%MODE%"=="clean" (
   set "TASK=clean"
   set "OUTPUT=build artifacts cleared"
@@ -178,6 +187,7 @@ if /I "%MODE%"=="debug" (
   echo   pack.bat release  ^(builds release APK, usually needs signing^)
   echo   pack.bat bundle   ^(builds release AAB for app store upload^)
   echo   pack.bat install  ^(builds and installs debug APK to connected device^)
+  echo   pack.bat install-release  ^(builds signed release APK and installs it to connected device^)
   echo   pack.bat clean    ^(clears build outputs^)
   exit /b 1
 )
@@ -189,12 +199,24 @@ call :ensure_java
 if errorlevel 1 exit /b %errorlevel%
 
 if /I "%MODE%"=="install" call :preflight_install
+if defined INSTALL_APK call :preflight_install
 if errorlevel 1 exit /b %errorlevel%
 
 echo.
 echo [PacilRead] Running Gradle task: %TASK%
 call .\gradlew.bat %TASK% --no-daemon --console plain
 if errorlevel 1 exit /b %errorlevel%
+
+if defined INSTALL_APK (
+  if not exist "!INSTALL_APK!" (
+    echo [PacilRead] Release APK not found: !INSTALL_APK!
+    exit /b 1
+  )
+  echo.
+  echo [PacilRead] Installing release APK: !INSTALL_APK!
+  "!ADB_EXE!" install -r "!INSTALL_APK!"
+  if errorlevel 1 exit /b %errorlevel%
+)
 
 echo.
 echo [PacilRead] Done: %TASK%

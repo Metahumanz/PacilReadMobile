@@ -16,6 +16,7 @@ public final class ReaderThemeConfig {
             jsonObject.put("font_weight", settingsStore.getReaderFontWeight());
             jsonObject.put("text_color", settingsStore.getReaderTextColor());
             jsonObject.put("line_spacing_extra", settingsStore.getLineSpacingExtraSp());
+            jsonObject.put("paragraph_spacing_dp", settingsStore.getParagraphSpacingDp());
             jsonObject.put("left_padding_dp", settingsStore.getLeftPaddingDp());
             jsonObject.put("right_padding_dp", settingsStore.getRightPaddingDp());
             jsonObject.put("top_padding_dp", settingsStore.getTopPaddingDp());
@@ -42,6 +43,7 @@ public final class ReaderThemeConfig {
         settingsStore.setReaderFontWeight(jsonObject.optInt("font_weight", settingsStore.getReaderFontWeight()));
         settingsStore.setReaderTextColor(jsonObject.optString("text_color", settingsStore.getReaderTextColor()));
         settingsStore.setLineSpacingExtraSp((float) jsonObject.optDouble("line_spacing_extra", settingsStore.getLineSpacingExtraSp()));
+        settingsStore.setParagraphSpacingDp(jsonObject.optInt("paragraph_spacing_dp", settingsStore.getParagraphSpacingDp()));
         settingsStore.setLeftPaddingDp(jsonObject.optInt("left_padding_dp", settingsStore.getLeftPaddingDp()));
         settingsStore.setRightPaddingDp(jsonObject.optInt("right_padding_dp", settingsStore.getRightPaddingDp()));
         settingsStore.setTopPaddingDp(jsonObject.optInt("top_padding_dp", settingsStore.getTopPaddingDp()));

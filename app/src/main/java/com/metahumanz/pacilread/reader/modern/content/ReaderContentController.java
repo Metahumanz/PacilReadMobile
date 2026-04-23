@@ -378,7 +378,8 @@ public final class ReaderContentController {
     private CharSequence buildDisplayBodyText(int chapterIndex) {
         String processed = getProcessedChapterText(chapterIndex);
         int indentPx = computeParagraphIndentPx();
-        if (processed.isEmpty() || indentPx <= 0) {
+        int paragraphSpacingPx = computeParagraphSpacingPx();
+        if (processed.isEmpty()) {
             return processed;
         }
         SpannableString spannable = new SpannableString(processed);
@@ -391,8 +392,25 @@ public final class ReaderContentController {
             }
             int paragraphLimit = end < length ? end + 1 : end;
             if (hasVisibleParagraphText(processed, start, end)) {
+                if (indentPx > 0) {
+                    spannable.setSpan(
+                            new LeadingMarginSpan.Standard(indentPx, 0),
+                            start,
+                            paragraphLimit,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    );
+                }
+                if (end < length && isNextLineVisible(processed, paragraphLimit) && paragraphSpacingPx > 0) {
+                    spannable.setSpan(
+                            new ParagraphBottomSpacingSpan(paragraphSpacingPx),
+                            end,
+                            paragraphLimit,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    );
+                }
+            } else if (end < length) {
                 spannable.setSpan(
-                        new LeadingMarginSpan.Standard(indentPx, 0),
+                        new FixedLineHeightSpan(paragraphSpacingPx),
                         start,
                         paragraphLimit,
                         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
@@ -505,6 +523,7 @@ public final class ReaderContentController {
                 views.pageBodyCurrent.getLineSpacingExtra(),
                 views.pageBodyCurrent.getLetterSpacing(),
                 runtime.settingsStore.getFirstLineIndentDp(),
+                runtime.settingsStore.getParagraphSpacingDp(),
                 runtime.settingsStore.getLeftPaddingDp(),
                 runtime.settingsStore.getRightPaddingDp(),
                 runtime.settingsStore.getTopPaddingDp(),
@@ -526,6 +545,10 @@ public final class ReaderContentController {
         return Math.round(emWidth * indentChars);
     }
 
+    private int computeParagraphSpacingPx() {
+        return ui.dp(runtime.settingsStore.getParagraphSpacingDp());
+    }
+
     private boolean hasDisplayableChapterTitle(ChapterRecord chapter) {
         return chapter != null
                 && chapter.title != null
@@ -539,6 +562,18 @@ public final class ReaderContentController {
             }
         }
         return false;
+    }
+
+    private boolean isNextLineVisible(String text, int start) {
+        int length = text == null ? 0 : text.length();
+        if (start >= length) {
+            return false;
+        }
+        int end = start;
+        while (end < length && text.charAt(end) != '\n') {
+            end++;
+        }
+        return hasVisibleParagraphText(text, start, end);
     }
 
     private int resolveInitialAnchorOffset(int defaultOffset) {
@@ -624,20 +659,8 @@ public final class ReaderContentController {
                     slice.end,
                     slice.bodyStartInSlice,
                     slice.bodyEndInSlice,
-                    stripDisplayOnlyBodySpans(slice.text)
+                    slice.text
             ));
-        }
-        return sanitized;
-    }
-
-    private CharSequence stripDisplayOnlyBodySpans(CharSequence text) {
-        if (!(text instanceof Spanned)) {
-            return text;
-        }
-        SpannableString sanitized = new SpannableString(text);
-        LeadingMarginSpan[] marginSpans = sanitized.getSpans(0, sanitized.length(), LeadingMarginSpan.class);
-        for (LeadingMarginSpan marginSpan : marginSpans) {
-            sanitized.removeSpan(marginSpan);
         }
         return sanitized;
     }
@@ -675,13 +698,30 @@ public final class ReaderContentController {
 
         @Override
         public void chooseHeight(CharSequence text, int start, int end, int spanstartv, int v, android.graphics.Paint.FontMetricsInt fontMetricsInt) {
-            if (fontMetricsInt == null || heightPx <= 0) {
+            if (fontMetricsInt == null) {
                 return;
             }
             fontMetricsInt.ascent = -heightPx;
             fontMetricsInt.top = fontMetricsInt.ascent;
             fontMetricsInt.descent = 0;
             fontMetricsInt.bottom = 0;
+        }
+    }
+
+    private static final class ParagraphBottomSpacingSpan implements LineHeightSpan {
+        private final int spacingPx;
+
+        private ParagraphBottomSpacingSpan(int spacingPx) {
+            this.spacingPx = Math.max(spacingPx, 0);
+        }
+
+        @Override
+        public void chooseHeight(CharSequence text, int start, int end, int spanstartv, int v, android.graphics.Paint.FontMetricsInt fontMetricsInt) {
+            if (fontMetricsInt == null || spacingPx <= 0) {
+                return;
+            }
+            fontMetricsInt.descent += spacingPx;
+            fontMetricsInt.bottom += spacingPx;
         }
     }
 }

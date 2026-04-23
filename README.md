@@ -93,6 +93,7 @@ sdk.dir=C\:\\Android\\SDK
 .\pack.bat release
 .\pack.bat bundle
 .\pack.bat install
+.\pack.bat install-release
 .\pack.bat clean
 ```
 
@@ -102,6 +103,7 @@ sdk.dir=C\:\\Android\\SDK
 - `release` -> `assembleRelease`
 - `bundle` -> `bundleRelease`
 - `install` -> `installDebug`
+- `install-release` -> `assembleRelease` 后通过 `adb install -r` 安装签名 release APK
 - `clean` -> `clean`
 
 ### 构建产物

@@ -13,32 +13,47 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
-import java.io.OutputStream;
-import java.lang.reflect.Field;
-import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.ResponseBody;
+
 public class WebDavClient {
     private static final Pattern HREF_PATTERN = Pattern.compile("(?i)<[^>]*href[^>]*>(.*?)</[^>]*href>");
+    private static final MediaType DEFAULT_BODY_TYPE = MediaType.get("application/json; charset=utf-8");
     private final SettingsStore settingsStore;
+    private final OkHttpClient httpClient;
 
     public WebDavClient(SettingsStore settingsStore) {
         this.settingsStore = settingsStore;
+        this.httpClient = new OkHttpClient.Builder()
+                .connectTimeout(8, TimeUnit.SECONDS)
+                .readTimeout(12, TimeUnit.SECONDS)
+                .build();
     }
 
     public Response probe() throws Exception {
         String base = requireConfiguredServerUrl();
         Response response = request(base, "PROPFIND", null, "0");
         requireSuccessfulResponse(response, "连接服务器", false);
-        ensureProgressDirectory();
+        try {
+            ensureProgressDirectory();
+        } catch (Exception ignored) {
+            // Match the Win11 probe behavior: connection success is determined by the root PROPFIND.
+        }
         return response;
     }
 
@@ -86,8 +101,7 @@ public class WebDavClient {
     }
 
     public ProgressPayload downloadProgress(BookRecord book) throws Exception {
-        String fileName = safeProgressFileName(book);
-        Response response = request(settingsStore.getWebDavProgressBaseUrl() + "bookProgress/" + fileName, "GET", null, null);
+        Response response = request(progressFileUrl(book), "GET", null, null);
         if (response.code != 200 || response.body == null || response.body.isBlank()) {
             return null;
         }
@@ -114,7 +128,7 @@ public class WebDavClient {
         payload.put("durChapterTitle", chapter.title);
         payload.put("name", book.title);
         request(
-                settingsStore.getWebDavProgressBaseUrl() + "bookProgress/" + safeProgressFileName(book),
+                progressFileUrl(book),
                 "PUT",
                 payload.toString(2),
                 null
@@ -125,6 +139,14 @@ public class WebDavClient {
         String safeTitle = sanitize(book.title == null ? "Unknown" : book.title);
         String safeAuthor = sanitize(book.author == null || book.author.isBlank() ? "未知" : book.author);
         return safeTitle + "_" + safeAuthor + ".json";
+    }
+
+    private String progressFileUrl(BookRecord book) throws Exception {
+        return settingsStore.getWebDavProgressBaseUrl() + "bookProgress/" + encodePathSegment(safeProgressFileName(book));
+    }
+
+    private String encodePathSegment(String value) throws Exception {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8.name()).replace("+", "%20");
     }
 
     private String sanitize(String input) {
@@ -189,7 +211,9 @@ public class WebDavClient {
     public void uploadFile(File localFile, String remoteUrl) throws Exception {
         try (FileInputStream inputStream = new FileInputStream(localFile)) {
             byte[] bytes = readFullyBytes(inputStream);
-            request(remoteUrl, "PUT", bytes, null, null);
+            Map<String, String> headers = new HashMap<>();
+            headers.put("Content-Type", "application/octet-stream");
+            request(remoteUrl, "PUT", bytes, null, headers);
         }
     }
 
@@ -224,58 +248,39 @@ public class WebDavClient {
     }
 
     private Response request(String url, String method, byte[] body, String depth, Map<String, String> extraHeaders) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-        connection.setConnectTimeout(8000);
-        connection.setReadTimeout(12000);
-        setMethod(connection, method);
-        connection.setUseCaches(false);
-        connection.setRequestProperty("Authorization", authorizationHeader());
-        if (depth != null) {
-            connection.setRequestProperty("Depth", depth);
-        }
-        if (extraHeaders != null) {
-            for (Map.Entry<String, String> entry : extraHeaders.entrySet()) {
-                connection.setRequestProperty(entry.getKey(), entry.getValue());
-            }
-        }
-        if (body != null) {
-            connection.setDoOutput(true);
-            if (extraHeaders == null || !extraHeaders.containsKey("Content-Type")) {
-                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            }
-            connection.setRequestProperty("Content-Length", String.valueOf(body.length));
-            try (OutputStream outputStream = connection.getOutputStream()) {
-                outputStream.write(body);
-            }
-        }
-
-        int responseCode = connection.getResponseCode();
-        InputStream inputStream = responseCode >= 400 ? connection.getErrorStream() : connection.getInputStream();
-        byte[] bytes = new byte[0];
-        if (inputStream != null) {
-            try (InputStream stream = inputStream) {
-                bytes = readFullyBytes(stream);
-            }
-        }
-        return new Response(responseCode, new String(bytes, StandardCharsets.UTF_8));
+        BinaryResponse response = requestBytes(url, method, body, depth, extraHeaders);
+        return new Response(response.code, new String(response.bytes, StandardCharsets.UTF_8));
     }
 
     private BinaryResponse requestBinary(String url, String method) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-        connection.setConnectTimeout(8000);
-        connection.setReadTimeout(12000);
-        setMethod(connection, method);
-        connection.setUseCaches(false);
-        connection.setRequestProperty("Authorization", authorizationHeader());
-        int responseCode = connection.getResponseCode();
-        InputStream inputStream = responseCode >= 400 ? connection.getErrorStream() : connection.getInputStream();
-        byte[] bytes = new byte[0];
-        if (inputStream != null) {
-            try (InputStream stream = inputStream) {
-                bytes = readFullyBytes(stream);
+        return requestBytes(url, method, null, null, null);
+    }
+
+    private BinaryResponse requestBytes(String url, String method, byte[] body, String depth, Map<String, String> extraHeaders) throws Exception {
+        Request.Builder builder = new Request.Builder()
+                .url(url)
+                .header("Authorization", authorizationHeader());
+        if (depth != null) {
+            builder.header("Depth", depth);
+        }
+
+        MediaType contentType = DEFAULT_BODY_TYPE;
+        if (extraHeaders != null) {
+            for (Map.Entry<String, String> entry : extraHeaders.entrySet()) {
+                if ("Content-Type".equalsIgnoreCase(entry.getKey())) {
+                    contentType = MediaType.parse(entry.getValue());
+                } else {
+                    builder.header(entry.getKey(), entry.getValue());
+                }
             }
         }
-        return new BinaryResponse(responseCode, bytes);
+
+        RequestBody requestBody = body == null ? null : RequestBody.create(body, contentType);
+        try (okhttp3.Response response = httpClient.newCall(builder.method(method, requestBody).build()).execute()) {
+            ResponseBody responseBody = response.body();
+            byte[] bytes = responseBody == null ? new byte[0] : responseBody.bytes();
+            return new BinaryResponse(response.code(), bytes);
+        }
     }
 
     private String authorizationHeader() {
@@ -341,17 +346,6 @@ public class WebDavClient {
             return;
         }
         throw new IllegalStateException(action + "失败: HTTP " + code);
-    }
-
-    private void setMethod(HttpURLConnection connection, String method) throws Exception {
-        try {
-            connection.setRequestMethod(method);
-            return;
-        } catch (Exception ignored) {
-        }
-        Field methodField = HttpURLConnection.class.getDeclaredField("method");
-        methodField.setAccessible(true);
-        methodField.set(connection, method);
     }
 
     private byte[] readFullyBytes(InputStream inputStream) throws Exception {

@@ -169,7 +169,11 @@ public final class ReaderChromeController {
         com.metahumanz.pacilread.model.ChapterRecord chapter = state.chapters.get(state.currentChapterIndex);
         int safePageCount = Math.max(pages.size(), 1);
         boolean statsEnabled = runtime.settingsStore.isReadingTimeTrackingEnabled();
-        views.readerTitle.setText(state.book.title == null || state.book.title.isBlank() ? "未命名书籍" : state.book.title);
+        String bookTitle = state.book.title == null || state.book.title.isBlank()
+                ? "未命名书籍"
+                : state.book.title.trim();
+        String chapterTitle = chapter.title == null ? "" : chapter.title.trim();
+        views.readerTitle.setText(chapterTitle.isEmpty() ? bookTitle : bookTitle + " | " + chapterTitle);
         views.readerTitle.setEnabled(statsEnabled);
         views.readerTitle.setClickable(statsEnabled);
         views.readerTitle.setAlpha(statsEnabled ? 1f : 0.9f);

@@ -14,6 +14,7 @@ import com.metahumanz.pacilread.model.ReadingTimeEntryRecord;
 import com.metahumanz.pacilread.model.ReaderThemeRecord;
 import com.metahumanz.pacilread.model.ReplacementRuleRecord;
 import com.metahumanz.pacilread.stats.ReadingStatsUtils;
+import com.metahumanz.pacilread.util.HtmlUtils;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -126,6 +127,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
 
     private void ensureSchema(SQLiteDatabase db) {
         createAllTables(db);
+        repairLegacyBookLocalPathColumn(db);
         ensureColumn(db, "books", "cover_path", "cover_path TEXT");
         ensureColumn(db, "books", "book_type", "book_type TEXT NOT NULL DEFAULT 'text'");
         ensureColumn(db, "books", "reading_stats_key", "reading_stats_key TEXT NOT NULL DEFAULT ''");
@@ -133,10 +135,12 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         ensureColumn(db, "books", "progress_offset", "progress_offset INTEGER NOT NULL DEFAULT 0");
         ensureColumn(db, "books", "last_read_at", "last_read_at INTEGER NOT NULL DEFAULT 0");
         ensureColumn(db, "books", "pinned", "pinned INTEGER NOT NULL DEFAULT 0");
+        repairLegacyBookLastReadColumn(db);
 
         ensureColumn(db, "chapters", "body_html", "body_html TEXT NOT NULL DEFAULT ''");
         ensureColumn(db, "chapters", "body_text", "body_text TEXT NOT NULL DEFAULT ''");
         ensureColumn(db, "chapters", "order_index", "order_index INTEGER NOT NULL DEFAULT 0");
+        repairLegacyChapterBodyColumns(db);
 
         ensureColumn(db, "replacement_rules", "scope", "scope TEXT NOT NULL DEFAULT 'global'");
         ensureColumn(db, "replacement_rules", "book_id", "book_id INTEGER");
@@ -178,6 +182,53 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
             }
         }
         return false;
+    }
+
+    private void repairLegacyBookLocalPathColumn(SQLiteDatabase db) {
+        boolean hasLocalPath = hasColumn(db, "books", "local_path");
+        boolean hasTypoLocalPath = hasColumn(db, "books", "loacl_path");
+        boolean hasWin11Path = hasColumn(db, "books", "path");
+        if (!hasLocalPath) {
+            db.execSQL("ALTER TABLE books ADD COLUMN local_path TEXT NOT NULL DEFAULT ''");
+        }
+        if (hasWin11Path) {
+            db.execSQL("UPDATE books SET local_path = path WHERE local_path IS NULL OR TRIM(local_path) = ''");
+        }
+        if (hasTypoLocalPath) {
+            db.execSQL("UPDATE books SET local_path = loacl_path WHERE local_path IS NULL OR TRIM(local_path) = ''");
+        }
+    }
+
+    private void repairLegacyChapterBodyColumns(SQLiteDatabase db) {
+        if (!hasColumn(db, "chapters", "body")) {
+            return;
+        }
+        db.execSQL("UPDATE chapters SET body_html = body WHERE body_html IS NULL OR TRIM(body_html) = ''");
+        try (Cursor cursor = db.query(
+                "chapters",
+                new String[]{"id", "body", "body_text"},
+                "body IS NOT NULL AND TRIM(body) <> '' AND (body_text IS NULL OR TRIM(body_text) = '')",
+                null,
+                null,
+                null,
+                null
+        )) {
+            while (cursor.moveToNext()) {
+                long id = cursor.getLong(0);
+                String legacyBody = cursor.getString(1);
+                ContentValues values = new ContentValues();
+                values.put("body_text", HtmlUtils.stripHtml(legacyBody));
+                db.update("chapters", values, "id=?", new String[]{String.valueOf(id)});
+            }
+        }
+    }
+
+    private void repairLegacyBookLastReadColumn(SQLiteDatabase db) {
+        if (!hasColumn(db, "books", "last_read")) {
+            return;
+        }
+        db.execSQL("UPDATE books SET last_read_at = COALESCE(CAST(strftime('%s', last_read) AS INTEGER) * 1000, last_read_at) " +
+                "WHERE (last_read_at IS NULL OR last_read_at <= 0) AND last_read IS NOT NULL AND TRIM(last_read) <> ''");
     }
 
     public synchronized long insertImportedBook(ImportedBook importedBook) {
@@ -714,11 +765,14 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
             coversDir.mkdirs();
         }
         SQLiteDatabase db = getWritableDatabase();
-        try (Cursor cursor = db.query("books", new String[]{"id", "local_path", "cover_path"}, null, null, null, null, null)) {
+        try (Cursor cursor = db.query("books", null, null, null, null, null, null)) {
+            int idIndex = cursor.getColumnIndexOrThrow("id");
+            int localPathIndex = cursor.getColumnIndex("local_path");
+            int coverPathIndex = cursor.getColumnIndex("cover_path");
             while (cursor.moveToNext()) {
-                long id = cursor.getLong(0);
-                String localPath = cursor.getString(1);
-                String coverPath = cursor.getString(2);
+                long id = cursor.getLong(idIndex);
+                String localPath = localPathIndex >= 0 ? cursor.getString(localPathIndex) : "";
+                String coverPath = coverPathIndex >= 0 ? cursor.getString(coverPathIndex) : "";
                 ContentValues values = new ContentValues();
                 if (localPath != null && !localPath.isBlank()) {
                     values.put("local_path", new File(booksDir, new File(localPath).getName()).getAbsolutePath());
@@ -759,7 +813,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                     ContentValues values = new ContentValues();
                     values.put("title", title);
                     values.put("author", author);
-                    values.put("local_path", rebasedAssetPath("books", sourceBooks.getString(sourceBooks.getColumnIndexOrThrow("local_path"))));
+                    values.put("local_path", rebasedAssetPath("books", getOptionalString(sourceBooks, "local_path", "loacl_path")));
                     int coverIndex = sourceBooks.getColumnIndex("cover_path");
                     if (coverIndex >= 0 && !sourceBooks.isNull(coverIndex)) {
                         values.put("cover_path", rebasedAssetPath("covers", sourceBooks.getString(coverIndex)));
@@ -859,7 +913,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
 
     private String rebasedAssetPath(String folderName, String originalPath) {
         if (originalPath == null || originalPath.isBlank()) {
-            return originalPath;
+            return "";
         }
         File folder = new File(appContext.getFilesDir(), folderName);
         if (!folder.exists()) {
@@ -873,7 +927,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         book.id = cursor.getLong(cursor.getColumnIndexOrThrow("id"));
         book.title = cursor.getString(cursor.getColumnIndexOrThrow("title"));
         book.author = cursor.getString(cursor.getColumnIndexOrThrow("author"));
-        book.localPath = cursor.getString(cursor.getColumnIndexOrThrow("local_path"));
+        book.localPath = getOptionalString(cursor, "local_path", "loacl_path");
         int coverIndex = cursor.getColumnIndex("cover_path");
         book.coverPath = coverIndex >= 0 ? cursor.getString(coverIndex) : null;
         int typeIndex = cursor.getColumnIndex("book_type");
@@ -887,6 +941,17 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         book.lastReadAt = cursor.getLong(cursor.getColumnIndexOrThrow("last_read_at"));
         book.pinned = cursor.getInt(cursor.getColumnIndexOrThrow("pinned")) == 1;
         return book;
+    }
+
+    private String getOptionalString(Cursor cursor, String columnName, String fallbackColumnName) {
+        int index = cursor.getColumnIndex(columnName);
+        if (index < 0 && fallbackColumnName != null) {
+            index = cursor.getColumnIndex(fallbackColumnName);
+        }
+        if (index < 0 || cursor.isNull(index)) {
+            return "";
+        }
+        return cursor.getString(index);
     }
 
     private ReadingTimeEntryRecord readReadingTimeEntry(Cursor cursor) {
