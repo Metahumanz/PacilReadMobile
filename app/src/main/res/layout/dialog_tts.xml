@@ -52,7 +52,7 @@
         android:textColor="@color/on_surface_muted" />
 
     <LinearLayout
-        android:id="@+id/tts_layout_mimo_api_key"
+        android:id="@+id/tts_layout_mimo_voice"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
@@ -61,21 +61,18 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="MiMo API Key"
+            android:text="MiMo 音色"
             android:textColor="@color/on_surface"
             android:textStyle="bold" />
 
-        <EditText
-            android:id="@+id/tts_input_mimo_api_key"
+        <Spinner
+            android:id="@+id/tts_spinner_mimo_voice"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:background="@drawable/bg_input"
-            android:hint="仅 MiMo 引擎需要"
-            android:inputType="textPassword"
-            android:padding="12dp"
-            android:textColor="@color/on_surface"
-            android:textColorHint="@color/on_surface_muted" />
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp" />
     </LinearLayout>
 
     <TextView

@@ -22,6 +22,8 @@ import java.nio.charset.StandardCharsets;
 
 public class MimoTtsClient {
     private static final String ENDPOINT = "https://api.xiaomimimo.com/v1/chat/completions";
+    private static final String MODEL = "mimo-v2.5-tts";
+    private static final String DEFAULT_VOICE = "冰糖";
     private static final int SAMPLE_RATE = 24000;
 
     private volatile boolean cancelled = false;
@@ -38,9 +40,9 @@ public class MimoTtsClient {
         activeTrack = null;
     }
 
-    public void speak(String text, String apiKey, float rate) throws Exception {
+    public void speak(String text, String apiKey, String voice, float rate) throws Exception {
         cancelled = false;
-        byte[] pcm = synthesizePcm16(text, apiKey);
+        byte[] pcm = synthesizePcm16(text, apiKey, voice);
         if (cancelled || pcm.length == 0) {
             return;
         }
@@ -74,7 +76,7 @@ public class MimoTtsClient {
         }
     }
 
-    private byte[] synthesizePcm16(String text, String apiKey) throws Exception {
+    private byte[] synthesizePcm16(String text, String apiKey, String voice) throws Exception {
         if (TextUtils.isEmpty(text)) {
             return new byte[0];
         }
@@ -89,10 +91,11 @@ public class MimoTtsClient {
         connection.setRequestMethod("POST");
         connection.setDoOutput(true);
         connection.setRequestProperty("Content-Type", "application/json");
+        connection.setRequestProperty("api-key", apiKey.trim());
         connection.setRequestProperty("Authorization", "Bearer " + apiKey.trim());
 
         JSONObject payload = new JSONObject();
-        payload.put("model", "mimo-v2-tts");
+        payload.put("model", MODEL);
         JSONArray messages = new JSONArray();
         JSONObject message = new JSONObject();
         message.put("role", "assistant");
@@ -101,7 +104,7 @@ public class MimoTtsClient {
         payload.put("messages", messages);
         JSONObject audio = new JSONObject();
         audio.put("format", "pcm16");
-        audio.put("voice", "mimo_default");
+        audio.put("voice", normalizeVoice(voice));
         payload.put("audio", audio);
         payload.put("stream", true);
 
@@ -164,6 +167,13 @@ public class MimoTtsClient {
             return new byte[0];
         }
         return audioStream.toByteArray();
+    }
+
+    private String normalizeVoice(String voice) {
+        if ("冰糖".equals(voice) || "茉莉".equals(voice) || "苏打".equals(voice) || "白桦".equals(voice)) {
+            return voice;
+        }
+        return DEFAULT_VOICE;
     }
 
     private AudioTrack createTrack(int pcmLength) {

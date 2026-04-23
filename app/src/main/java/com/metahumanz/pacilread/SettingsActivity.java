@@ -27,6 +27,8 @@ import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
 import com.metahumanz.pacilread.sync.WebDavClient;
 import com.metahumanz.pacilread.theme.ThemedActivity;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
+import com.metahumanz.pacilread.tts.MimoTtsClient;
+import com.metahumanz.pacilread.tts.SystemTtsClient;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -41,6 +43,7 @@ public class SettingsActivity extends ThemedActivity {
     private static final String[] READER_THEME_KEYS = new String[]{"follow_app", "system", "light", "dark"};
     private static final String[] TTS_ENGINE_KEYS = new String[]{"system", "mimo"};
     private static final String[] TTS_ENGINE_LABELS = new String[]{"系统 TTS", "小米 MiMo"};
+    private static final String TTS_TEST_TEXT = "这是一段听书测试，用来确认当前朗读引擎可以正常播放。";
     private static final String[] VOLUME_KEY_ACTION_KEYS = new String[]{"system", "page_up", "page_down"};
     private static final String[] VOLUME_KEY_ACTION_LABELS = new String[]{"系统音量", "上一页", "下一页"};
 
@@ -50,6 +53,8 @@ public class SettingsActivity extends ThemedActivity {
     private WebDavBackupManager backupManager;
     private ReadingStatsSyncManager readingStatsSyncManager;
     private BookImportService importService;
+    private final MimoTtsClient testMimoTtsClient = new MimoTtsClient();
+    private SystemTtsClient testSystemTtsClient;
 
     private TextView statusText;
     private TextView fullBackupText;
@@ -77,6 +82,7 @@ public class SettingsActivity extends ThemedActivity {
     private SeekBar glassOpacitySeekBar;
     private TextView glassOpacityText;
     private Button testButton;
+    private Button ttsTestButton;
     private Button fullBackupButton;
     private Button fullRestoreButton;
     private Button liteBackupButton;
@@ -146,6 +152,7 @@ public class SettingsActivity extends ThemedActivity {
         liteBackupButton = findViewById(R.id.button_lite_backup);
         liteRestoreButton = findViewById(R.id.button_lite_restore);
         testButton = findViewById(R.id.button_test_webdav);
+        ttsTestButton = findViewById(R.id.button_test_tts);
         webDavSyncOptionsLayout = findViewById(R.id.layout_webdav_sync_options);
         webDavSyncBookshelfButton = findViewById(R.id.button_webdav_sync_bookshelf);
         webDavSyncFilesButton = findViewById(R.id.button_webdav_sync_files);
@@ -172,6 +179,9 @@ public class SettingsActivity extends ThemedActivity {
         refreshBackupLabels();
 
         testButton.setOnClickListener(v -> testWebDav());
+        if (ttsTestButton != null) {
+            ttsTestButton.setOnClickListener(v -> testTtsEngine());
+        }
         fullBackupButton.setOnClickListener(v -> runWebDavAction("正在执行全量备份...", listener -> backupManager.fullBackup(listener)));
         liteBackupButton.setOnClickListener(v -> runWebDavAction("正在执行增量备份...", listener -> backupManager.incrementalBackup(listener)));
         fullRestoreButton.setOnClickListener(v -> confirmRestore("确定要从云端恢复吗？这将替换您当前的本地书架与设置。", listener -> backupManager.fullRestore(listener)));
@@ -212,6 +222,10 @@ public class SettingsActivity extends ThemedActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        testMimoTtsClient.cancel();
+        if (testSystemTtsClient != null) {
+            testSystemTtsClient.shutdown();
+        }
         executor.shutdownNow();
     }
 
@@ -540,6 +554,46 @@ public class SettingsActivity extends ThemedActivity {
         });
     }
 
+    private void testTtsEngine() {
+        saveSettings();
+        String engine = settingsStore.getTtsEngine();
+        if ("mimo".equals(engine) && settingsStore.getTtsMimoApiKey().isBlank()) {
+            showToast("请先填写 MiMo API Key");
+            return;
+        }
+
+        String engineLabel = "mimo".equals(engine) ? "MiMo" : "系统 TTS";
+        setBusy(true);
+        if (ttsTestButton != null) {
+            ttsTestButton.setText("正在测试朗读...");
+        }
+        executor.execute(() -> {
+            try {
+                if ("mimo".equals(engine)) {
+                    testMimoTtsClient.speak(
+                            TTS_TEST_TEXT,
+                            settingsStore.getTtsMimoApiKey(),
+                            settingsStore.getTtsMimoVoice(),
+                            settingsStore.getTtsRate()
+                    );
+                } else {
+                    getTestSystemTtsClient().speak(TTS_TEST_TEXT, settingsStore.getTtsRate());
+                }
+                runOnUiThread(() -> {
+                    setBusy(false);
+                    restoreTtsTestButton();
+                    showToast(engineLabel + " 测试朗读完成");
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    setBusy(false);
+                    restoreTtsTestButton();
+                    showToast(engineLabel + " 测试朗读失败: " + error.getMessage());
+                });
+            }
+        });
+    }
+
     private void confirmRestore(String message, BackgroundAction action) {
         new AlertDialog.Builder(this)
                 .setTitle("确认恢复")
@@ -576,6 +630,15 @@ public class SettingsActivity extends ThemedActivity {
     private void setBusy(boolean busy) {
         settingsBusy = busy;
         testButton.setEnabled(!busy);
+        if (ttsTestButton != null) {
+            ttsTestButton.setEnabled(!busy);
+        }
+        if (ttsEngineSpinner != null) {
+            ttsEngineSpinner.setEnabled(!busy);
+        }
+        if (mimoApiKeyInput != null) {
+            mimoApiKeyInput.setEnabled(!busy);
+        }
         fullBackupButton.setEnabled(!busy);
         fullRestoreButton.setEnabled(!busy);
         liteBackupButton.setEnabled(!busy);
@@ -601,6 +664,19 @@ public class SettingsActivity extends ThemedActivity {
 
     private void showToast(String text) {
         Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
+    }
+
+    private synchronized SystemTtsClient getTestSystemTtsClient() {
+        if (testSystemTtsClient == null) {
+            testSystemTtsClient = new SystemTtsClient(this);
+        }
+        return testSystemTtsClient;
+    }
+
+    private void restoreTtsTestButton() {
+        if (ttsTestButton != null) {
+            ttsTestButton.setText("测试朗读");
+        }
     }
 
     private void updateGlassOpacityLabel(int opacityPercent) {

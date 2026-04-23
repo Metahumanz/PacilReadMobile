@@ -713,6 +713,16 @@
                             android:minHeight="48dp"
                             android:padding="12dp" />
                     </LinearLayout>
+
+                    <Button
+                        android:id="@+id/button_test_tts"
+                        android:layout_width="match_parent"
+                        android:layout_height="46dp"
+                        android:layout_marginTop="14dp"
+                        android:background="@drawable/bg_app_outline_button"
+                        android:text="测试朗读"
+                        android:textAllCaps="false"
+                        android:textColor="@color/app_button_outline_text" />
                 </LinearLayout>
 
             </LinearLayout>

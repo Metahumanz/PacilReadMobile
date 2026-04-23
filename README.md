@@ -119,7 +119,7 @@ sdk.dir=C\:\\Android\\SDK
 
 - 阅读页听书面板支持 `本地系统 TTS` 和 `小米 MiMo` 两种引擎。
 - **本地系统 TTS**：使用 Android 设备自带的语音合成服务，无需联网。
-- **小米 MiMo**：需要配置 API Key。可以在阅读页听书面板或设置页中填写。实现类为 `com.metahumanz.pacilread.tts.MimoTtsClient`。
+- **小米 MiMo**：使用 `mimo-v2.5-tts` 云端 TTS，需要在设置页配置 API Key。阅读页听书面板可在 `冰糖`、`茉莉`、`苏打`、`白桦` 4 种中文内置音色间切换。实现类为 `com.metahumanz.pacilread.tts.MimoTtsClient`。
 - **分句逻辑**：所有引擎均采用与 Win11 版一致的分句正则，确保跨平台听书节奏统一。
 
 ## 项目结构

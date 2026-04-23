@@ -1,12 +1,9 @@
 package com.metahumanz.pacilread.reader.modern.tts;
 
 import android.app.AlertDialog;
-import android.text.Editable;
-import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -34,6 +31,8 @@ public final class ReaderTtsController {
     private static final Pattern TTS_SEGMENT_PATTERN = Pattern.compile("[^ \\n\\t。！？.!?,，;；、]+[。！？.!?,，;；、]*");
     private static final String[] TTS_ENGINE_KEYS = new String[]{"system", "mimo"};
     private static final String[] TTS_ENGINE_LABELS = new String[]{"系统 TTS", "小米 MiMo"};
+    private static final String[] TTS_MIMO_VOICE_KEYS = new String[]{"冰糖", "茉莉", "苏打", "白桦"};
+    private static final String[] TTS_MIMO_VOICE_LABELS = new String[]{"冰糖（女声）", "茉莉（女声）", "苏打（男声）", "白桦（男声）"};
 
     private final ModernReaderActivity activity;
     private final ReaderRuntime runtime;
@@ -86,7 +85,7 @@ public final class ReaderTtsController {
             return;
         }
         if ("mimo".equals(runtime.settingsStore.getTtsEngine()) && runtime.settingsStore.getTtsMimoApiKey().isBlank()) {
-            ui.showToast("请先填写 MiMo API Key");
+            ui.showToast("请先在设置页填写 MiMo API Key");
             return;
         }
         boolean hasCurrentUnits = rebuildTtsUnitsForChapter(state.currentChapterIndex, content.currentCharOffset());
@@ -131,23 +130,34 @@ public final class ReaderTtsController {
         View contentView = LayoutInflater.from(activity).inflate(R.layout.dialog_tts, null, false);
         Spinner engineSpinner = contentView.findViewById(R.id.tts_spinner_engine);
         SeekBar seekBar = contentView.findViewById(R.id.tts_seek_rate);
-        View mimoKeyLayout = contentView.findViewById(R.id.tts_layout_mimo_api_key);
+        View mimoVoiceLayout = contentView.findViewById(R.id.tts_layout_mimo_voice);
+        Spinner mimoVoiceSpinner = contentView.findViewById(R.id.tts_spinner_mimo_voice);
         TextView valueText = contentView.findViewById(R.id.tts_text_rate);
-        EditText mimoKeyInput = contentView.findViewById(R.id.tts_input_mimo_api_key);
         TextView noteText = contentView.findViewById(R.id.tts_text_note);
         Button toggleButton = contentView.findViewById(R.id.tts_button_toggle);
         engineSpinner.setAdapter(dialogSupport.buildSpinnerAdapter(TTS_ENGINE_LABELS));
         engineSpinner.setSelection(indexOf(TTS_ENGINE_KEYS, runtime.settingsStore.getTtsEngine(), 0), false);
+        mimoVoiceSpinner.setAdapter(dialogSupport.buildSpinnerAdapter(TTS_MIMO_VOICE_LABELS));
+        mimoVoiceSpinner.setSelection(indexOf(TTS_MIMO_VOICE_KEYS, runtime.settingsStore.getTtsMimoVoice(), 0), false);
         seekBar.setProgress(ui.clamp(Math.round((runtime.settingsStore.getTtsRate() - 0.5f) * 10f), 0, 15));
         valueText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%.1f 倍", runtime.settingsStore.getTtsRate()));
-        mimoKeyInput.setText(runtime.settingsStore.getTtsMimoApiKey());
-        updateTtsDialogViews(runtime.settingsStore.getTtsEngine(), mimoKeyLayout, noteText);
+        updateTtsDialogViews(runtime.settingsStore.getTtsEngine(), mimoVoiceLayout, noteText);
         engineSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
                 String engine = TTS_ENGINE_KEYS[position];
                 runtime.settingsStore.setTtsEngine(engine);
-                updateTtsDialogViews(engine, mimoKeyLayout, noteText);
+                updateTtsDialogViews(engine, mimoVoiceLayout, noteText);
+            }
+
+            @Override
+            public void onNothingSelected(android.widget.AdapterView<?> parent) {
+            }
+        });
+        mimoVoiceSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                runtime.settingsStore.setTtsMimoVoice(TTS_MIMO_VOICE_KEYS[position]);
             }
 
             @Override
@@ -159,20 +169,6 @@ public final class ReaderTtsController {
             valueText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%.1f 倍", rate));
             runtime.settingsStore.setTtsRate(rate);
         }));
-        mimoKeyInput.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                runtime.settingsStore.setTtsMimoApiKey(s == null ? "" : s.toString());
-            }
-        });
         toggleButton.setText(state.ttsActive ? "停止听书" : "开始听书");
         AlertDialog dialog = new AlertDialog.Builder(activity).setView(contentView).create();
         toggleButton.setOnClickListener(v -> {
@@ -333,7 +329,12 @@ public final class ReaderTtsController {
         runtime.ttsExecutor.execute(() -> {
             try {
                 if ("mimo".equals(engine)) {
-                    runtime.mimoTtsClient.speak(groupText, runtime.settingsStore.getTtsMimoApiKey(), runtime.settingsStore.getTtsRate());
+                    runtime.mimoTtsClient.speak(
+                            groupText,
+                            runtime.settingsStore.getTtsMimoApiKey(),
+                            runtime.settingsStore.getTtsMimoVoice(),
+                            runtime.settingsStore.getTtsRate()
+                    );
                 } else {
                     runtime.systemTtsClient.speak(groupText, runtime.settingsStore.getTtsRate());
                 }
@@ -367,18 +368,18 @@ public final class ReaderTtsController {
         return lastChar == '。' || lastChar == '！' || lastChar == '？' || lastChar == '!' || lastChar == '?';
     }
 
-    private void updateTtsDialogViews(String engine, View mimoKeyLayout, TextView noteText) {
-        if (mimoKeyLayout != null) {
-            mimoKeyLayout.setVisibility("mimo".equals(engine) ? View.VISIBLE : View.GONE);
+    private void updateTtsDialogViews(String engine, View mimoVoiceLayout, TextView noteText) {
+        if (mimoVoiceLayout != null) {
+            mimoVoiceLayout.setVisibility("mimo".equals(engine) ? View.VISIBLE : View.GONE);
         }
         if (noteText == null) {
             return;
         }
         if ("mimo".equals(engine)) {
-            noteText.setText("MiMo 模式会调用小米云端 TTS，模型固定为 mimo-v2-tts / mimo_default。");
+            noteText.setText("MiMo 模式会调用小米云端 TTS，模型为 mimo-v2.5-tts，API Key 请在设置页维护。");
             return;
         }
-        noteText.setText("系统 TTS 使用设备内置语音引擎，无需联网，也不需要填写 MiMo API Key。");
+        noteText.setText("系统 TTS 使用设备内置语音引擎，无需联网。");
     }
 
     private String engineLabel(String engine) {

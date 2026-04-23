@@ -47,6 +47,7 @@ public class SettingsStore {
     private static final String KEY_TTS_ENGINE = "tts_engine";
     private static final String KEY_TTS_RATE = "tts_rate";
     private static final String KEY_TTS_MIMO_API_KEY = "tts_mimo_api_key";
+    private static final String KEY_TTS_MIMO_VOICE = "tts_mimo_voice";
     private static final String KEY_FLIP_MODE = "flip_mode";
     private static final String KEY_READER_SLIDER_MODE = "reader_slider_mode";
     private static final String KEY_VOLUME_KEY_UP_ACTION = "volume_key_up_action";
@@ -384,6 +385,14 @@ public class SettingsStore {
         preferences.edit().putString(KEY_TTS_MIMO_API_KEY, value == null ? "" : value.trim()).apply();
     }
 
+    public String getTtsMimoVoice() {
+        return normalizeTtsMimoVoice(preferences.getString(KEY_TTS_MIMO_VOICE, "冰糖"));
+    }
+
+    public void setTtsMimoVoice(String value) {
+        preferences.edit().putString(KEY_TTS_MIMO_VOICE, normalizeTtsMimoVoice(value)).apply();
+    }
+
     public String getFlipMode() {
         return normalizeFlipMode(preferences.getString(KEY_FLIP_MODE, "slide"));
     }
@@ -681,6 +690,13 @@ public class SettingsStore {
 
     private static String normalizeTtsEngine(String value) {
         return "mimo".equals(value) ? "mimo" : "system";
+    }
+
+    public static String normalizeTtsMimoVoice(String value) {
+        if ("冰糖".equals(value) || "茉莉".equals(value) || "苏打".equals(value) || "白桦".equals(value)) {
+            return value;
+        }
+        return "冰糖";
     }
 
     private static String normalizeReaderFontFamily(String value) {
