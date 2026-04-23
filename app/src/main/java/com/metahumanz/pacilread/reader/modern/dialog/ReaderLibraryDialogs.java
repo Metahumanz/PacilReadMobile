@@ -107,7 +107,7 @@ public final class ReaderLibraryDialogs {
         });
         listView.setOnItemClickListener((parent, view, position, id) -> {
             dialog.dismiss();
-            navigation.openChapter(position, 0, true, position >= state.currentChapterIndex ? 1 : -1);
+            navigation.openChapterFromStart(position, true, position >= state.currentChapterIndex ? 1 : -1);
         });
         listView.setOnScrollListener(new AbsListView.OnScrollListener() {
             @Override

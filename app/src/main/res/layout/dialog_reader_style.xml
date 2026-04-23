@@ -14,7 +14,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="阅读样式"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textSize="20sp"
             android:textStyle="bold" />
 
@@ -23,7 +23,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="界面明暗"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textStyle="bold" />
 
         <Spinner
@@ -43,7 +43,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="阅读预设"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textStyle="bold" />
 
         <LinearLayout
@@ -64,7 +64,7 @@
                 android:paddingBottom="10dp"
                 android:text="纸控"
                 android:textAllCaps="false"
-                android:textColor="@color/on_surface" />
+                android:textColor="?attr/themeColorOnSurface" />
 
             <Button
                 android:id="@+id/style_button_theme_forest"
@@ -78,7 +78,7 @@
                 android:paddingBottom="10dp"
                 android:text="护眼"
                 android:textAllCaps="false"
-                android:textColor="@color/on_surface" />
+                android:textColor="?attr/themeColorOnSurface" />
 
             <Button
                 android:id="@+id/style_button_theme_night"
@@ -91,7 +91,7 @@
                 android:paddingBottom="10dp"
                 android:text="夜航"
                 android:textAllCaps="false"
-                android:textColor="@color/on_surface" />
+                android:textColor="?attr/themeColorOnSurface" />
         </LinearLayout>
 
         <TextView
@@ -99,7 +99,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="字体"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textStyle="bold" />
 
         <Spinner
@@ -119,7 +119,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="字色"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textStyle="bold" />
 
         <Spinner
@@ -142,7 +142,7 @@
             android:background="@drawable/bg_input"
             android:padding="12dp"
             android:text="字色预览"
-            android:textColor="@color/on_surface_muted" />
+            android:textColor="?attr/themeColorOnSurfaceMuted" />
 
         <Button
             android:id="@+id/style_button_custom_color"
@@ -155,14 +155,14 @@
             android:paddingBottom="10dp"
             android:text="自定义字色（RGB）"
             android:textAllCaps="false"
-            android:textColor="@color/primary" />
+            android:textColor="?attr/themeColorPrimary" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="字号"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textStyle="bold" />
 
         <SeekBar
@@ -175,14 +175,14 @@
             android:id="@+id/style_text_font"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/on_surface_muted" />
+            android:textColor="?attr/themeColorOnSurfaceMuted" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="字重"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textStyle="bold" />
 
         <SeekBar
@@ -195,14 +195,14 @@
             android:id="@+id/style_text_font_weight"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/on_surface_muted" />
+            android:textColor="?attr/themeColorOnSurfaceMuted" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="行距"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textStyle="bold" />
 
         <SeekBar
@@ -215,14 +215,14 @@
             android:id="@+id/style_text_line_spacing"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/on_surface_muted" />
+            android:textColor="?attr/themeColorOnSurfaceMuted" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="左边距"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textStyle="bold" />
 
         <SeekBar
@@ -235,14 +235,14 @@
             android:id="@+id/style_text_left_padding"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/on_surface_muted" />
+            android:textColor="?attr/themeColorOnSurfaceMuted" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="右边距"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textStyle="bold" />
 
         <SeekBar
@@ -255,14 +255,14 @@
             android:id="@+id/style_text_right_padding"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/on_surface_muted" />
+            android:textColor="?attr/themeColorOnSurfaceMuted" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="上边距"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textStyle="bold" />
 
         <SeekBar
@@ -275,14 +275,14 @@
             android:id="@+id/style_text_top_padding"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/on_surface_muted" />
+            android:textColor="?attr/themeColorOnSurfaceMuted" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="下边距"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textStyle="bold" />
 
         <SeekBar
@@ -295,34 +295,34 @@
             android:id="@+id/style_text_bottom_padding"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/on_surface_muted" />
+            android:textColor="?attr/themeColorOnSurfaceMuted" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="字间距"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textStyle="bold" />
 
         <SeekBar
             android:id="@+id/style_seek_letter_spacing"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:max="100" />
+            android:max="20" />
 
         <TextView
             android:id="@+id/style_text_letter_spacing"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/on_surface_muted" />
+            android:textColor="?attr/themeColorOnSurfaceMuted" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="首行缩进"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textStyle="bold" />
 
         <SeekBar
@@ -335,14 +335,14 @@
             android:id="@+id/style_text_first_line_indent"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/on_surface_muted" />
+            android:textColor="?attr/themeColorOnSurfaceMuted" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="正文对齐"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textStyle="bold" />
 
         <LinearLayout
@@ -363,7 +363,7 @@
                 android:paddingBottom="10dp"
                 android:text="两端对齐"
                 android:textAllCaps="false"
-                android:textColor="@color/on_surface" />
+                android:textColor="?attr/themeColorOnSurface" />
 
             <Button
                 android:id="@+id/style_button_body_left"
@@ -376,7 +376,7 @@
                 android:paddingBottom="10dp"
                 android:text="左对齐"
                 android:textAllCaps="false"
-                android:textColor="@color/on_surface" />
+                android:textColor="?attr/themeColorOnSurface" />
         </LinearLayout>
 
         <TextView
@@ -384,7 +384,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="章节标题对齐"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textStyle="bold" />
 
         <LinearLayout
@@ -405,7 +405,7 @@
                 android:paddingBottom="10dp"
                 android:text="靠左"
                 android:textAllCaps="false"
-                android:textColor="@color/on_surface" />
+                android:textColor="?attr/themeColorOnSurface" />
 
             <Button
                 android:id="@+id/style_button_title_center"
@@ -418,7 +418,7 @@
                 android:paddingBottom="10dp"
                 android:text="居中"
                 android:textAllCaps="false"
-                android:textColor="@color/on_surface" />
+                android:textColor="?attr/themeColorOnSurface" />
         </LinearLayout>
 
 
@@ -427,7 +427,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="背景模糊"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textStyle="bold" />
 
         <SeekBar
@@ -440,7 +440,7 @@
             android:id="@+id/style_text_background_blur"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/on_surface_muted" />
+            android:textColor="?attr/themeColorOnSurfaceMuted" />
 
         <CheckBox
             android:id="@+id/style_check_keep_screen_on"
@@ -448,7 +448,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="阅读时保持屏幕常亮"
-            android:textColor="@color/on_surface" />
+            android:textColor="?attr/themeColorOnSurface" />
 
         <CheckBox
             android:id="@+id/style_check_show_title"
@@ -456,14 +456,14 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:text="章节首页显示标题"
-            android:textColor="@color/on_surface" />
+            android:textColor="?attr/themeColorOnSurface" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="背景图"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textStyle="bold" />
 
         <LinearLayout
@@ -483,7 +483,7 @@
                 android:paddingTop="10dp"
                 android:paddingBottom="10dp"
                 android:text="选择背景"
-                android:textColor="@color/primary" />
+                android:textColor="?attr/themeColorPrimary" />
 
             <Button
                 android:id="@+id/style_button_clear_background"
@@ -495,7 +495,7 @@
                 android:paddingTop="10dp"
                 android:paddingBottom="10dp"
                 android:text="恢复预设"
-                android:textColor="@color/primary" />
+                android:textColor="?attr/themeColorPrimary" />
         </LinearLayout>
 
         <TextView
@@ -503,7 +503,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:textColor="@color/on_surface_muted"
+            android:textColor="?attr/themeColorOnSurfaceMuted"
             android:textSize="12sp" />
 
         <TextView
@@ -511,7 +511,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="自定义主题"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textStyle="bold" />
 
         <Button
@@ -526,7 +526,7 @@
             android:paddingEnd="20dp"
             android:paddingBottom="10dp"
             android:text="保存当前主题"
-            android:textColor="@color/primary" />
+            android:textColor="?attr/themeColorPrimary" />
 
         <LinearLayout
             android:id="@+id/style_custom_theme_list"

@@ -29,6 +29,7 @@ import com.metahumanz.pacilread.reader.modern.theme.ReaderThemePalette;
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedActivity;
+import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.ui.GlassUiHelper;
 import com.metahumanz.pacilread.util.FileAssetHelper;
 
@@ -249,7 +250,7 @@ public class PreviewActivity extends ThemedActivity {
 
     private void updatePreviewPanels() {
         previewTheme.setText(
-                "界面: " + labelForReaderUiTheme(settingsStore.getReaderUiThemeMode())
+                "界面: " + ThemeModeHelper.getResolvedReaderAppearanceLabel(this)
                         + " · 阅读预设: " + labelForReaderPreset(settingsStore.getReaderTheme())
                         + " · 字体 " + labelForReaderFontFamily(settingsStore.getReaderFontFamily())
                         + " · 字重 " + labelForReaderFontWeight(settingsStore.getReaderFontWeight())
@@ -306,7 +307,7 @@ public class PreviewActivity extends ThemedActivity {
         previewReaderHeading.setText("第一章 雨落书页时");
         previewReaderHeading.setIncludeFontPadding(false);
         previewReaderHeading.setTypeface(titleTypeface);
-        previewReaderHeading.setTextSize(TypedValue.COMPLEX_UNIT_SP, settingsStore.getFontSizeSp() + 2f);
+        previewReaderHeading.setTextSize(TypedValue.COMPLEX_UNIT_SP, settingsStore.getFontSizeSp() * 1.4f);
         previewReaderHeading.setTextColor(palette.textColor);
         previewReaderBody.setText("雨点敲在窗沿上时，旧书的纸页也跟着轻轻起伏。字距、行距、边距与字重会共同决定这页文字是松弛、沉稳，还是压迫。\n\n如果一段文字像现在这样安静地铺开，说明当前排版已经接近真实阅读状态。");
         previewReaderBody.setTypeface(bodyTypeface);
@@ -322,7 +323,9 @@ public class PreviewActivity extends ThemedActivity {
         int bottomPadding = dp(settingsStore.getBottomPaddingDp() + 24);
         previewReaderPage.setPadding(leftPadding, topPadding, rightPadding, bottomPadding);
         LinearLayout.LayoutParams bodyParams = (LinearLayout.LayoutParams) previewReaderBody.getLayoutParams();
-        bodyParams.topMargin = settingsStore.isChapterTitleVisible() ? dp(14) : 0;
+        bodyParams.topMargin = settingsStore.isChapterTitleVisible()
+                ? Math.max(dp(16), Math.round(previewReaderHeading.getTextSize() * 1.5f))
+                : 0;
         previewReaderBody.setLayoutParams(bodyParams);
         String backgroundPath = settingsStore.getReaderBackgroundPath();
         boolean applied = false;
@@ -344,8 +347,11 @@ public class PreviewActivity extends ThemedActivity {
 
     private void stylePreviewThemeButton(Button button, boolean active) {
         if (button == null) return;
-        button.setBackgroundResource(active ? R.drawable.bg_primary_button : R.drawable.bg_outline_button);
-        button.setTextColor(getColor(active ? android.R.color.white : R.color.on_surface));
+        button.setBackgroundResource(active ? R.drawable.bg_app_primary_button : R.drawable.bg_app_outline_button);
+        button.setTextColor(ThemeModeHelper.resolveColor(
+                this,
+                active ? R.color.app_button_primary_text : R.color.app_button_outline_text
+        ));
         GlassUiHelper.applyToView(this, button, settingsStore.getGlassOpacityPercent());
     }
 
@@ -391,56 +397,72 @@ public class PreviewActivity extends ThemedActivity {
         if (previewStyleCustomThemeList == null) return;
         previewStyleCustomThemeList.removeAllViews();
         executor.execute(() -> {
-            List<ReaderThemeRecord> themes = databaseHelper.getCustomThemes();
-            runOnUiThread(() -> {
-                if (previewStyleCustomThemeList == null) return;
-                previewStyleCustomThemeList.removeAllViews();
-                for (ReaderThemeRecord theme : themes) {
-                    LinearLayout row = new LinearLayout(this);
-                    row.setOrientation(LinearLayout.HORIZONTAL);
-                    Button applyButton = new Button(this);
-                    applyButton.setText(theme.name);
-                    applyButton.setAllCaps(false);
-                    applyButton.setBackgroundResource(R.drawable.bg_outline_button);
-                    applyButton.setTextColor(getColor(R.color.primary));
-                    applyButton.setPadding(dp(16), dp(8), dp(16), dp(8));
-                    GlassUiHelper.applyToView(this, applyButton, settingsStore.getGlassOpacityPercent());
-                    LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-                    row.addView(applyButton, ap);
-                    Button deleteButton = new Button(this);
-                    deleteButton.setText("删除");
-                    deleteButton.setAllCaps(false);
-                    deleteButton.setBackgroundResource(R.drawable.bg_danger_button);
-                    deleteButton.setPadding(dp(12), dp(8), dp(12), dp(8));
-                    LinearLayout.LayoutParams dp2 = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-                    dp2.leftMargin = dp(8);
-                    row.addView(deleteButton, dp2);
-                    LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-                    rp.bottomMargin = dp(8);
-                    row.setLayoutParams(rp);
-                    applyButton.setOnClickListener(v -> {
-                        try {
-                            ReaderThemeConfig.apply(settingsStore, new JSONObject(theme.configJson));
-                            previewSelectedReaderTheme = settingsStore.getReaderTheme();
-                            bindPreviewStyleValues();
-                            updatePreviewPanels();
-                        } catch (Exception e) {
-                            Toast.makeText(this, "主题配置损坏", Toast.LENGTH_SHORT).show();
-                        }
-                    });
-                    deleteButton.setOnClickListener(v -> executor.execute(() -> {
-                        databaseHelper.deleteCustomTheme(theme.id);
-                        runOnUiThread(this::renderPreviewThemeRows);
-                    }));
-                    previewStyleCustomThemeList.addView(row);
-                }
-            });
+            try {
+                List<ReaderThemeRecord> themes = databaseHelper.getCustomThemes();
+                runOnUiThread(() -> {
+                    if (previewStyleCustomThemeList == null) return;
+                    previewStyleCustomThemeList.removeAllViews();
+                    for (ReaderThemeRecord theme : themes) {
+                        LinearLayout row = new LinearLayout(this);
+                        row.setOrientation(LinearLayout.HORIZONTAL);
+                        Button applyButton = new Button(this);
+                        applyButton.setText(theme.name);
+                        applyButton.setAllCaps(false);
+                        applyButton.setBackgroundResource(R.drawable.bg_app_outline_button);
+                        applyButton.setTextColor(ThemeModeHelper.resolveColor(this, R.color.app_button_outline_text));
+                        applyButton.setPadding(dp(16), dp(8), dp(16), dp(8));
+                        GlassUiHelper.applyToView(this, applyButton, settingsStore.getGlassOpacityPercent());
+                        LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+                        row.addView(applyButton, ap);
+                        Button deleteButton = new Button(this);
+                        deleteButton.setText("删除");
+                        deleteButton.setAllCaps(false);
+                        deleteButton.setBackgroundResource(R.drawable.bg_app_danger_button);
+                        deleteButton.setTextColor(ThemeModeHelper.resolveColor(this, R.color.app_button_danger_text));
+                        deleteButton.setPadding(dp(12), dp(8), dp(12), dp(8));
+                        LinearLayout.LayoutParams dp2 = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                        dp2.leftMargin = dp(8);
+                        row.addView(deleteButton, dp2);
+                        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                        rp.bottomMargin = dp(8);
+                        row.setLayoutParams(rp);
+                        applyButton.setOnClickListener(v -> {
+                            try {
+                                ReaderThemeConfig.apply(settingsStore, new JSONObject(theme.configJson));
+                                previewSelectedReaderTheme = settingsStore.getReaderTheme();
+                                bindPreviewStyleValues();
+                                updatePreviewPanels();
+                            } catch (Exception e) {
+                                Toast.makeText(this, "主题配置损坏", Toast.LENGTH_SHORT).show();
+                            }
+                        });
+                        deleteButton.setOnClickListener(v -> executor.execute(() -> {
+                            databaseHelper.deleteCustomTheme(theme.id);
+                            runOnUiThread(this::renderPreviewThemeRows);
+                        }));
+                        previewStyleCustomThemeList.addView(row);
+                    }
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    if (previewStyleCustomThemeList != null) {
+                        previewStyleCustomThemeList.removeAllViews();
+                    }
+                    Toast.makeText(this, "加载主题失败", Toast.LENGTH_SHORT).show();
+                });
+            }
         });
     }
 
     private void promptSavePreviewTheme() {
         EditText input = new EditText(this);
         input.setHint("主题名称");
+        input.setBackgroundResource(R.drawable.bg_app_input);
+        input.setTextColor(ThemeModeHelper.resolveColor(this, R.color.app_text_primary));
+        input.setHintTextColor(ThemeModeHelper.resolveColor(this, R.color.app_text_secondary));
+        int horizontal = dp(14);
+        int vertical = dp(12);
+        input.setPadding(horizontal, vertical, horizontal, vertical);
         new AlertDialog.Builder(this)
                 .setTitle("保存当前主题").setView(input).setNegativeButton("取消", null)
                 .setPositiveButton("保存", (dialog, which) -> {
@@ -488,8 +510,8 @@ public class PreviewActivity extends ThemedActivity {
     }
 
     private ArrayAdapter<String> buildSpinnerAdapter(String[] items) {
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, R.layout.item_spinner_selected, items);
-        adapter.setDropDownViewResource(R.layout.item_spinner_dropdown);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, R.layout.item_app_spinner_selected, items);
+        adapter.setDropDownViewResource(R.layout.item_app_spinner_dropdown);
         return adapter;
     }
 
@@ -499,14 +521,6 @@ public class PreviewActivity extends ThemedActivity {
         }
         return fallback;
     }
-
-    private String labelForReaderUiTheme(String v) {
-        if ("system".equals(v)) return "跟随系统";
-        if ("light".equals(v)) return "浅色";
-        if ("dark".equals(v)) return "深色";
-        return "跟随应用";
-    }
-
     private String labelForReaderPreset(String v) {
         if ("forest".equals(v)) return "护眼";
         if ("night".equals(v)) return "夜航";

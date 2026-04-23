@@ -5,7 +5,10 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.text.LineBreaker;
 import android.text.Layout;
+import android.text.Spanned;
 import android.text.TextPaint;
+import android.text.style.AlignmentSpan;
+import android.text.style.LineHeightSpan;
 import android.util.AttributeSet;
 
 import androidx.appcompat.widget.AppCompatTextView;
@@ -85,6 +88,11 @@ public class JustifiedPageTextView extends AppCompatTextView {
             if (start >= end) {
                 continue;
             }
+            if (shouldUsePlatformLine(text, start, end)) {
+                drawLineHighlight(canvas, layout.getLineLeft(lineIndex), layout.getLineBaseline(lineIndex), paint, text, start, end);
+                drawPlatformLine(canvas, layout, lineIndex, availableWidth);
+                continue;
+            }
             String rawLine = text.subSequence(start, end).toString();
             boolean paragraphEnd = rawLine.endsWith("\n") || rawLine.endsWith("\r");
             String drawLine = trimLineBreaks(rawLine);
@@ -102,6 +110,23 @@ public class JustifiedPageTextView extends AppCompatTextView {
                 canvas.drawText(drawLine, lineLeft, baseline, paint);
             }
         }
+        canvas.restoreToCount(saveCount);
+    }
+
+    private boolean shouldUsePlatformLine(CharSequence text, int lineStart, int lineEnd) {
+        if (!(text instanceof Spanned)) {
+            return false;
+        }
+        Spanned spanned = (Spanned) text;
+        return spanned.getSpans(lineStart, lineEnd, ReaderTitleSpan.class).length > 0
+                || spanned.getSpans(lineStart, lineEnd, AlignmentSpan.class).length > 0
+                || spanned.getSpans(lineStart, lineEnd, LineHeightSpan.class).length > 0;
+    }
+
+    private void drawPlatformLine(Canvas canvas, Layout layout, int lineIndex, int availableWidth) {
+        int saveCount = canvas.save();
+        canvas.clipRect(0, layout.getLineTop(lineIndex), availableWidth, layout.getLineBottom(lineIndex));
+        layout.draw(canvas);
         canvas.restoreToCount(saveCount);
     }
 
@@ -156,22 +181,21 @@ public class JustifiedPageTextView extends AppCompatTextView {
     }
 
     private void drawJustifiedLine(Canvas canvas, String lineText, float startX, float baseline, float availableWidth, TextPaint paint) {
-        float[] xPositions = computeJustifiedPositions(lineText, startX, availableWidth, paint);
         int indentEnd = countIndent(lineText);
-        float x = startX;
+        float[] xPositions = computeJustifiedPositions(lineText, startX, availableWidth, paint);
         if (indentEnd > 0) {
             String indent = lineText.substring(0, indentEnd);
-            canvas.drawText(indent, x, baseline, paint);
-            x += paint.measureText(indent);
+            canvas.drawText(indent, startX, baseline, paint);
         }
         String content = lineText.substring(indentEnd);
         if (content.length() <= 1) {
-            canvas.drawText(content, x, baseline, paint);
+            float contentStartX = startX + (indentEnd > 0 ? paint.measureText(lineText.substring(0, indentEnd)) : 0f);
+            canvas.drawText(content, contentStartX, baseline, paint);
             return;
         }
-        List<String> units = splitToUnits(content);
+        List<TextUnit> units = splitToUnits(content);
         for (int i = 0; i < units.size(); i++) {
-            canvas.drawText(units.get(i), xPositions[i], baseline, paint);
+            canvas.drawText(units.get(i).text, xPositions[i], baseline, paint);
         }
     }
 
@@ -184,19 +208,16 @@ public class JustifiedPageTextView extends AppCompatTextView {
         float[] xPositions = computeJustifiedPositions(lineText, lineLeft, lineAvailableWidth, paint);
         int indentEnd = countIndent(lineText);
         String content = lineText.substring(indentEnd);
-        List<String> units = splitToUnits(content);
+        List<TextUnit> units = splitToUnits(content);
 
-        float x = lineLeft;
-        float indentWidth = 0;
         if (indentEnd > 0) {
             String indent = lineText.substring(0, indentEnd);
-            canvas.drawText(indent, x, baseline, paint);
-            indentWidth = paint.measureText(indent);
-            x += indentWidth;
+            canvas.drawText(indent, lineLeft, baseline, paint);
         }
         if (content.length() <= 1) {
             if (content.length() == 1) {
-                canvas.drawText(content, x, baseline, paint);
+                float contentStartX = lineLeft + (indentEnd > 0 ? paint.measureText(lineText.substring(0, indentEnd)) : 0f);
+                canvas.drawText(content, contentStartX, baseline, paint);
             }
             return;
         }
@@ -217,28 +238,20 @@ public class JustifiedPageTextView extends AppCompatTextView {
         // Draw content units with per-unit highlight tracking
         for (int i = 0; i < units.size(); i++) {
             float unitX = xPositions[i];
-            int unitCharStart = contentOffset + unitOffsetInContent(content, i);
-            int unitCharEnd = unitCharStart + units.get(i).length();
+            TextUnit unit = units.get(i);
+            int unitCharStart = contentOffset + unit.start;
+            int unitCharEnd = contentOffset + unit.end;
 
             int hlStart = Math.max(highlightStart, unitCharStart);
             int hlEnd = Math.min(highlightEnd, unitCharEnd);
             if (hlStart < hlEnd) {
-                float partialStartOffset = (hlStart == unitCharStart) ? 0 : paint.measureText(fullText, unitCharStart, hlStart);
-                float partialWidth = paint.measureText(fullText, hlStart, hlEnd);
-                canvas.drawRect(unitX + partialStartOffset, highlightTop, unitX + partialStartOffset + partialWidth, highlightBottom, highlightPaint);
+                float partialStartOffset = measureRunAdvance(unit.text, hlStart - unitCharStart, paint);
+                float partialEndOffset = measureRunAdvance(unit.text, hlEnd - unitCharStart, paint);
+                canvas.drawRect(unitX + partialStartOffset, highlightTop, unitX + partialEndOffset, highlightBottom, highlightPaint);
             }
 
-            canvas.drawText(units.get(i), unitX, baseline, paint);
+            canvas.drawText(unit.text, unitX, baseline, paint);
         }
-    }
-
-    private int unitOffsetInContent(String content, int unitIndex) {
-        List<String> units = splitToUnits(content);
-        int offset = 0;
-        for (int i = 0; i < unitIndex && i < units.size(); i++) {
-            offset += units.get(i).length();
-        }
-        return offset;
     }
 
     private int countIndent(String lineText) {
@@ -263,59 +276,57 @@ public class JustifiedPageTextView extends AppCompatTextView {
         if (content.length() <= 1) {
             return new float[]{ contentStartX };
         }
-        List<String> units = splitToUnits(content);
-        float naturalWidth = paint.measureText(content);
+        List<TextUnit> units = splitToUnits(content);
+        float naturalWidth = measureRunAdvance(content, content.length(), paint);
         float residualWidth = availableWidth - indentWidth - naturalWidth;
 
         float[] positions = new float[units.size()];
-        float x = contentStartX;
-
-        if (residualWidth <= 0.5f) {
-            for (int i = 0; i < units.size(); i++) {
-                positions[i] = x;
-                x += paint.measureText(units.get(i));
-            }
-            return positions;
-        }
-
         int spaceCount = 0;
-        for (String unit : units) {
-            if (" ".equals(unit)) spaceCount++;
-        }
-
-        if (spaceCount > 1) {
-            float extraSpace = residualWidth / spaceCount;
-            for (int i = 0; i < units.size(); i++) {
-                positions[i] = x;
-                x += paint.measureText(units.get(i));
-                if (" ".equals(units.get(i)) && i < units.size() - 1) {
-                    x += extraSpace;
-                }
+        for (TextUnit unit : units) {
+            if (unit.isSpace()) {
+                spaceCount++;
             }
-            return positions;
         }
 
+        float distributedExtra = 0f;
+        float extraSpace = spaceCount > 1 ? residualWidth / spaceCount : 0f;
         int gapCount = Math.max(units.size() - 1, 1);
-        float extraGap = residualWidth / gapCount;
+        float extraGap = spaceCount > 1 ? 0f : residualWidth / gapCount;
         for (int i = 0; i < units.size(); i++) {
-            positions[i] = x;
-            x += paint.measureText(units.get(i));
-            if (i < units.size() - 1) {
-                x += extraGap;
+            TextUnit unit = units.get(i);
+            positions[i] = contentStartX + measureRunAdvance(content, unit.start, paint) + distributedExtra;
+            if (residualWidth <= 0.5f) {
+                continue;
+            }
+            if (spaceCount > 1) {
+                if (unit.isSpace() && i < units.size() - 1) {
+                    distributedExtra += extraSpace;
+                }
+            } else if (i < units.size() - 1) {
+                distributedExtra += extraGap;
             }
         }
         return positions;
     }
 
-    private List<String> splitToUnits(String text) {
-        List<String> units = new ArrayList<>();
+    private List<TextUnit> splitToUnits(String text) {
+        List<TextUnit> units = new ArrayList<>();
         int index = 0;
         while (index < text.length()) {
             int codePoint = text.codePointAt(index);
-            units.add(new String(Character.toChars(codePoint)));
-            index += Character.charCount(codePoint);
+            int nextIndex = index + Character.charCount(codePoint);
+            units.add(new TextUnit(new String(Character.toChars(codePoint)), index, nextIndex));
+            index = nextIndex;
         }
         return units;
+    }
+
+    private float measureRunAdvance(CharSequence text, int offset, TextPaint paint) {
+        if (text == null || text.length() == 0 || offset <= 0) {
+            return 0f;
+        }
+        int safeOffset = Math.max(0, Math.min(offset, text.length()));
+        return paint.getRunAdvance(text, 0, text.length(), 0, text.length(), false, safeOffset);
     }
 
     private String trimLineBreaks(String line) {
@@ -329,5 +340,21 @@ public class JustifiedPageTextView extends AppCompatTextView {
             }
         }
         return line.substring(0, end);
+    }
+
+    private static final class TextUnit {
+        final String text;
+        final int start;
+        final int end;
+
+        TextUnit(String text, int start, int end) {
+            this.text = text;
+            this.start = start;
+            this.end = end;
+        }
+
+        boolean isSpace() {
+            return " ".equals(text);
+        }
     }
 }

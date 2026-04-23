@@ -10,7 +10,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="全文搜索"
-        android:textColor="@color/on_surface"
+        android:textColor="?attr/themeColorOnSurface"
         android:textSize="20sp"
         android:textStyle="bold" />
 
@@ -29,8 +29,8 @@
             android:background="@drawable/bg_input"
             android:hint="输入关键词"
             android:padding="12dp"
-            android:textColor="@color/on_surface"
-            android:textColorHint="@color/on_surface_muted" />
+            android:textColor="?attr/themeColorOnSurface"
+            android:textColorHint="?attr/themeColorOnSurfaceMuted" />
 
         <Button
             android:id="@+id/search_button_go"
@@ -46,14 +46,14 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:textColor="@color/on_surface_muted" />
+        android:textColor="?attr/themeColorOnSurfaceMuted" />
 
     <ListView
         android:id="@+id/search_result_list"
         android:layout_width="match_parent"
         android:layout_height="320dp"
         android:layout_marginTop="10dp"
-        android:divider="@color/divider"
+        android:divider="?attr/themeColorDivider"
         android:dividerHeight="1dp"
         android:fastScrollEnabled="true"
         android:scrollbarStyle="outsideInset"

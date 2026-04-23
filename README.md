@@ -115,11 +115,36 @@ sdk.dir=C\:\\Android\\SDK
 - `app/build/outputs/apk/release/`
 - `app/build/outputs/bundle/release/`
 
+### Release 签名
+
+没有配置 release keystore 时，`assembleRelease` 会生成未签名包：
+
+```text
+app/build/outputs/apk/release/app-release-unsigned.apk
+```
+
+如果需要生成可安装的 signed release APK，先在一台电脑上生成一把 release keystore：
+
+```powershell
+keytool -genkeypair -v -keystore .\pacilread-release.jks -storetype PKCS12 -alias pacilread -keyalg RSA -keysize 2048 -validity 10000
+```
+
+然后把 `keystore.properties.example` 复制为 `keystore.properties`，填入本机的 keystore 路径和密码：
+
+```properties
+storeFile=pacilread-release.jks
+storePassword=你的 store 密码
+keyAlias=pacilread
+keyPassword=你的 key 密码
+```
+
+`keystore.properties` 和 `*.jks` 都不会提交到 Git。多台电脑开发时，不要每台电脑各生成一把新 key；要安全保存并复用同一个 `pacilread-release.jks`，否则同一个包名的 APK 以后无法互相覆盖更新。
+
 ## 听书说明
 
 - 阅读页听书面板支持 `本地系统 TTS` 和 `小米 MiMo` 两种引擎。
 - **本地系统 TTS**：使用 Android 设备自带的语音合成服务，无需联网。
-- **小米 MiMo**：需要配置 API Key。可以在阅读页听书面板或设置页中填写。实现类为 `com.metahumanz.pacilread.tts.MimoTtsClient`。
+- **小米 MiMo**：使用 `mimo-v2.5-tts` 云端 TTS，需要在设置页配置 API Key。阅读页听书面板可在 `冰糖`、`茉莉`、`苏打`、`白桦` 4 种中文内置音色间切换。实现类为 `com.metahumanz.pacilread.tts.MimoTtsClient`。
 - **分句逻辑**：所有引擎均采用与 Win11 版一致的分句正则，确保跨平台听书节奏统一。
 
 ## 项目结构

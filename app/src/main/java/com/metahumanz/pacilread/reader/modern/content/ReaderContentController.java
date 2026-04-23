@@ -1,18 +1,26 @@
 package com.metahumanz.pacilread.reader.modern.content;
 
-import android.graphics.Paint;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.text.Layout;
+import android.text.SpannableString;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
 import android.text.TextPaint;
+import android.text.style.AlignmentSpan;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.LeadingMarginSpan;
+import android.text.style.LineHeightSpan;
 import android.util.Log;
 import android.util.LruCache;
-import android.util.TypedValue;
 import android.view.View;
-import android.widget.TextView;
 
 import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.model.ChapterRecord;
 import com.metahumanz.pacilread.model.ReplacementRuleRecord;
 import com.metahumanz.pacilread.reader.PageSlice;
 import com.metahumanz.pacilread.reader.ReaderPaginator;
+import com.metahumanz.pacilread.reader.ReaderTitleSpan;
 import com.metahumanz.pacilread.reader.ReplacementEngine;
 import com.metahumanz.pacilread.reader.modern.ModernReaderActivity;
 import com.metahumanz.pacilread.reader.modern.ReaderRuntime;
@@ -24,33 +32,21 @@ import com.metahumanz.pacilread.reader.modern.paging.ReaderPagingAnimator;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderStyleController;
 
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 public final class ReaderContentController {
     private static final String TAG = "PacilReadReader";
-    private static final int CHAPTER_TITLE_BODY_MARGIN_DP = 16;
+    private static final long REFLOW_DEBOUNCE_MS = 32L;
 
     private static long lastCachedBookId = -1L;
     private static BookRecord cachedBook;
     private static final List<ChapterRecord> cachedChapters = new ArrayList<>();
     private static final List<ReplacementRuleRecord> cachedRules = new ArrayList<>();
     private static final Map<Integer, List<PageSlice>> cachedPageSlicesMap = new HashMap<>();
-    private static String cachedLayoutFontFamily;
-    private static int cachedLayoutFontWeight;
-    private static float cachedLayoutFontSize;
-    private static float cachedLayoutLineSpacing;
-    private static int cachedLayoutLeftPadding;
-    private static int cachedLayoutRightPadding;
-    private static int cachedLayoutTopPadding;
-    private static int cachedLayoutBottomPadding;
-    private static int cachedLayoutWidth;
-    private static int cachedLayoutHeight;
+    private static ReaderLayoutSignature cachedLayoutSignature;
 
     private final ModernReaderActivity activity;
     private final ReaderRuntime runtime;
@@ -60,11 +56,15 @@ public final class ReaderContentController {
     private final LruCache<Integer, String> processedChapterLruCache = new LruCache<>(100);
     private final Map<Integer, Integer> processedChapterLengthCache = new HashMap<>();
     private final Runnable saveProgressRunnable = this::persistProgress;
+    private final Runnable scheduledReflowRunnable = this::performScheduledReflow;
 
     private ReaderNavigationController navigation;
     private ReaderStyleController style;
     private ReaderPagingAnimator paging;
     private ReaderChromeController chrome;
+    private int pendingReflowChapterIndex = -1;
+    private int pendingReflowAnchorOffset = 0;
+    private int reflowGeneration = 0;
 
     public ReaderContentController(
             ModernReaderActivity activity,
@@ -100,30 +100,21 @@ public final class ReaderContentController {
             state.replacementRules.clear();
             state.replacementRules.addAll(cachedRules);
 
-            if (!isLayoutFingerprintSame()) {
-                cachedPageSlicesMap.clear();
-                updateLayoutFingerprint();
-            }
-
             int targetChapterIndex = ui.clamp(
                     navigation.chapterIndexFromOrder(state.book.progressIndex),
                     0,
                     state.chapters.size() - 1
             );
-            state.currentChapterIndex = targetChapterIndex;
-            style.applyReaderSettings();
-            if (state.restoredChapterIndex >= 0) {
-                navigation.showPage(
-                        ui.clamp(state.restoredChapterIndex, 0, state.chapters.size() - 1),
-                        Math.max(state.restoredPageIndex, 0),
-                        false,
-                        0
-                );
-                state.restoredChapterIndex = -1;
-                state.restoredPageIndex = -1;
-            } else {
-                navigation.openChapter(state.currentChapterIndex, state.book.progressOffset, false, 0);
+            if (state.restoredChapterIndex >= 0 && state.restoredProgressOffset >= 0) {
+                targetChapterIndex = ui.clamp(state.restoredChapterIndex, 0, state.chapters.size() - 1);
             }
+            state.currentChapterIndex = targetChapterIndex;
+            int initialAnchorOffset = resolveInitialAnchorOffset(state.book.progressOffset);
+            state.sessionStartOffset = initialAnchorOffset;
+            resetRestoredPosition();
+            style.applyReaderSettings();
+            activity.onReaderBookLoaded();
+            scheduleReflowAfterLayout(targetChapterIndex, initialAnchorOffset);
             return;
         }
 
@@ -146,7 +137,7 @@ public final class ReaderContentController {
                     cachedRules.clear();
                     cachedRules.addAll(loadedRules);
                     cachedPageSlicesMap.clear();
-                    updateLayoutFingerprint();
+                    cachedLayoutSignature = null;
 
                     state.book = loadedBook;
                     state.chapters.clear();
@@ -159,22 +150,17 @@ public final class ReaderContentController {
                             0,
                             state.chapters.size() - 1
                     );
-                    state.currentChapterIndex = targetChapterIndex;
-                    style.applyReaderSettings();
-                    if (state.restoredChapterIndex >= 0) {
-                        navigation.showPage(
-                                ui.clamp(state.restoredChapterIndex, 0, state.chapters.size() - 1),
-                                Math.max(state.restoredPageIndex, 0),
-                                false,
-                                0
-                        );
-                        state.restoredChapterIndex = -1;
-                        state.restoredPageIndex = -1;
-                    } else {
-                        navigation.openChapter(state.currentChapterIndex, loadedBook.progressOffset, false, 0);
-                        state.sessionStartOffset = loadedBook.progressOffset;
-                        runtime.mainHandler.postDelayed(() -> syncFromWebDav(true), 2000L);
+                    if (state.restoredChapterIndex >= 0 && state.restoredProgressOffset >= 0) {
+                        targetChapterIndex = ui.clamp(state.restoredChapterIndex, 0, state.chapters.size() - 1);
                     }
+                    state.currentChapterIndex = targetChapterIndex;
+                    int initialAnchorOffset = resolveInitialAnchorOffset(loadedBook.progressOffset);
+                    state.sessionStartOffset = initialAnchorOffset;
+                    resetRestoredPosition();
+                    style.applyReaderSettings();
+                    activity.onReaderBookLoaded();
+                    scheduleReflowAfterLayout(targetChapterIndex, initialAnchorOffset);
+                    runtime.mainHandler.postDelayed(() -> syncFromWebDav(true), 2000L);
                 });
             } catch (Exception error) {
                 Log.e(TAG, "Failed to load reader state", error);
@@ -186,49 +172,19 @@ public final class ReaderContentController {
         });
     }
 
-    public boolean isLayoutFingerprintSame() {
-        if (views.pageStage == null) {
-            return true;
-        }
-        return runtime.settingsStore.getReaderFontFamily().equals(cachedLayoutFontFamily)
-                && runtime.settingsStore.getReaderFontWeight() == cachedLayoutFontWeight
-                && runtime.settingsStore.getFontSizeSp() == cachedLayoutFontSize
-                && runtime.settingsStore.getLineSpacingExtraSp() == cachedLayoutLineSpacing
-                && runtime.settingsStore.getLeftPaddingDp() == cachedLayoutLeftPadding
-                && runtime.settingsStore.getRightPaddingDp() == cachedLayoutRightPadding
-                && runtime.settingsStore.getTopPaddingDp() == cachedLayoutTopPadding
-                && runtime.settingsStore.getBottomPaddingDp() == cachedLayoutBottomPadding
-                && views.pageStage.getWidth() == cachedLayoutWidth
-                && views.pageStage.getHeight() == cachedLayoutHeight;
-    }
-
-    public void updateLayoutFingerprint() {
-        if (views.pageStage == null) {
-            return;
-        }
-        cachedLayoutFontFamily = runtime.settingsStore.getReaderFontFamily();
-        cachedLayoutFontWeight = runtime.settingsStore.getReaderFontWeight();
-        cachedLayoutFontSize = runtime.settingsStore.getFontSizeSp();
-        cachedLayoutLineSpacing = runtime.settingsStore.getLineSpacingExtraSp();
-        cachedLayoutLeftPadding = runtime.settingsStore.getLeftPaddingDp();
-        cachedLayoutRightPadding = runtime.settingsStore.getRightPaddingDp();
-        cachedLayoutTopPadding = runtime.settingsStore.getTopPaddingDp();
-        cachedLayoutBottomPadding = runtime.settingsStore.getBottomPaddingDp();
-        cachedLayoutWidth = views.pageStage.getWidth();
-        cachedLayoutHeight = views.pageStage.getHeight();
-    }
-
     public void persistProgress() {
         if (state.book == null || state.chapters.isEmpty()) {
             return;
         }
         int offset = currentCharOffset();
         ChapterRecord chapter = state.chapters.get(state.currentChapterIndex);
+        int chapterOrderIndex = chapter.orderIndex;
+        long persistedAt = System.currentTimeMillis();
+        state.book.progressIndex = chapterOrderIndex;
+        state.book.progressOffset = offset;
+        state.book.lastReadAt = persistedAt;
         runtime.executor.execute(() -> {
-            runtime.databaseHelper.updateProgress(state.book.id, chapter.orderIndex, offset);
-            state.book.progressIndex = chapter.orderIndex;
-            state.book.progressOffset = offset;
-            state.book.lastReadAt = System.currentTimeMillis();
+            runtime.databaseHelper.updateProgress(state.book.id, chapterOrderIndex, offset);
             if (runtime.settingsStore.isWebDavEnabled()) {
                 try {
                     runtime.webDavClient.ensureProgressDirectory();
@@ -279,8 +235,10 @@ public final class ReaderContentController {
                         state.chapters.get(remoteIndex).orderIndex,
                         payload.chapterPosition
                 );
+                state.book.progressIndex = state.chapters.get(remoteIndex).orderIndex;
+                state.book.progressOffset = Math.max(payload.chapterPosition, 0);
                 state.book.lastReadAt = payload.chapterTime;
-                activity.runOnUiThread(() -> navigation.openChapter(remoteIndex, payload.chapterPosition, false, 0));
+                activity.runOnUiThread(() -> scheduleReflowAfterLayout(remoteIndex, payload.chapterPosition));
             } catch (Exception error) {
                 if (!silent) {
                     activity.runOnUiThread(() -> ui.showToast("同步失败: " + error.getMessage()));
@@ -290,75 +248,60 @@ public final class ReaderContentController {
     }
 
     public List<PageSlice> getPagesForChapter(int chapterIndex) {
+        ensurePaginationCacheMatchesLayout();
         if (cachedPageSlicesMap.containsKey(chapterIndex)) {
             return cachedPageSlicesMap.get(chapterIndex);
         }
-        String text = getProcessedChapterText(chapterIndex);
+        DisplayChapterText display = buildDisplayChapterText(chapterIndex);
         int pageWidth = getReaderPageTextWidth();
         int regularPageHeight = getRegularReaderPageHeight();
-        if (pageWidth <= 0 || regularPageHeight <= 0) {
-            List<PageSlice> fallback = new ArrayList<>();
-            fallback.add(new PageSlice(0, text.length(), text));
-            return fallback;
-        }
-        int firstPageHeight = runtime.settingsStore.isChapterTitleVisible()
-                ? Math.max(1, regularPageHeight - measureChapterTitleOccupiedHeight(state.chapters.get(chapterIndex).title, pageWidth))
-                : regularPageHeight;
-        TextPaint paint = new TextPaint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
-        paint.setTextSize(views.pageBodyCurrent.getTextSize());
-        paint.setTypeface(views.pageBodyCurrent.getTypeface());
-        List<PageSlice> pages = ReaderPaginator.paginate(
-                text,
+        TextPaint paint = new TextPaint(views.pageBodyCurrent.getPaint());
+        List<PageSlice> pages = sanitizePageSlices(ReaderPaginator.paginate(
+                display.text,
                 paint,
                 pageWidth,
-                firstPageHeight,
                 regularPageHeight,
-                views.pageBodyCurrent.getLineSpacingExtra()
-        );
+                regularPageHeight,
+                views.pageBodyCurrent.getLineSpacingExtra(),
+                display.bodyStartIndex
+        ));
         cachedPageSlicesMap.put(chapterIndex, pages);
         return pages;
     }
 
     public int getReaderPageTextWidth() {
-        if (views.pageBodyCurrent != null && views.pageBodyCurrent.getWidth() > 0) {
-            return views.pageBodyCurrent.getWidth()
-                    - views.pageBodyCurrent.getPaddingLeft()
-                    - views.pageBodyCurrent.getPaddingRight();
-        }
-        if (views.pageCurrent != null && views.pageCurrent.getWidth() > 0) {
-            return views.pageCurrent.getWidth() - views.pageCurrent.getPaddingLeft() - views.pageCurrent.getPaddingRight();
+        if (views.pageCurrent != null) {
+            int width = views.pageCurrent.getWidth() > 0
+                    ? views.pageCurrent.getWidth()
+                    : views.pageCurrent.getMeasuredWidth();
+            if (width > 0) {
+                return Math.max(0, width
+                        - views.pageCurrent.getPaddingLeft()
+                        - views.pageCurrent.getPaddingRight());
+            }
         }
         return 0;
     }
 
     public int getRegularReaderPageHeight() {
-        if (views.pageBodyCurrent != null && views.pageBodyCurrent.getHeight() > 0) {
-            return views.pageBodyCurrent.getHeight();
-        }
-        if (views.pageCurrent != null && views.pageCurrent.getHeight() > 0) {
-            return views.pageCurrent.getHeight()
-                    - views.pageCurrent.getPaddingTop()
-                    - views.pageCurrent.getPaddingBottom()
-                    - ui.dp(14);
+        if (views.pageCurrent != null) {
+            int height = views.pageCurrent.getHeight() > 0
+                    ? views.pageCurrent.getHeight()
+                    : views.pageCurrent.getMeasuredHeight();
+            if (height > 0) {
+                return Math.max(0, height
+                        - views.pageCurrent.getPaddingTop()
+                        - views.pageCurrent.getPaddingBottom());
+            }
         }
         return 0;
     }
 
-    public int measureChapterTitleOccupiedHeight(String title, int width) {
-        if (title == null || title.isBlank() || width <= 0) {
-            return 0;
+    public int getChapterTitleBodyMarginPx() {
+        if (views.pageTitleCurrent == null) {
+            return ui.dp(16);
         }
-        TextView measureView = new TextView(activity);
-        measureView.setIncludeFontPadding(false);
-        measureView.setMaxLines(2);
-        measureView.setTypeface(views.pageTitleCurrent.getTypeface());
-        measureView.setTextSize(TypedValue.COMPLEX_UNIT_PX, views.pageTitleCurrent.getTextSize());
-        measureView.setText(title);
-        int widthSpec = View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY);
-        int heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
-        measureView.measure(widthSpec, heightSpec);
-        int safetyBuffer = Math.max(ui.dp(2), Math.round(views.pageBodyCurrent.getPaint().getFontSpacing() * 0.08f));
-        return measureView.getMeasuredHeight() + ui.dp(CHAPTER_TITLE_BODY_MARGIN_DP) + safetyBuffer;
+        return Math.max(ui.dp(16), Math.round(views.pageTitleCurrent.getTextSize() * 1.5f));
     }
 
     public String getProcessedChapterText(int chapterIndex) {
@@ -379,6 +322,85 @@ public final class ReaderContentController {
         processedChapterLruCache.put(chapterIndex, processed);
         processedChapterLengthCache.put(chapterIndex, processed.length());
         return processed;
+    }
+
+    private DisplayChapterText buildDisplayChapterText(int chapterIndex) {
+        CharSequence body = buildDisplayBodyText(chapterIndex);
+        ChapterRecord chapter = state.chapters.get(chapterIndex);
+        if (!runtime.settingsStore.isChapterTitleVisible() || !hasDisplayableChapterTitle(chapter)) {
+            return new DisplayChapterText(body, 0);
+        }
+
+        SpannableStringBuilder builder = new SpannableStringBuilder();
+        String title = chapter.title.trim();
+        int titleStart = builder.length();
+        builder.append(title);
+        int titleEnd = builder.length();
+        builder.append('\n');
+        int titleParagraphEnd = builder.length();
+        builder.setSpan(
+                new ReaderTitleSpan(resolveChapterTitleTypeface(), resolveChapterTitleTextSizePx()),
+                titleStart,
+                titleEnd,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        );
+        if ("center".equals(runtime.settingsStore.getChapterTitleAlignment())) {
+            builder.setSpan(
+                    new AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER),
+                    titleStart,
+                    titleParagraphEnd,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
+        }
+
+        int spacerStart = builder.length();
+        builder.append(' ');
+        int spacerEnd = builder.length();
+        builder.append('\n');
+        builder.setSpan(
+                new ForegroundColorSpan(Color.TRANSPARENT),
+                spacerStart,
+                spacerEnd,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        );
+        builder.setSpan(
+                new FixedLineHeightSpan(getChapterTitleBodyMarginPx()),
+                spacerStart,
+                spacerEnd,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        );
+
+        int bodyStartIndex = builder.length();
+        builder.append(body);
+        return new DisplayChapterText(builder, bodyStartIndex);
+    }
+
+    private CharSequence buildDisplayBodyText(int chapterIndex) {
+        String processed = getProcessedChapterText(chapterIndex);
+        int indentPx = computeParagraphIndentPx();
+        if (processed.isEmpty() || indentPx <= 0) {
+            return processed;
+        }
+        SpannableString spannable = new SpannableString(processed);
+        int start = 0;
+        int length = processed.length();
+        while (start < length) {
+            int end = start;
+            while (end < length && processed.charAt(end) != '\n') {
+                end++;
+            }
+            int paragraphLimit = end < length ? end + 1 : end;
+            if (hasVisibleParagraphText(processed, start, end)) {
+                spannable.setSpan(
+                        new LeadingMarginSpan.Standard(indentPx, 0),
+                        start,
+                        paragraphLimit,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+            }
+            start = paragraphLimit;
+        }
+        return spannable;
     }
 
     public int getProcessedChapterLength(int chapterIndex) {
@@ -404,6 +426,9 @@ public final class ReaderContentController {
     }
 
     public int currentCharOffset() {
+        if (state.chapters.isEmpty()) {
+            return 0;
+        }
         List<PageSlice> pages = getPagesForChapter(state.currentChapterIndex);
         if (pages.isEmpty()) {
             return 0;
@@ -419,7 +444,24 @@ public final class ReaderContentController {
         processedChapterLruCache.evictAll();
         processedChapterLengthCache.clear();
         cachedPageSlicesMap.clear();
+        cachedLayoutSignature = null;
         state.totalProcessedBookLength = -1;
+    }
+
+    public void scheduleReflowAfterLayout(int chapterIndex, int anchorOffset) {
+        if (state.book == null || state.chapters.isEmpty()) {
+            return;
+        }
+        pendingReflowChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size() - 1);
+        pendingReflowAnchorOffset = Math.max(anchorOffset, 0);
+        reflowGeneration++;
+        runtime.mainHandler.removeCallbacks(scheduledReflowRunnable);
+        runtime.mainHandler.postDelayed(scheduledReflowRunnable, REFLOW_DEBOUNCE_MS);
+    }
+
+    public void cancelPendingReflow() {
+        reflowGeneration++;
+        runtime.mainHandler.removeCallbacks(scheduledReflowRunnable);
     }
 
     public String readableError(Throwable error) {
@@ -429,17 +471,217 @@ public final class ReaderContentController {
         return error.getMessage();
     }
 
-    public void recordSessionStats() {
-        if (state.sessionStartTime <= 0) {
+    private void ensurePaginationCacheMatchesLayout() {
+        ReaderLayoutSignature currentSignature = captureCurrentLayoutSignature();
+        if (currentSignature == null) {
             return;
         }
-        long durationMs = System.currentTimeMillis() - state.sessionStartTime;
-        if (durationMs < 2000) {
+        if (!currentSignature.equals(cachedLayoutSignature)) {
+            cachedPageSlicesMap.clear();
+            cachedLayoutSignature = currentSignature;
+        }
+    }
+
+    private ReaderLayoutSignature captureCurrentLayoutSignature() {
+        if (views.pageBodyCurrent == null
+                || views.pageCurrent == null
+                || views.pageCurrent.isLayoutRequested()) {
+            return null;
+        }
+        int availableWidth = getReaderPageTextWidth();
+        int availableHeight = getRegularReaderPageHeight();
+        if (availableWidth <= 0 || availableHeight <= 0) {
+            return null;
+        }
+        return new ReaderLayoutSignature(
+                availableWidth,
+                availableHeight,
+                runtime.settingsStore.isChapterTitleVisible(),
+                runtime.settingsStore.getChapterTitleAlignment(),
+                resolveChapterTitleTextSizePx(),
+                views.pageBodyCurrent.getTextSize(),
+                runtime.settingsStore.getReaderFontWeight(),
+                runtime.settingsStore.getReaderFontFamily(),
+                views.pageBodyCurrent.getLineSpacingExtra(),
+                views.pageBodyCurrent.getLetterSpacing(),
+                runtime.settingsStore.getFirstLineIndentDp(),
+                runtime.settingsStore.getLeftPaddingDp(),
+                runtime.settingsStore.getRightPaddingDp(),
+                runtime.settingsStore.getTopPaddingDp(),
+                runtime.settingsStore.getBottomPaddingDp(),
+                state.systemInsetTop,
+                state.systemInsetBottom
+        );
+    }
+
+    private int computeParagraphIndentPx() {
+        int indentChars = Math.max(runtime.settingsStore.getFirstLineIndentDp(), 0);
+        if (indentChars <= 0 || views.pageBodyCurrent == null) {
+            return 0;
+        }
+        float emWidth = views.pageBodyCurrent.getPaint().measureText("\u3000");
+        if (emWidth <= 0f) {
+            emWidth = views.pageBodyCurrent.getTextSize();
+        }
+        return Math.round(emWidth * indentChars);
+    }
+
+    private boolean hasDisplayableChapterTitle(ChapterRecord chapter) {
+        return chapter != null
+                && chapter.title != null
+                && !chapter.title.trim().isEmpty();
+    }
+
+    private boolean hasVisibleParagraphText(String text, int start, int end) {
+        for (int i = start; i < end; i++) {
+            if (!Character.isWhitespace(text.charAt(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private int resolveInitialAnchorOffset(int defaultOffset) {
+        if (state.restoredChapterIndex >= 0 && state.restoredProgressOffset >= 0) {
+            return Math.max(state.restoredProgressOffset, 0);
+        }
+        return Math.max(defaultOffset, 0);
+    }
+
+    private void resetRestoredPosition() {
+        state.restoredChapterIndex = -1;
+        state.restoredPageIndex = -1;
+        state.restoredProgressOffset = -1;
+    }
+
+    private void performScheduledReflow() {
+        if (state.book == null || state.chapters.isEmpty()) {
             return;
         }
-        int seconds = (int) (durationMs / 1000);
-        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
-        runtime.executor.execute(() -> runtime.databaseHelper.recordReadingStats(today, seconds, 0));
-        state.sessionStartTime = System.currentTimeMillis();
+        final int generation = reflowGeneration;
+        final int chapterIndex = ui.clamp(pendingReflowChapterIndex, 0, state.chapters.size() - 1);
+        final int anchorOffset = Math.max(pendingReflowAnchorOffset, 0);
+        style.applyReaderSettings();
+        runAfterNextPageLayout(generation, () -> {
+            if (generation != reflowGeneration) {
+                return;
+            }
+            ensurePaginationCacheMatchesLayout();
+            navigation.openChapter(chapterIndex, anchorOffset, false, 0);
+        });
+    }
+
+    private void runAfterNextPageLayout(int generation, Runnable action) {
+        if (views.pageBodyCurrent == null) {
+            action.run();
+            return;
+        }
+        final boolean[] completed = new boolean[]{false};
+        View.OnLayoutChangeListener listener = new View.OnLayoutChangeListener() {
+            @Override
+            public void onLayoutChange(
+                    View view,
+                    int left,
+                    int top,
+                    int right,
+                    int bottom,
+                    int oldLeft,
+                    int oldTop,
+                    int oldRight,
+                    int oldBottom
+            ) {
+                if (completed[0]) {
+                    return;
+                }
+                completed[0] = true;
+                view.removeOnLayoutChangeListener(this);
+                if (generation == reflowGeneration) {
+                    action.run();
+                }
+            }
+        };
+        views.pageBodyCurrent.addOnLayoutChangeListener(listener);
+        views.pageCurrent.requestLayout();
+        views.pageIncoming.requestLayout();
+        views.pageBodyCurrent.requestLayout();
+        views.pageBodyCurrent.post(() -> {
+            if (completed[0]) {
+                return;
+            }
+            completed[0] = true;
+            views.pageBodyCurrent.removeOnLayoutChangeListener(listener);
+            if (generation == reflowGeneration) {
+                action.run();
+            }
+        });
+    }
+
+    private List<PageSlice> sanitizePageSlices(List<PageSlice> pages) {
+        List<PageSlice> sanitized = new ArrayList<>(pages.size());
+        for (PageSlice slice : pages) {
+            sanitized.add(new PageSlice(
+                    slice.start,
+                    slice.end,
+                    slice.bodyStartInSlice,
+                    slice.bodyEndInSlice,
+                    stripDisplayOnlyBodySpans(slice.text)
+            ));
+        }
+        return sanitized;
+    }
+
+    private CharSequence stripDisplayOnlyBodySpans(CharSequence text) {
+        if (!(text instanceof Spanned)) {
+            return text;
+        }
+        SpannableString sanitized = new SpannableString(text);
+        LeadingMarginSpan[] marginSpans = sanitized.getSpans(0, sanitized.length(), LeadingMarginSpan.class);
+        for (LeadingMarginSpan marginSpan : marginSpans) {
+            sanitized.removeSpan(marginSpan);
+        }
+        return sanitized;
+    }
+
+    private Typeface resolveChapterTitleTypeface() {
+        if (views.pageTitleCurrent != null && views.pageTitleCurrent.getTypeface() != null) {
+            return views.pageTitleCurrent.getTypeface();
+        }
+        return views.pageBodyCurrent == null ? null : views.pageBodyCurrent.getTypeface();
+    }
+
+    private float resolveChapterTitleTextSizePx() {
+        if (views.pageTitleCurrent != null && views.pageTitleCurrent.getTextSize() > 0f) {
+            return views.pageTitleCurrent.getTextSize();
+        }
+        return views.pageBodyCurrent == null ? 0f : views.pageBodyCurrent.getTextSize();
+    }
+
+    private static final class DisplayChapterText {
+        final CharSequence text;
+        final int bodyStartIndex;
+
+        private DisplayChapterText(CharSequence text, int bodyStartIndex) {
+            this.text = text == null ? "" : text;
+            this.bodyStartIndex = Math.max(0, Math.min(bodyStartIndex, this.text.length()));
+        }
+    }
+
+    private static final class FixedLineHeightSpan implements LineHeightSpan {
+        private final int heightPx;
+
+        private FixedLineHeightSpan(int heightPx) {
+            this.heightPx = Math.max(heightPx, 0);
+        }
+
+        @Override
+        public void chooseHeight(CharSequence text, int start, int end, int spanstartv, int v, android.graphics.Paint.FontMetricsInt fontMetricsInt) {
+            if (fontMetricsInt == null || heightPx <= 0) {
+                return;
+            }
+            fontMetricsInt.ascent = -heightPx;
+            fontMetricsInt.top = fontMetricsInt.ascent;
+            fontMetricsInt.descent = 0;
+            fontMetricsInt.bottom = 0;
+        }
     }
 }

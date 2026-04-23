@@ -9,12 +9,10 @@
         android:id="@+id/button_footer_add_book"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/bg_primary_button"
-        android:fontFamily="sans-serif-medium"
+        android:background="@drawable/bg_app_primary_button"
         android:minHeight="52dp"
         android:text="添加书籍"
         android:textAllCaps="false"
-        android:textColor="@android:color/white"
-        android:textSize="15sp" />
+        android:textColor="?attr/themeColorAppButtonPrimaryText" />
 
 </FrameLayout>

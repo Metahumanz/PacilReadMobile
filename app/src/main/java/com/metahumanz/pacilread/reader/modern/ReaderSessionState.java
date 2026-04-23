@@ -20,6 +20,7 @@ public final class ReaderSessionState {
     public int currentPageIndex = 0;
     public int restoredChapterIndex = -1;
     public int restoredPageIndex = -1;
+    public int restoredProgressOffset = -1;
     public int systemInsetTop = 0;
     public int systemInsetBottom = 0;
     public int systemInsetLeft = 0;
@@ -64,6 +65,7 @@ public final class ReaderSessionState {
     public int preparedCurrentSnapshotPageIndex = -1;
     public int preparedIncomingSnapshotChapterIndex = -1;
     public int preparedIncomingSnapshotPageIndex = -1;
+    public long suppressInsetReflowUntilUptimeMs = 0L;
     public long sessionStartTime = 0L;
     public int sessionStartOffset = 0;
 }

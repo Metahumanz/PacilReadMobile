@@ -1,14 +1,544 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="PacilReadTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="android:windowBackground">@color/surface</item>
+    <style name="PacilReadTheme" parent="PacilReadTheme.Yunbai" />
+
+    <style name="PacilReadTheme.Base" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowBackground">?attr/themeColorAppBackground</item>
+        <item name="android:colorBackground">?attr/themeColorAppBackground</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="colorPrimary">@color/primary</item>
-        <item name="colorPrimaryVariant">@color/primary_variant</item>
-        <item name="colorSecondary">@color/accent</item>
-        <item name="android:textColorPrimary">@color/on_surface</item>
+        <item name="colorPrimary">?attr/themeColorAppPrimary</item>
+        <item name="colorPrimaryVariant">?attr/themeColorAppPrimaryVariant</item>
+        <item name="colorSecondary">?attr/themeColorAppPrimary</item>
+        <item name="colorSurface">?attr/themeColorCard</item>
+        <item name="colorOnPrimary">?attr/themeColorAppButtonPrimaryText</item>
+        <item name="android:textColorPrimary">?attr/themeColorAppTextPrimary</item>
+        <item name="android:textColorSecondary">?attr/themeColorAppTextSecondary</item>
         <item name="materialButtonStyle">@style/AppButtonStyle</item>
+    </style>
+
+    <style name="PacilReadTheme.Yunbai" parent="PacilReadTheme.Base">
+        <item name="themeColorSurface">#FFFFFF</item>
+        <item name="themeColorSurfaceVariant">#F8FAFC</item>
+        <item name="themeColorSurfaceRaised">#FBFCFE</item>
+        <item name="themeColorPrimary">#1B61C9</item>
+        <item name="themeColorPrimaryVariant">#254FAD</item>
+        <item name="themeColorAccent">#254FAD</item>
+        <item name="themeColorAccentSoft">#F4F8FE</item>
+        <item name="themeColorOnSurface">#181D26</item>
+        <item name="themeColorOnSurfaceMuted">#333333</item>
+        <item name="themeColorCard">#FFFFFF</item>
+        <item name="themeColorDivider">#E0E2E6</item>
+        <item name="themeColorBackdropTop">#FFFFFF</item>
+        <item name="themeColorBackdropBottom">#F8FAFC</item>
+        <item name="themeColorGlassFill">#FCFFFFFF</item>
+        <item name="themeColorGlassFillStrong">#FFFFFFFF</item>
+        <item name="themeColorGlassStroke">#99E0E2E6</item>
+        <item name="themeColorGlassDarkFill">#FF212B39</item>
+        <item name="themeColorGlassDarkFillStrong">#FF283443</item>
+        <item name="themeColorGlassDarkStroke">#59FFFFFF</item>
+        <item name="themeColorOverlayLight">#E8F8FAFC</item>
+        <item name="themeColorReaderStageStroke">#331B61C9</item>
+        <item name="themeColorPositive">#006400</item>
+        <item name="themeColorDanger">#B74848</item>
+
+        <item name="themeColorAppBackground">#FFFFFF</item>
+        <item name="themeColorAppSurface">#FFFFFF</item>
+        <item name="themeColorAppSurfaceSecondary">#F8FAFC</item>
+        <item name="themeColorAppSurfaceRaised">#FBFCFE</item>
+        <item name="themeColorAppBackdropTop">#FFFFFF</item>
+        <item name="themeColorAppBackdropBottom">#F8FAFC</item>
+        <item name="themeColorAppTextPrimary">#181D26</item>
+        <item name="themeColorAppTextSecondary">#333333</item>
+        <item name="themeColorAppTextMuted">#6E7684</item>
+        <item name="themeColorAppTextOnPrimary">#FFFFFF</item>
+        <item name="themeColorAppPrimary">#1B61C9</item>
+        <item name="themeColorAppPrimaryVariant">#254FAD</item>
+        <item name="themeColorAppPrimaryHover">#254FAD</item>
+        <item name="themeColorAppPrimaryTint">#EEF4FD</item>
+        <item name="themeColorAppBorder">#E0E2E6</item>
+        <item name="themeColorAppBorderStrong">#CDD4DD</item>
+        <item name="themeColorAppGlassFill">#FCFFFFFF</item>
+        <item name="themeColorAppGlassFillStrong">#FFF8FAFC</item>
+        <item name="themeColorAppGlassStroke">#66E0E2E6</item>
+        <item name="themeColorAppButtonPrimaryText">#FFFFFF</item>
+        <item name="themeColorAppButtonOutlineText">#181D26</item>
+        <item name="themeColorAppButtonSecondaryText">#181D26</item>
+        <item name="themeColorAppButtonPositiveText">#FFFFFF</item>
+        <item name="themeColorAppButtonDangerText">#FFFFFF</item>
+        <item name="themeColorAppNavTextActive">#181D26</item>
+        <item name="themeColorAppNavTextIdle">#333333</item>
+        <item name="themeColorAppNavActiveBg">#F4F8FE</item>
+        <item name="themeColorAppNavIdleBg">#00000000</item>
+        <item name="themeColorAppScrim">#66181D26</item>
+        <item name="themeColorAppBadgeFill">#FFF8FAFC</item>
+        <item name="themeColorAppBadgeStroke">#CCE0E2E6</item>
+        <item name="themeColorAppBadgeText">#181D26</item>
+        <item name="themeColorAppPositive">#006400</item>
+        <item name="themeColorAppDanger">#B74848</item>
+        <item name="themeColorReaderMenuText">#181D26</item>
+        <item name="themeColorReaderMenuTextMuted">#5E6878</item>
+        <item name="themeColorReaderMenuButtonText">#181D26</item>
+        <item name="themeColorReaderMenuButtonActiveText">#FFFFFF</item>
+
+        <item name="themeColorAppPrimaryButtonFill">#1B61C9</item>
+        <item name="themeColorAppPrimaryButtonStroke">#254FAD</item>
+        <item name="themeColorAppOutlineButtonFill">#FFFFFF</item>
+        <item name="themeColorAppOutlineButtonStroke">#E0E2E6</item>
+        <item name="themeColorAppOutlineLightFill">#FFF8FAFC</item>
+        <item name="themeColorAppOutlineLightStroke">#CCE0E2E6</item>
+        <item name="themeColorAppSoftButtonFill">#F8FAFC</item>
+        <item name="themeColorAppSoftButtonStroke">#E0E2E6</item>
+        <item name="themeColorAppCardFill">#FFFFFF</item>
+        <item name="themeColorAppCardStroke">#E0E2E6</item>
+        <item name="themeColorAppDialogFill">#FFFFFF</item>
+        <item name="themeColorAppDialogStroke">#E0E2E6</item>
+        <item name="themeColorAppInputFill">#FFFFFF</item>
+        <item name="themeColorAppInputStroke">#E0E2E6</item>
+        <item name="themeColorAppSidebarFill">#FFF8FAFC</item>
+        <item name="themeColorAppSidebarStroke">#66E0E2E6</item>
+        <item name="themeColorBookCoverStart">#254FAD</item>
+        <item name="themeColorBookCoverEnd">#1B61C9</item>
+
+        <item name="themeColorReaderCardStart">#FFFFFFFF</item>
+        <item name="themeColorReaderCardEnd">#FFFFFFFF</item>
+        <item name="themeColorReaderCardStroke">#99E0E2E6</item>
+        <item name="themeColorReaderDialogFill">#FFFFFF</item>
+        <item name="themeColorReaderDialogStroke">#E0E2E6</item>
+        <item name="themeColorReaderInputFillStart">#FFFFFF</item>
+        <item name="themeColorReaderInputFillEnd">#FFFFFF</item>
+        <item name="themeColorReaderInputStroke">#E0E2E6</item>
+        <item name="themeColorReaderOutlineButtonFillStart">#FFFFFF</item>
+        <item name="themeColorReaderOutlineButtonFillEnd">#FBFCFE</item>
+        <item name="themeColorReaderOutlineButtonStroke">#E0E2E6</item>
+        <item name="themeColorReaderPrimaryButtonFill">#1B61C9</item>
+        <item name="themeColorReaderPrimaryButtonStroke">#254FAD</item>
+        <item name="themeColorReaderSoftButtonFillStart">#FFFFFF</item>
+        <item name="themeColorReaderSoftButtonFillEnd">#F8FAFC</item>
+        <item name="themeColorReaderSoftButtonStroke">#E0E2E6</item>
+        <item name="themeColorReaderMenuPanelFillStart">#FFFFFFFF</item>
+        <item name="themeColorReaderMenuPanelFillEnd">#FFF8FAFC</item>
+        <item name="themeColorReaderMenuPanelStroke">#E0E2E6</item>
+        <item name="themeColorReaderMenuButtonFill">#FFFFFFFF</item>
+        <item name="themeColorReaderMenuButtonStroke">#E0E2E6</item>
+        <item name="themeColorReaderMenuButtonActiveFill">#1B61C9</item>
+        <item name="themeColorReaderMenuButtonActiveStroke">#254FAD</item>
+        <item name="themeColorReaderHudFill">#F8FAFC</item>
+        <item name="themeColorReaderHudStroke">#E0E2E6</item>
+
+        <item name="themeRadiusAppButton">12dp</item>
+        <item name="themeRadiusAppCard">20dp</item>
+        <item name="themeRadiusAppDialog">24dp</item>
+        <item name="themeRadiusAppInput">16dp</item>
+        <item name="themeRadiusAppNavItem">16dp</item>
+        <item name="themeRadiusAppSidebar">34dp</item>
+        <item name="themeRadiusReaderPanel">24dp</item>
+        <item name="themeRadiusReaderButton">18dp</item>
+        <item name="themeRadiusPill">999dp</item>
+
+        <item name="themeFontFamilyBody">sans-serif</item>
+        <item name="themeFontFamilyStrong">sans-serif-medium</item>
+        <item name="themeFontFamilyDisplay">sans-serif-medium</item>
+        <item name="themeLetterSpacingBody">0.01</item>
+        <item name="themeLetterSpacingStrong">0.008</item>
+        <item name="themeLetterSpacingSection">0.02</item>
+        <item name="themeLetterSpacingTitle">0.005</item>
+        <item name="themeLetterSpacingCaption">0.014</item>
+        <item name="themeLetterSpacingButton">0.01</item>
+        <item name="themeTextSizeButton">15sp</item>
+    </style>
+
+    <style name="PacilReadTheme.Yaobai" parent="PacilReadTheme.Base">
+        <item name="themeColorSurface">#FFFFFF</item>
+        <item name="themeColorSurfaceVariant">#FAFBFC</item>
+        <item name="themeColorSurfaceRaised">#FFFFFF</item>
+        <item name="themeColorPrimary">#1C69D4</item>
+        <item name="themeColorPrimaryVariant">#0653B6</item>
+        <item name="themeColorAccent">#1C69D4</item>
+        <item name="themeColorAccentSoft">#EEF4FB</item>
+        <item name="themeColorOnSurface">#262626</item>
+        <item name="themeColorOnSurfaceMuted">#757575</item>
+        <item name="themeColorCard">#FFFFFF</item>
+        <item name="themeColorDivider">#D6D9DD</item>
+        <item name="themeColorBackdropTop">#FFFFFF</item>
+        <item name="themeColorBackdropBottom">#F5F7F9</item>
+        <item name="themeColorGlassFill">#FCFFFFFF</item>
+        <item name="themeColorGlassFillStrong">#FFFFFFFF</item>
+        <item name="themeColorGlassStroke">#80D6D9DD</item>
+        <item name="themeColorGlassDarkFill">#FF1A1A1A</item>
+        <item name="themeColorGlassDarkFillStrong">#FF262626</item>
+        <item name="themeColorGlassDarkStroke">#40FFFFFF</item>
+        <item name="themeColorOverlayLight">#E6FFFFFF</item>
+        <item name="themeColorReaderStageStroke">#221C69D4</item>
+        <item name="themeColorPositive">#0F6A28</item>
+        <item name="themeColorDanger">#B74848</item>
+
+        <item name="themeColorAppBackground">#FFFFFF</item>
+        <item name="themeColorAppSurface">#FFFFFF</item>
+        <item name="themeColorAppSurfaceSecondary">#FAFBFC</item>
+        <item name="themeColorAppSurfaceRaised">#FFFFFF</item>
+        <item name="themeColorAppBackdropTop">#FFFFFF</item>
+        <item name="themeColorAppBackdropBottom">#F5F7F9</item>
+        <item name="themeColorAppTextPrimary">#262626</item>
+        <item name="themeColorAppTextSecondary">#757575</item>
+        <item name="themeColorAppTextMuted">#A0A0A0</item>
+        <item name="themeColorAppTextOnPrimary">#FFFFFF</item>
+        <item name="themeColorAppPrimary">#1C69D4</item>
+        <item name="themeColorAppPrimaryVariant">#0653B6</item>
+        <item name="themeColorAppPrimaryHover">#0653B6</item>
+        <item name="themeColorAppPrimaryTint">#EEF4FB</item>
+        <item name="themeColorAppBorder">#D6D9DD</item>
+        <item name="themeColorAppBorderStrong">#B8BEC6</item>
+        <item name="themeColorAppGlassFill">#FCFFFFFF</item>
+        <item name="themeColorAppGlassFillStrong">#FFFFFFFF</item>
+        <item name="themeColorAppGlassStroke">#80D6D9DD</item>
+        <item name="themeColorAppButtonPrimaryText">#FFFFFF</item>
+        <item name="themeColorAppButtonOutlineText">#262626</item>
+        <item name="themeColorAppButtonSecondaryText">#262626</item>
+        <item name="themeColorAppButtonPositiveText">#FFFFFF</item>
+        <item name="themeColorAppButtonDangerText">#FFFFFF</item>
+        <item name="themeColorAppNavTextActive">#262626</item>
+        <item name="themeColorAppNavTextIdle">#757575</item>
+        <item name="themeColorAppNavActiveBg">#F5F8FC</item>
+        <item name="themeColorAppNavIdleBg">#00000000</item>
+        <item name="themeColorAppScrim">#66262626</item>
+        <item name="themeColorAppBadgeFill">#FFFFFFFF</item>
+        <item name="themeColorAppBadgeStroke">#CCD6D9DD</item>
+        <item name="themeColorAppBadgeText">#262626</item>
+        <item name="themeColorAppPositive">#0F6A28</item>
+        <item name="themeColorAppDanger">#B74848</item>
+        <item name="themeColorReaderMenuText">#262626</item>
+        <item name="themeColorReaderMenuTextMuted">#757575</item>
+        <item name="themeColorReaderMenuButtonText">#262626</item>
+        <item name="themeColorReaderMenuButtonActiveText">#FFFFFF</item>
+
+        <item name="themeColorAppPrimaryButtonFill">#1C69D4</item>
+        <item name="themeColorAppPrimaryButtonStroke">#0653B6</item>
+        <item name="themeColorAppOutlineButtonFill">#FFFFFF</item>
+        <item name="themeColorAppOutlineButtonStroke">#B8BEC6</item>
+        <item name="themeColorAppOutlineLightFill">#FFFFFF</item>
+        <item name="themeColorAppOutlineLightStroke">#D6D9DD</item>
+        <item name="themeColorAppSoftButtonFill">#FAFBFC</item>
+        <item name="themeColorAppSoftButtonStroke">#D6D9DD</item>
+        <item name="themeColorAppCardFill">#FFFFFF</item>
+        <item name="themeColorAppCardStroke">#D6D9DD</item>
+        <item name="themeColorAppDialogFill">#FFFFFF</item>
+        <item name="themeColorAppDialogStroke">#D6D9DD</item>
+        <item name="themeColorAppInputFill">#FFFFFF</item>
+        <item name="themeColorAppInputStroke">#D6D9DD</item>
+        <item name="themeColorAppSidebarFill">#FFFFFFFF</item>
+        <item name="themeColorAppSidebarStroke">#80D6D9DD</item>
+        <item name="themeColorBookCoverStart">#0653B6</item>
+        <item name="themeColorBookCoverEnd">#1C69D4</item>
+
+        <item name="themeColorReaderCardStart">#FFFFFFFF</item>
+        <item name="themeColorReaderCardEnd">#FFFFFFFF</item>
+        <item name="themeColorReaderCardStroke">#80D6D9DD</item>
+        <item name="themeColorReaderDialogFill">#FFFFFF</item>
+        <item name="themeColorReaderDialogStroke">#D6D9DD</item>
+        <item name="themeColorReaderInputFillStart">#FFFFFF</item>
+        <item name="themeColorReaderInputFillEnd">#FFFFFF</item>
+        <item name="themeColorReaderInputStroke">#D6D9DD</item>
+        <item name="themeColorReaderOutlineButtonFillStart">#FFFFFF</item>
+        <item name="themeColorReaderOutlineButtonFillEnd">#FAFBFC</item>
+        <item name="themeColorReaderOutlineButtonStroke">#D6D9DD</item>
+        <item name="themeColorReaderPrimaryButtonFill">#1C69D4</item>
+        <item name="themeColorReaderPrimaryButtonStroke">#0653B6</item>
+        <item name="themeColorReaderSoftButtonFillStart">#FFFFFF</item>
+        <item name="themeColorReaderSoftButtonFillEnd">#FAFBFC</item>
+        <item name="themeColorReaderSoftButtonStroke">#D6D9DD</item>
+        <item name="themeColorReaderMenuPanelFillStart">#FFFFFFFF</item>
+        <item name="themeColorReaderMenuPanelFillEnd">#FFFAFBFC</item>
+        <item name="themeColorReaderMenuPanelStroke">#D6D9DD</item>
+        <item name="themeColorReaderMenuButtonFill">#FFFFFFFF</item>
+        <item name="themeColorReaderMenuButtonStroke">#D6D9DD</item>
+        <item name="themeColorReaderMenuButtonActiveFill">#1C69D4</item>
+        <item name="themeColorReaderMenuButtonActiveStroke">#0653B6</item>
+        <item name="themeColorReaderHudFill">#FFFFFFFF</item>
+        <item name="themeColorReaderHudStroke">#D6D9DD</item>
+
+        <item name="themeRadiusAppButton">0dp</item>
+        <item name="themeRadiusAppCard">0dp</item>
+        <item name="themeRadiusAppDialog">0dp</item>
+        <item name="themeRadiusAppInput">0dp</item>
+        <item name="themeRadiusAppNavItem">0dp</item>
+        <item name="themeRadiusAppSidebar">0dp</item>
+        <item name="themeRadiusReaderPanel">0dp</item>
+        <item name="themeRadiusReaderButton">0dp</item>
+        <item name="themeRadiusPill">0dp</item>
+
+        <item name="themeFontFamilyBody">sans-serif</item>
+        <item name="themeFontFamilyStrong">sans-serif-medium</item>
+        <item name="themeFontFamilyDisplay">sans-serif-light</item>
+        <item name="themeLetterSpacingBody">0</item>
+        <item name="themeLetterSpacingStrong">0</item>
+        <item name="themeLetterSpacingSection">0.01</item>
+        <item name="themeLetterSpacingTitle">0</item>
+        <item name="themeLetterSpacingCaption">0.01</item>
+        <item name="themeLetterSpacingButton">0</item>
+        <item name="themeTextSizeButton">15sp</item>
+    </style>
+
+    <style name="PacilReadTheme.Yemu" parent="PacilReadTheme.Base">
+        <item name="themeColorSurface">#0D131B</item>
+        <item name="themeColorSurfaceVariant">#161E29</item>
+        <item name="themeColorSurfaceRaised">#1A2430</item>
+        <item name="themeColorPrimary">#7AB4FF</item>
+        <item name="themeColorPrimaryVariant">#4A88D1</item>
+        <item name="themeColorAccent">#8CB4E8</item>
+        <item name="themeColorAccentSoft">#21324B</item>
+        <item name="themeColorOnSurface">#EDF3FA</item>
+        <item name="themeColorOnSurfaceMuted">#A2AEBC</item>
+        <item name="themeColorCard">#17202B</item>
+        <item name="themeColorDivider">#283241</item>
+        <item name="themeColorBackdropTop">#111925</item>
+        <item name="themeColorBackdropBottom">#0A1017</item>
+        <item name="themeColorGlassFill">#BF1A2431</item>
+        <item name="themeColorGlassFillStrong">#D41D2735</item>
+        <item name="themeColorGlassStroke">#33FFFFFF</item>
+        <item name="themeColorGlassDarkFill">#FF1C2634</item>
+        <item name="themeColorGlassDarkFillStrong">#FF253140</item>
+        <item name="themeColorGlassDarkStroke">#4DFFFFFF</item>
+        <item name="themeColorOverlayLight">#B7141A24</item>
+        <item name="themeColorReaderStageStroke">#22FFFFFF</item>
+        <item name="themeColorPositive">#55B48B</item>
+        <item name="themeColorDanger">#EF8585</item>
+
+        <item name="themeColorAppBackground">#201D1D</item>
+        <item name="themeColorAppSurface">#302C2C</item>
+        <item name="themeColorAppSurfaceSecondary">#282424</item>
+        <item name="themeColorAppSurfaceRaised">#2B2727</item>
+        <item name="themeColorAppBackdropTop">#201D1D</item>
+        <item name="themeColorAppBackdropBottom">#241F1F</item>
+        <item name="themeColorAppTextPrimary">#FDFCFC</item>
+        <item name="themeColorAppTextSecondary">#9A9898</item>
+        <item name="themeColorAppTextMuted">#6E6E73</item>
+        <item name="themeColorAppTextOnPrimary">#FDFCFC</item>
+        <item name="themeColorAppPrimary">#007AFF</item>
+        <item name="themeColorAppPrimaryVariant">#0056B3</item>
+        <item name="themeColorAppPrimaryHover">#0056B3</item>
+        <item name="themeColorAppPrimaryTint">#13243A</item>
+        <item name="themeColorAppBorder">#1F0F0000</item>
+        <item name="themeColorAppBorderStrong">#646262</item>
+        <item name="themeColorAppGlassFill">#E6302C2C</item>
+        <item name="themeColorAppGlassFillStrong">#F0302C2C</item>
+        <item name="themeColorAppGlassStroke">#33646262</item>
+        <item name="themeColorAppButtonPrimaryText">#FDFCFC</item>
+        <item name="themeColorAppButtonOutlineText">#FDFCFC</item>
+        <item name="themeColorAppButtonSecondaryText">#FDFCFC</item>
+        <item name="themeColorAppButtonPositiveText">#0C1A0E</item>
+        <item name="themeColorAppButtonDangerText">#FDFCFC</item>
+        <item name="themeColorAppNavTextActive">#FDFCFC</item>
+        <item name="themeColorAppNavTextIdle">#9A9898</item>
+        <item name="themeColorAppNavActiveBg">#302C2C</item>
+        <item name="themeColorAppNavIdleBg">#00000000</item>
+        <item name="themeColorAppScrim">#7A000000</item>
+        <item name="themeColorAppBadgeFill">#1AFDFCFC</item>
+        <item name="themeColorAppBadgeStroke">#35FDFCFC</item>
+        <item name="themeColorAppBadgeText">#FDFCFC</item>
+        <item name="themeColorAppPositive">#30D158</item>
+        <item name="themeColorAppDanger">#FF3B30</item>
+        <item name="themeColorReaderMenuText">#FDFCFC</item>
+        <item name="themeColorReaderMenuTextMuted">#94A3B8</item>
+        <item name="themeColorReaderMenuButtonText">#FDFCFC</item>
+        <item name="themeColorReaderMenuButtonActiveText">#FDFCFC</item>
+
+        <item name="themeColorAppPrimaryButtonFill">#201D1D</item>
+        <item name="themeColorAppPrimaryButtonStroke">#646262</item>
+        <item name="themeColorAppOutlineButtonFill">#302C2C</item>
+        <item name="themeColorAppOutlineButtonStroke">#646262</item>
+        <item name="themeColorAppOutlineLightFill">#1AFDFCFC</item>
+        <item name="themeColorAppOutlineLightStroke">#35FDFCFC</item>
+        <item name="themeColorAppSoftButtonFill">#282424</item>
+        <item name="themeColorAppSoftButtonStroke">#1F0F0000</item>
+        <item name="themeColorAppCardFill">#302C2C</item>
+        <item name="themeColorAppCardStroke">#1F0F0000</item>
+        <item name="themeColorAppDialogFill">#302C2C</item>
+        <item name="themeColorAppDialogStroke">#1F0F0000</item>
+        <item name="themeColorAppInputFill">#302C2C</item>
+        <item name="themeColorAppInputStroke">#646262</item>
+        <item name="themeColorAppSidebarFill">#F0302C2C</item>
+        <item name="themeColorAppSidebarStroke">#33646262</item>
+        <item name="themeColorBookCoverStart">#0056B3</item>
+        <item name="themeColorBookCoverEnd">#007AFF</item>
+
+        <item name="themeColorReaderCardStart">#D41D2735</item>
+        <item name="themeColorReaderCardEnd">#17202B</item>
+        <item name="themeColorReaderCardStroke">#33FFFFFF</item>
+        <item name="themeColorReaderDialogFill">#17202B</item>
+        <item name="themeColorReaderDialogStroke">#283241</item>
+        <item name="themeColorReaderInputFillStart">#161E29</item>
+        <item name="themeColorReaderInputFillEnd">#1A2430</item>
+        <item name="themeColorReaderInputStroke">#283241</item>
+        <item name="themeColorReaderOutlineButtonFillStart">#17202B</item>
+        <item name="themeColorReaderOutlineButtonFillEnd">#1A2430</item>
+        <item name="themeColorReaderOutlineButtonStroke">#283241</item>
+        <item name="themeColorReaderPrimaryButtonFill">#7AB4FF</item>
+        <item name="themeColorReaderPrimaryButtonStroke">#4A88D1</item>
+        <item name="themeColorReaderSoftButtonFillStart">#17202B</item>
+        <item name="themeColorReaderSoftButtonFillEnd">#21324B</item>
+        <item name="themeColorReaderSoftButtonStroke">#283241</item>
+        <item name="themeColorReaderMenuPanelFillStart">#FF202B38</item>
+        <item name="themeColorReaderMenuPanelFillEnd">#FF161F29</item>
+        <item name="themeColorReaderMenuPanelStroke">#FF445262</item>
+        <item name="themeColorReaderMenuButtonFill">#17202B</item>
+        <item name="themeColorReaderMenuButtonStroke">#283241</item>
+        <item name="themeColorReaderMenuButtonActiveFill">#7AB4FF</item>
+        <item name="themeColorReaderMenuButtonActiveStroke">#4A88D1</item>
+        <item name="themeColorReaderHudFill">#FF1C2634</item>
+        <item name="themeColorReaderHudStroke">#4DFFFFFF</item>
+
+        <item name="themeRadiusAppButton">4dp</item>
+        <item name="themeRadiusAppCard">20dp</item>
+        <item name="themeRadiusAppDialog">20dp</item>
+        <item name="themeRadiusAppInput">4dp</item>
+        <item name="themeRadiusAppNavItem">16dp</item>
+        <item name="themeRadiusAppSidebar">4dp</item>
+        <item name="themeRadiusReaderPanel">28dp</item>
+        <item name="themeRadiusReaderButton">20dp</item>
+        <item name="themeRadiusPill">999dp</item>
+
+        <item name="themeFontFamilyBody">monospace</item>
+        <item name="themeFontFamilyStrong">monospace</item>
+        <item name="themeFontFamilyDisplay">monospace</item>
+        <item name="themeLetterSpacingBody">0</item>
+        <item name="themeLetterSpacingStrong">0</item>
+        <item name="themeLetterSpacingSection">0</item>
+        <item name="themeLetterSpacingTitle">0</item>
+        <item name="themeLetterSpacingCaption">0</item>
+        <item name="themeLetterSpacingButton">0</item>
+        <item name="themeTextSizeButton">14sp</item>
+    </style>
+
+    <style name="PacilReadTheme.Jiye" parent="PacilReadTheme.Base">
+        <item name="themeColorSurface">#0F1011</item>
+        <item name="themeColorSurfaceVariant">#191A1B</item>
+        <item name="themeColorSurfaceRaised">#28282C</item>
+        <item name="themeColorPrimary">#5E6AD2</item>
+        <item name="themeColorPrimaryVariant">#7170FF</item>
+        <item name="themeColorAccent">#7170FF</item>
+        <item name="themeColorAccentSoft">#161A2B</item>
+        <item name="themeColorOnSurface">#F7F8F8</item>
+        <item name="themeColorOnSurfaceMuted">#D0D6E0</item>
+        <item name="themeColorCard">#191A1B</item>
+        <item name="themeColorDivider">#14FFFFFF</item>
+        <item name="themeColorBackdropTop">#08090A</item>
+        <item name="themeColorBackdropBottom">#0F1011</item>
+        <item name="themeColorGlassFill">#E6191A1B</item>
+        <item name="themeColorGlassFillStrong">#F01F2022</item>
+        <item name="themeColorGlassStroke">#14FFFFFF</item>
+        <item name="themeColorGlassDarkFill">#FF0F1011</item>
+        <item name="themeColorGlassDarkFillStrong">#FF191A1B</item>
+        <item name="themeColorGlassDarkStroke">#14FFFFFF</item>
+        <item name="themeColorOverlayLight">#D9010102</item>
+        <item name="themeColorReaderStageStroke">#14FFFFFF</item>
+        <item name="themeColorPositive">#27A644</item>
+        <item name="themeColorDanger">#D96C7D</item>
+
+        <item name="themeColorAppBackground">#08090A</item>
+        <item name="themeColorAppSurface">#0F1011</item>
+        <item name="themeColorAppSurfaceSecondary">#191A1B</item>
+        <item name="themeColorAppSurfaceRaised">#28282C</item>
+        <item name="themeColorAppBackdropTop">#08090A</item>
+        <item name="themeColorAppBackdropBottom">#0F1011</item>
+        <item name="themeColorAppTextPrimary">#F7F8F8</item>
+        <item name="themeColorAppTextSecondary">#D0D6E0</item>
+        <item name="themeColorAppTextMuted">#8A8F98</item>
+        <item name="themeColorAppTextOnPrimary">#FFFFFF</item>
+        <item name="themeColorAppPrimary">#5E6AD2</item>
+        <item name="themeColorAppPrimaryVariant">#7170FF</item>
+        <item name="themeColorAppPrimaryHover">#828FFF</item>
+        <item name="themeColorAppPrimaryTint">#171A2B</item>
+        <item name="themeColorAppBorder">#0DFFFFFF</item>
+        <item name="themeColorAppBorderStrong">#14FFFFFF</item>
+        <item name="themeColorAppGlassFill">#E6191A1B</item>
+        <item name="themeColorAppGlassFillStrong">#F01F2022</item>
+        <item name="themeColorAppGlassStroke">#14FFFFFF</item>
+        <item name="themeColorAppButtonPrimaryText">#FFFFFF</item>
+        <item name="themeColorAppButtonOutlineText">#D0D6E0</item>
+        <item name="themeColorAppButtonSecondaryText">#D0D6E0</item>
+        <item name="themeColorAppButtonPositiveText">#FFFFFF</item>
+        <item name="themeColorAppButtonDangerText">#FFFFFF</item>
+        <item name="themeColorAppNavTextActive">#F7F8F8</item>
+        <item name="themeColorAppNavTextIdle">#D0D6E0</item>
+        <item name="themeColorAppNavActiveBg">#191A1B</item>
+        <item name="themeColorAppNavIdleBg">#00000000</item>
+        <item name="themeColorAppScrim">#CC000000</item>
+        <item name="themeColorAppBadgeFill">#0DFFFFFF</item>
+        <item name="themeColorAppBadgeStroke">#14FFFFFF</item>
+        <item name="themeColorAppBadgeText">#D0D6E0</item>
+        <item name="themeColorAppPositive">#10B981</item>
+        <item name="themeColorAppDanger">#D96C7D</item>
+        <item name="themeColorReaderMenuText">#F7F8F8</item>
+        <item name="themeColorReaderMenuTextMuted">#8A8F98</item>
+        <item name="themeColorReaderMenuButtonText">#D0D6E0</item>
+        <item name="themeColorReaderMenuButtonActiveText">#FFFFFF</item>
+
+        <item name="themeColorAppPrimaryButtonFill">#5E6AD2</item>
+        <item name="themeColorAppPrimaryButtonStroke">#7170FF</item>
+        <item name="themeColorAppOutlineButtonFill">#05FFFFFF</item>
+        <item name="themeColorAppOutlineButtonStroke">#14FFFFFF</item>
+        <item name="themeColorAppOutlineLightFill">#0AFFFFFF</item>
+        <item name="themeColorAppOutlineLightStroke">#14FFFFFF</item>
+        <item name="themeColorAppSoftButtonFill">#0AFFFFFF</item>
+        <item name="themeColorAppSoftButtonStroke">#14FFFFFF</item>
+        <item name="themeColorAppCardFill">#10191A1B</item>
+        <item name="themeColorAppCardStroke">#14FFFFFF</item>
+        <item name="themeColorAppDialogFill">#191A1B</item>
+        <item name="themeColorAppDialogStroke">#14FFFFFF</item>
+        <item name="themeColorAppInputFill">#0F1011</item>
+        <item name="themeColorAppInputStroke">#14FFFFFF</item>
+        <item name="themeColorAppSidebarFill">#F0191A1B</item>
+        <item name="themeColorAppSidebarStroke">#14FFFFFF</item>
+        <item name="themeColorBookCoverStart">#7170FF</item>
+        <item name="themeColorBookCoverEnd">#5E6AD2</item>
+
+        <item name="themeColorReaderCardStart">#14191A1B</item>
+        <item name="themeColorReaderCardEnd">#0F1011</item>
+        <item name="themeColorReaderCardStroke">#14FFFFFF</item>
+        <item name="themeColorReaderDialogFill">#191A1B</item>
+        <item name="themeColorReaderDialogStroke">#14FFFFFF</item>
+        <item name="themeColorReaderInputFillStart">#0F1011</item>
+        <item name="themeColorReaderInputFillEnd">#191A1B</item>
+        <item name="themeColorReaderInputStroke">#14FFFFFF</item>
+        <item name="themeColorReaderOutlineButtonFillStart">#05FFFFFF</item>
+        <item name="themeColorReaderOutlineButtonFillEnd">#0AFFFFFF</item>
+        <item name="themeColorReaderOutlineButtonStroke">#14FFFFFF</item>
+        <item name="themeColorReaderPrimaryButtonFill">#5E6AD2</item>
+        <item name="themeColorReaderPrimaryButtonStroke">#7170FF</item>
+        <item name="themeColorReaderSoftButtonFillStart">#05FFFFFF</item>
+        <item name="themeColorReaderSoftButtonFillEnd">#0AFFFFFF</item>
+        <item name="themeColorReaderSoftButtonStroke">#14FFFFFF</item>
+        <item name="themeColorReaderMenuPanelFillStart">#191A1B</item>
+        <item name="themeColorReaderMenuPanelFillEnd">#0F1011</item>
+        <item name="themeColorReaderMenuPanelStroke">#14FFFFFF</item>
+        <item name="themeColorReaderMenuButtonFill">#0AFFFFFF</item>
+        <item name="themeColorReaderMenuButtonStroke">#14FFFFFF</item>
+        <item name="themeColorReaderMenuButtonActiveFill">#5E6AD2</item>
+        <item name="themeColorReaderMenuButtonActiveStroke">#7170FF</item>
+        <item name="themeColorReaderHudFill">#14191A1B</item>
+        <item name="themeColorReaderHudStroke">#14FFFFFF</item>
+
+        <item name="themeRadiusAppButton">6dp</item>
+        <item name="themeRadiusAppCard">12dp</item>
+        <item name="themeRadiusAppDialog">12dp</item>
+        <item name="themeRadiusAppInput">6dp</item>
+        <item name="themeRadiusAppNavItem">8dp</item>
+        <item name="themeRadiusAppSidebar">22dp</item>
+        <item name="themeRadiusReaderPanel">12dp</item>
+        <item name="themeRadiusReaderButton">6dp</item>
+        <item name="themeRadiusPill">999dp</item>
+
+        <item name="themeFontFamilyBody">sans-serif</item>
+        <item name="themeFontFamilyStrong">sans-serif-medium</item>
+        <item name="themeFontFamilyDisplay">sans-serif-medium</item>
+        <item name="themeLetterSpacingBody">0</item>
+        <item name="themeLetterSpacingStrong">-0.01</item>
+        <item name="themeLetterSpacingSection">0</item>
+        <item name="themeLetterSpacingTitle">-0.03</item>
+        <item name="themeLetterSpacingCaption">-0.01</item>
+        <item name="themeLetterSpacingButton">0</item>
+        <item name="themeTextSizeButton">15sp</item>
     </style>
 
     <style name="AppButtonStyle" parent="Widget.MaterialComponents.Button">
@@ -16,13 +546,139 @@
         <item name="android:insetBottom">0dp</item>
         <item name="android:insetLeft">0dp</item>
         <item name="android:insetRight">0dp</item>
-        <item name="android:minHeight">36dp</item>
+        <item name="android:minHeight">40dp</item>
         <item name="android:minWidth">64dp</item>
-        <item name="android:paddingLeft">16dp</item>
-        <item name="android:paddingTop">8dp</item>
-        <item name="android:paddingRight">16dp</item>
-        <item name="android:paddingBottom">8dp</item>
-        <item name="cornerRadius">4dp</item>
+        <item name="android:paddingLeft">18dp</item>
+        <item name="android:paddingTop">10dp</item>
+        <item name="android:paddingRight">18dp</item>
+        <item name="android:paddingBottom">10dp</item>
+        <item name="android:textSize">?attr/themeTextSizeButton</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:fontFamily">?attr/themeFontFamilyStrong</item>
+        <item name="android:letterSpacing">?attr/themeLetterSpacingButton</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="cornerRadius">?attr/themeRadiusAppButton</item>
         <item name="backgroundTint">@null</item>
+    </style>
+
+    <style name="AppChromeSurfaceTheme">
+        <item name="android:textColorPrimary">?attr/themeColorAppTextPrimary</item>
+        <item name="android:textColorSecondary">?attr/themeColorAppTextSecondary</item>
+        <item name="android:textColorHint">?attr/themeColorAppTextSecondary</item>
+        <item name="android:fontFamily">?attr/themeFontFamilyBody</item>
+        <item name="fontFamily">?attr/themeFontFamilyBody</item>
+    </style>
+
+    <style name="AppChromeBarTitle">
+        <item name="android:fontFamily">?attr/themeFontFamilyDisplay</item>
+        <item name="android:textColor">?attr/themeColorAppTextPrimary</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:letterSpacing">?attr/themeLetterSpacingTitle</item>
+    </style>
+
+    <style name="AppChromePageTitle">
+        <item name="android:fontFamily">?attr/themeFontFamilyDisplay</item>
+        <item name="android:textColor">?attr/themeColorAppTextPrimary</item>
+        <item name="android:textSize">22sp</item>
+        <item name="android:letterSpacing">?attr/themeLetterSpacingTitle</item>
+    </style>
+
+    <style name="AppChromeCardTitle">
+        <item name="android:fontFamily">?attr/themeFontFamilyStrong</item>
+        <item name="android:textColor">?attr/themeColorAppTextPrimary</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:letterSpacing">?attr/themeLetterSpacingStrong</item>
+    </style>
+
+    <style name="AppChromeSectionLabel">
+        <item name="android:fontFamily">?attr/themeFontFamilyStrong</item>
+        <item name="android:textColor">?attr/themeColorAppPrimary</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:letterSpacing">?attr/themeLetterSpacingSection</item>
+    </style>
+
+    <style name="AppChromeFieldLabel">
+        <item name="android:fontFamily">?attr/themeFontFamilyStrong</item>
+        <item name="android:textColor">?attr/themeColorAppTextPrimary</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:letterSpacing">?attr/themeLetterSpacingStrong</item>
+    </style>
+
+    <style name="AppChromeBody">
+        <item name="android:fontFamily">?attr/themeFontFamilyBody</item>
+        <item name="android:textColor">?attr/themeColorAppTextPrimary</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:letterSpacing">?attr/themeLetterSpacingBody</item>
+    </style>
+
+    <style name="AppChromeBodyStrong">
+        <item name="android:fontFamily">?attr/themeFontFamilyStrong</item>
+        <item name="android:textColor">?attr/themeColorAppTextPrimary</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:letterSpacing">?attr/themeLetterSpacingStrong</item>
+    </style>
+
+    <style name="AppChromeBodyMuted">
+        <item name="android:fontFamily">?attr/themeFontFamilyBody</item>
+        <item name="android:textColor">?attr/themeColorAppTextSecondary</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:letterSpacing">?attr/themeLetterSpacingCaption</item>
+    </style>
+
+    <style name="AppChromeCaption">
+        <item name="android:fontFamily">?attr/themeFontFamilyStrong</item>
+        <item name="android:textColor">?attr/themeColorAppTextMuted</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:letterSpacing">?attr/themeLetterSpacingCaption</item>
+    </style>
+
+    <style name="AppChromeMicro">
+        <item name="android:fontFamily">?attr/themeFontFamilyStrong</item>
+        <item name="android:textColor">?attr/themeColorAppTextMuted</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:letterSpacing">?attr/themeLetterSpacingSection</item>
+    </style>
+
+    <style name="AppChromeAccentCaption">
+        <item name="android:fontFamily">?attr/themeFontFamilyStrong</item>
+        <item name="android:textColor">?attr/themeColorAppPrimary</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:letterSpacing">?attr/themeLetterSpacingCaption</item>
+    </style>
+
+    <style name="AppChromeCheckBox">
+        <item name="android:fontFamily">?attr/themeFontFamilyBody</item>
+        <item name="android:textColor">?attr/themeColorAppTextPrimary</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:letterSpacing">?attr/themeLetterSpacingBody</item>
+    </style>
+
+    <style name="AppChromeInputText">
+        <item name="android:fontFamily">?attr/themeFontFamilyBody</item>
+        <item name="android:textColor">?attr/themeColorAppTextPrimary</item>
+        <item name="android:textColorHint">?attr/themeColorAppTextSecondary</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:letterSpacing">?attr/themeLetterSpacingBody</item>
+    </style>
+
+    <style name="AppChromeDrawerBrand">
+        <item name="android:fontFamily">?attr/themeFontFamilyDisplay</item>
+        <item name="android:textColor">?attr/themeColorAppTextPrimary</item>
+        <item name="android:textSize">20sp</item>
+        <item name="android:letterSpacing">?attr/themeLetterSpacingStrong</item>
+    </style>
+
+    <style name="AppChromeDrawerItem">
+        <item name="android:fontFamily">?attr/themeFontFamilyStrong</item>
+        <item name="android:textColor">?attr/themeColorAppNavTextIdle</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:letterSpacing">?attr/themeLetterSpacingStrong</item>
+    </style>
+
+    <style name="AppChromeMetricValue">
+        <item name="android:fontFamily">?attr/themeFontFamilyStrong</item>
+        <item name="android:textColor">?attr/themeColorAppTextPrimary</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:letterSpacing">?attr/themeLetterSpacingStrong</item>
     </style>
 </resources>

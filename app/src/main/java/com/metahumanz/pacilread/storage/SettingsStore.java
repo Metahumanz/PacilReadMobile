@@ -7,6 +7,7 @@ import org.json.JSONObject;
 
 import java.util.Map;
 import java.util.Iterator;
+import java.util.UUID;
 
 public class SettingsStore {
     private static final String PREFS_NAME = "pacil_read_settings";
@@ -15,6 +16,7 @@ public class SettingsStore {
     private static final String KEY_WEB_DAV_ENABLED = "webdav_enabled";
     private static final String KEY_WEB_DAV_URL = "webdav_url";
     private static final String KEY_WEB_DAV_DIR = "webdav_dir";
+    private static final String KEY_WEB_DAV_SETTINGS_SUBDIR = "webdav_settings_subdir";
     private static final String KEY_WEB_DAV_USER = "webdav_user";
     private static final String KEY_WEB_DAV_PASSWORD = "webdav_password";
     private static final String KEY_WEB_DAV_LAST_FULL = "webdav_last_full";
@@ -24,6 +26,7 @@ public class SettingsStore {
     private static final String KEY_WEB_DAV_SYNC_UI_SETTINGS = "webdav_sync_ui_settings";
     private static final String KEY_WEB_DAV_SYNC_THEMES = "webdav_sync_themes";
     private static final String KEY_WEB_DAV_SYNC_BACKGROUNDS = "webdav_sync_backgrounds";
+    private static final String KEY_WEB_DAV_SYNC_READING_STATS = "webdav_sync_reading_stats";
     private static final String KEY_FONT_SIZE = "font_size_sp";
     private static final String KEY_FONT_FAMILY = "font_family";
     private static final String KEY_FONT_WEIGHT = "font_weight";
@@ -35,6 +38,8 @@ public class SettingsStore {
     private static final String KEY_BOTTOM_PADDING = "bottom_padding_dp";
     private static final String KEY_APP_THEME_MODE = "app_theme_mode";
     private static final String KEY_READER_UI_THEME_MODE = "reader_ui_theme_mode";
+    private static final String KEY_APP_LIGHT_STYLE_VARIANT = "app_light_style_variant";
+    private static final String KEY_APP_DARK_STYLE_VARIANT = "app_dark_style_variant";
     private static final String KEY_THEME = "reader_theme";
     private static final String KEY_BACKGROUND_PATH = "reader_background_path";
     private static final String KEY_KEEP_SCREEN_ON = "keep_screen_on";
@@ -42,6 +47,7 @@ public class SettingsStore {
     private static final String KEY_TTS_ENGINE = "tts_engine";
     private static final String KEY_TTS_RATE = "tts_rate";
     private static final String KEY_TTS_MIMO_API_KEY = "tts_mimo_api_key";
+    private static final String KEY_TTS_MIMO_VOICE = "tts_mimo_voice";
     private static final String KEY_FLIP_MODE = "flip_mode";
     private static final String KEY_READER_SLIDER_MODE = "reader_slider_mode";
     private static final String KEY_VOLUME_KEY_UP_ACTION = "volume_key_up_action";
@@ -63,7 +69,11 @@ public class SettingsStore {
     private static final String KEY_BODY_TEXT_JUSTIFY = "body_text_justify";
     private static final String KEY_FLIP_SPEED = "flip_speed";
     private static final String KEY_HUD_VERTICAL_MARGIN = "hud_vertical_margin";
+    private static final String KEY_HUD_TOP_MARGIN = "hud_top_margin";
+    private static final String KEY_HUD_BOTTOM_MARGIN = "hud_bottom_margin";
     private static final String KEY_READER_MENU_AUTO_HIDE = "reader_menu_auto_hide";
+    private static final String KEY_READING_TIME_TRACKING_ENABLED = "reading_time_tracking_enabled";
+    private static final String KEY_READING_STATS_DEVICE_ID = "reading_stats_device_id";
 
     private final SharedPreferences preferences;
 
@@ -101,6 +111,14 @@ public class SettingsStore {
 
     public void setWebDavDir(String value) {
         preferences.edit().putString(KEY_WEB_DAV_DIR, normalizeDirectory(value)).apply();
+    }
+
+    public String getWebDavSettingsSubdir() {
+        return normalizeDirectory(preferences.getString(KEY_WEB_DAV_SETTINGS_SUBDIR, ""));
+    }
+
+    public void setWebDavSettingsSubdir(String value) {
+        preferences.edit().putString(KEY_WEB_DAV_SETTINGS_SUBDIR, normalizeDirectory(value)).apply();
     }
 
     public String getWebDavUser() {
@@ -173,6 +191,32 @@ public class SettingsStore {
 
     public void setWebDavSyncBackgroundsEnabled(boolean enabled) {
         preferences.edit().putBoolean(KEY_WEB_DAV_SYNC_BACKGROUNDS, enabled).apply();
+    }
+
+    public boolean isWebDavSyncReadingStatsEnabled() {
+        return preferences.getBoolean(KEY_WEB_DAV_SYNC_READING_STATS, true);
+    }
+
+    public void setWebDavSyncReadingStatsEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_WEB_DAV_SYNC_READING_STATS, enabled).apply();
+    }
+
+    public boolean isReadingTimeTrackingEnabled() {
+        return preferences.getBoolean(KEY_READING_TIME_TRACKING_ENABLED, false);
+    }
+
+    public void setReadingTimeTrackingEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_READING_TIME_TRACKING_ENABLED, enabled).apply();
+    }
+
+    public String getReadingStatsDeviceId() {
+        String value = preferences.getString(KEY_READING_STATS_DEVICE_ID, "");
+        if (value != null && !value.isBlank()) {
+            return value;
+        }
+        String created = UUID.randomUUID().toString();
+        preferences.edit().putString(KEY_READING_STATS_DEVICE_ID, created).apply();
+        return created;
     }
 
     public float getFontSizeSp() {
@@ -265,6 +309,22 @@ public class SettingsStore {
         preferences.edit().putString(KEY_READER_UI_THEME_MODE, normalizeReaderUiThemeMode(value)).apply();
     }
 
+    public String getAppLightStyleVariant() {
+        return normalizeAppLightStyleVariant(preferences.getString(KEY_APP_LIGHT_STYLE_VARIANT, "yunbai"));
+    }
+
+    public void setAppLightStyleVariant(String value) {
+        preferences.edit().putString(KEY_APP_LIGHT_STYLE_VARIANT, normalizeAppLightStyleVariant(value)).apply();
+    }
+
+    public String getAppDarkStyleVariant() {
+        return normalizeAppDarkStyleVariant(preferences.getString(KEY_APP_DARK_STYLE_VARIANT, "yemu"));
+    }
+
+    public void setAppDarkStyleVariant(String value) {
+        preferences.edit().putString(KEY_APP_DARK_STYLE_VARIANT, normalizeAppDarkStyleVariant(value)).apply();
+    }
+
     public String getReaderTheme() {
         return preferences.getString(KEY_THEME, "paper");
     }
@@ -325,6 +385,14 @@ public class SettingsStore {
         preferences.edit().putString(KEY_TTS_MIMO_API_KEY, value == null ? "" : value.trim()).apply();
     }
 
+    public String getTtsMimoVoice() {
+        return normalizeTtsMimoVoice(preferences.getString(KEY_TTS_MIMO_VOICE, "冰糖"));
+    }
+
+    public void setTtsMimoVoice(String value) {
+        preferences.edit().putString(KEY_TTS_MIMO_VOICE, normalizeTtsMimoVoice(value)).apply();
+    }
+
     public String getFlipMode() {
         return normalizeFlipMode(preferences.getString(KEY_FLIP_MODE, "slide"));
     }
@@ -341,12 +409,39 @@ public class SettingsStore {
         preferences.edit().putString(KEY_FLIP_SPEED, value).apply();
     }
 
+    public int getHudTopMarginDp() {
+        return preferences.getInt(
+                KEY_HUD_TOP_MARGIN,
+                preferences.getInt(KEY_HUD_VERTICAL_MARGIN, 2)
+        );
+    }
+
+    public void setHudTopMarginDp(int value) {
+        preferences.edit().putInt(KEY_HUD_TOP_MARGIN, clamp(value, 0, 32)).apply();
+    }
+
+    public int getHudBottomMarginDp() {
+        return preferences.getInt(
+                KEY_HUD_BOTTOM_MARGIN,
+                preferences.getInt(KEY_HUD_VERTICAL_MARGIN, 2)
+        );
+    }
+
+    public void setHudBottomMarginDp(int value) {
+        preferences.edit().putInt(KEY_HUD_BOTTOM_MARGIN, clamp(value, 0, 32)).apply();
+    }
+
     public int getHudVerticalMarginDp() {
         return preferences.getInt(KEY_HUD_VERTICAL_MARGIN, 2);
     }
 
     public void setHudVerticalMarginDp(int value) {
-        preferences.edit().putInt(KEY_HUD_VERTICAL_MARGIN, value).apply();
+        int clamped = clamp(value, 0, 32);
+        preferences.edit()
+                .putInt(KEY_HUD_VERTICAL_MARGIN, clamped)
+                .putInt(KEY_HUD_TOP_MARGIN, clamped)
+                .putInt(KEY_HUD_BOTTOM_MARGIN, clamped)
+                .apply();
     }
 
     public boolean isReaderMenuAutoHideEnabled() {
@@ -456,11 +551,11 @@ public class SettingsStore {
     }
 
     public float getLetterSpacing() {
-        return preferences.getFloat(KEY_LETTER_SPACING, 0f);
+        return normalizeLetterSpacing(preferences.getFloat(KEY_LETTER_SPACING, 0f));
     }
 
     public void setLetterSpacing(float value) {
-        preferences.edit().putFloat(KEY_LETTER_SPACING, clamp(value, 0f, 10f)).apply();
+        preferences.edit().putFloat(KEY_LETTER_SPACING, normalizeLetterSpacing(value)).apply();
     }
 
     public int getFirstLineIndentDp() {
@@ -571,22 +666,37 @@ public class SettingsStore {
         return Math.max(min, Math.min(max, value));
     }
 
-    private static String normalizeAppThemeMode(String value) {
+    public static String normalizeAppThemeMode(String value) {
         if ("light".equals(value) || "dark".equals(value)) {
             return value;
         }
         return "system";
     }
 
-    private static String normalizeReaderUiThemeMode(String value) {
+    public static String normalizeReaderUiThemeMode(String value) {
         if ("system".equals(value) || "light".equals(value) || "dark".equals(value)) {
             return value;
         }
         return "follow_app";
     }
 
+    public static String normalizeAppLightStyleVariant(String value) {
+        return "yaobai".equals(value) ? "yaobai" : "yunbai";
+    }
+
+    public static String normalizeAppDarkStyleVariant(String value) {
+        return "jiye".equals(value) ? "jiye" : "yemu";
+    }
+
     private static String normalizeTtsEngine(String value) {
         return "mimo".equals(value) ? "mimo" : "system";
+    }
+
+    public static String normalizeTtsMimoVoice(String value) {
+        if ("冰糖".equals(value) || "茉莉".equals(value) || "苏打".equals(value) || "白桦".equals(value)) {
+            return value;
+        }
+        return "冰糖";
     }
 
     private static String normalizeReaderFontFamily(String value) {
@@ -635,6 +745,11 @@ public class SettingsStore {
             return "scroll";
         }
         return "slide";
+    }
+
+    private static float normalizeLetterSpacing(float value) {
+        float clamped = clamp(value, 0f, 1f);
+        return Math.round(clamped * 20f) / 20f;
     }
 
     private static String normalizeVolumeKeyAction(String value, String fallback) {

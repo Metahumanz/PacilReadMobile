@@ -7,5 +7,5 @@
     <corners android:radius="34dp" />
     <stroke
         android:width="1dp"
-        android:color="@color/reader_stage_stroke" />
+        android:color="?attr/themeColorReaderStageStroke" />
 </shape>

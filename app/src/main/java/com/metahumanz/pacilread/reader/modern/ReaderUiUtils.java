@@ -4,6 +4,8 @@ import android.widget.Toast;
 
 import androidx.annotation.ColorRes;
 
+import com.metahumanz.pacilread.theme.ThemeModeHelper;
+
 public final class ReaderUiUtils {
     private final ModernReaderActivity activity;
 
@@ -12,7 +14,7 @@ public final class ReaderUiUtils {
     }
 
     public int themeColor(@ColorRes int resId) {
-        return activity.getColor(resId);
+        return ThemeModeHelper.resolveColor(activity, resId);
     }
 
     public int dp(int value) {

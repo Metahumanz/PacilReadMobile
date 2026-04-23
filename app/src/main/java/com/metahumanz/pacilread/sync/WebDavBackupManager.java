@@ -120,14 +120,14 @@ public class WebDavBackupManager {
     private void uploadSettingsSnapshot(StatusListener listener) throws Exception {
         listener.onStatus("上传设置...");
         webDavClient.uploadText(
-                webDavClient.backupBaseUrl() + "settings.json",
+                webDavClient.settingsSnapshotUrl(),
                 settingsStore.exportAsJson().toString(2),
                 "application/json; charset=utf-8"
         );
     }
 
     private void restoreSettingsJsonIfPresent(StatusListener listener) throws Exception {
-        String remotePath = webDavClient.backupBaseUrl() + "settings.json";
+        String remotePath = webDavClient.settingsSnapshotUrl();
         if (webDavClient.head(remotePath).code != 200) {
             return;
         }

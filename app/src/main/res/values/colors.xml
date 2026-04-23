@@ -1,26 +1,66 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="surface">#EEF2F8</color>
-    <color name="surface_variant">#DAE3EF</color>
-    <color name="surface_raised">#F8FBFF</color>
-    <color name="primary">#005FB8</color>
-    <color name="primary_variant">#00498F</color>
-    <color name="accent">#7EA9DD</color>
-    <color name="accent_soft">#DDEBFF</color>
-    <color name="on_surface">#172231</color>
-    <color name="on_surface_muted">#667688</color>
-    <color name="card">#F9FBFF</color>
-    <color name="divider">#CFD9E6</color>
-    <color name="backdrop_top">#F6F9FD</color>
-    <color name="backdrop_bottom">#E2EAF3</color>
-    <color name="glass_fill">#F2FFFFFF</color>
-    <color name="glass_fill_strong">#FAFFFFFF</color>
-    <color name="glass_stroke">#8CFFFFFF</color>
-    <color name="glass_dark_fill">#FF212B39</color>
-    <color name="glass_dark_fill_strong">#FF283443</color>
-    <color name="glass_dark_stroke">#59FFFFFF</color>
-    <color name="overlay_light">#CFEAF2F8</color>
-    <color name="reader_stage_stroke">#4DFFFFFF</color>
-    <color name="positive">#2F8F68</color>
-    <color name="danger">#C45555</color>
+    <item name="surface" type="color">?attr/themeColorSurface</item>
+    <item name="surface_variant" type="color">?attr/themeColorSurfaceVariant</item>
+    <item name="surface_raised" type="color">?attr/themeColorSurfaceRaised</item>
+    <item name="primary" type="color">?attr/themeColorPrimary</item>
+    <item name="primary_variant" type="color">?attr/themeColorPrimaryVariant</item>
+    <item name="accent" type="color">?attr/themeColorAccent</item>
+    <item name="accent_soft" type="color">?attr/themeColorAccentSoft</item>
+    <item name="on_surface" type="color">?attr/themeColorOnSurface</item>
+    <item name="on_surface_muted" type="color">?attr/themeColorOnSurfaceMuted</item>
+    <item name="card" type="color">?attr/themeColorCard</item>
+    <item name="divider" type="color">?attr/themeColorDivider</item>
+    <item name="backdrop_top" type="color">?attr/themeColorBackdropTop</item>
+    <item name="backdrop_bottom" type="color">?attr/themeColorBackdropBottom</item>
+    <item name="glass_fill" type="color">?attr/themeColorGlassFill</item>
+    <item name="glass_fill_strong" type="color">?attr/themeColorGlassFillStrong</item>
+    <item name="glass_stroke" type="color">?attr/themeColorGlassStroke</item>
+    <item name="glass_dark_fill" type="color">?attr/themeColorGlassDarkFill</item>
+    <item name="glass_dark_fill_strong" type="color">?attr/themeColorGlassDarkFillStrong</item>
+    <item name="glass_dark_stroke" type="color">?attr/themeColorGlassDarkStroke</item>
+    <item name="overlay_light" type="color">?attr/themeColorOverlayLight</item>
+    <item name="reader_stage_stroke" type="color">?attr/themeColorReaderStageStroke</item>
+    <item name="positive" type="color">?attr/themeColorPositive</item>
+    <item name="danger" type="color">?attr/themeColorDanger</item>
+
+    <item name="app_background" type="color">?attr/themeColorAppBackground</item>
+    <item name="app_surface" type="color">?attr/themeColorAppSurface</item>
+    <item name="app_surface_secondary" type="color">?attr/themeColorAppSurfaceSecondary</item>
+    <item name="app_surface_raised" type="color">?attr/themeColorAppSurfaceRaised</item>
+    <item name="app_backdrop_top" type="color">?attr/themeColorAppBackdropTop</item>
+    <item name="app_backdrop_bottom" type="color">?attr/themeColorAppBackdropBottom</item>
+    <item name="app_text_primary" type="color">?attr/themeColorAppTextPrimary</item>
+    <item name="app_text_secondary" type="color">?attr/themeColorAppTextSecondary</item>
+    <item name="app_text_muted" type="color">?attr/themeColorAppTextMuted</item>
+    <item name="app_text_on_primary" type="color">?attr/themeColorAppTextOnPrimary</item>
+    <item name="app_primary" type="color">?attr/themeColorAppPrimary</item>
+    <item name="app_primary_variant" type="color">?attr/themeColorAppPrimaryVariant</item>
+    <item name="app_primary_hover" type="color">?attr/themeColorAppPrimaryHover</item>
+    <item name="app_primary_tint" type="color">?attr/themeColorAppPrimaryTint</item>
+    <item name="app_border" type="color">?attr/themeColorAppBorder</item>
+    <item name="app_border_strong" type="color">?attr/themeColorAppBorderStrong</item>
+    <item name="app_glass_fill" type="color">?attr/themeColorAppGlassFill</item>
+    <item name="app_glass_fill_strong" type="color">?attr/themeColorAppGlassFillStrong</item>
+    <item name="app_glass_stroke" type="color">?attr/themeColorAppGlassStroke</item>
+    <item name="app_button_primary_text" type="color">?attr/themeColorAppButtonPrimaryText</item>
+    <item name="app_button_outline_text" type="color">?attr/themeColorAppButtonOutlineText</item>
+    <item name="app_button_secondary_text" type="color">?attr/themeColorAppButtonSecondaryText</item>
+    <item name="app_button_positive_text" type="color">?attr/themeColorAppButtonPositiveText</item>
+    <item name="app_button_danger_text" type="color">?attr/themeColorAppButtonDangerText</item>
+    <item name="app_nav_text_active" type="color">?attr/themeColorAppNavTextActive</item>
+    <item name="app_nav_text_idle" type="color">?attr/themeColorAppNavTextIdle</item>
+    <item name="app_nav_active_bg" type="color">?attr/themeColorAppNavActiveBg</item>
+    <item name="app_nav_idle_bg" type="color">?attr/themeColorAppNavIdleBg</item>
+    <item name="app_scrim" type="color">?attr/themeColorAppScrim</item>
+    <item name="app_badge_fill" type="color">?attr/themeColorAppBadgeFill</item>
+    <item name="app_badge_stroke" type="color">?attr/themeColorAppBadgeStroke</item>
+    <item name="app_badge_text" type="color">?attr/themeColorAppBadgeText</item>
+    <item name="app_positive" type="color">?attr/themeColorAppPositive</item>
+    <item name="app_danger" type="color">?attr/themeColorAppDanger</item>
+
+    <item name="reader_menu_text" type="color">?attr/themeColorReaderMenuText</item>
+    <item name="reader_menu_text_muted" type="color">?attr/themeColorReaderMenuTextMuted</item>
+    <item name="reader_menu_button_text" type="color">?attr/themeColorReaderMenuButtonText</item>
+    <item name="reader_menu_button_active_text" type="color">?attr/themeColorReaderMenuButtonActiveText</item>
 </resources>

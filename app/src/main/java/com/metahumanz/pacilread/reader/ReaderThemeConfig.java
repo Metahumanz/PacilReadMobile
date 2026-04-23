@@ -27,6 +27,7 @@ public final class ReaderThemeConfig {
             jsonObject.put("chapter_title_visibility", settingsStore.isChapterTitleVisible());
             jsonObject.put("auto_page_seconds", settingsStore.getAutoPageSeconds());
             jsonObject.put("tts_rate", settingsStore.getTtsRate());
+            jsonObject.put("tts_mimo_voice", settingsStore.getTtsMimoVoice());
         } catch (Exception ignore) {
         }
         return jsonObject;
@@ -52,5 +53,6 @@ public final class ReaderThemeConfig {
         settingsStore.setChapterTitleVisible(jsonObject.optBoolean("chapter_title_visibility", settingsStore.isChapterTitleVisible()));
         settingsStore.setAutoPageSeconds(jsonObject.optInt("auto_page_seconds", settingsStore.getAutoPageSeconds()));
         settingsStore.setTtsRate((float) jsonObject.optDouble("tts_rate", settingsStore.getTtsRate()));
+        settingsStore.setTtsMimoVoice(jsonObject.optString("tts_mimo_voice", settingsStore.getTtsMimoVoice()));
     }
 }

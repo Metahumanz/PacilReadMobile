@@ -6,6 +6,7 @@ import android.os.Looper;
 
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
+import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
 import com.metahumanz.pacilread.sync.WebDavClient;
 import com.metahumanz.pacilread.tts.MimoTtsClient;
 import com.metahumanz.pacilread.tts.SystemTtsClient;
@@ -20,6 +21,7 @@ public final class ReaderRuntime {
     public final ReaderDatabaseHelper databaseHelper;
     public final SettingsStore settingsStore;
     public final WebDavClient webDavClient;
+    public final ReadingStatsSyncManager readingStatsSyncManager;
     public final MimoTtsClient mimoTtsClient;
     public final SystemTtsClient systemTtsClient;
 
@@ -27,6 +29,7 @@ public final class ReaderRuntime {
         databaseHelper = ReaderDatabaseHelper.getInstance(context);
         settingsStore = new SettingsStore(context);
         webDavClient = new WebDavClient(settingsStore);
+        readingStatsSyncManager = new ReadingStatsSyncManager(context, databaseHelper, settingsStore, webDavClient);
         mimoTtsClient = new MimoTtsClient();
         systemTtsClient = new SystemTtsClient(context);
     }

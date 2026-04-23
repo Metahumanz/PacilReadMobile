@@ -33,6 +33,8 @@ import com.metahumanz.pacilread.util.FileAssetHelper;
 import java.util.List;
 
 public final class ReaderStyleDialogController {
+    private static final float LETTER_SPACING_STEP = 0.05f;
+
     private final ModernReaderActivity activity;
     private final ReaderRuntime runtime;
     private final ReaderSessionState state;
@@ -89,7 +91,7 @@ public final class ReaderStyleDialogController {
         refs.rightSeek.setProgress(runtime.settingsStore.getRightPaddingDp());
         refs.topSeek.setProgress(runtime.settingsStore.getTopPaddingDp());
         refs.bottomSeek.setProgress(runtime.settingsStore.getBottomPaddingDp());
-        refs.letterSpacingSeek.setProgress(Math.round(runtime.settingsStore.getLetterSpacing() * 10f));
+        refs.letterSpacingSeek.setProgress(Math.round(runtime.settingsStore.getLetterSpacing() / LETTER_SPACING_STEP));
         refs.firstLineIndentSeek.setProgress(runtime.settingsStore.getFirstLineIndentDp());
         refs.backgroundBlurSeek.setProgress(runtime.settingsStore.getBackgroundBlurPercent());
         refs.keepScreenOn.setChecked(runtime.settingsStore.isKeepScreenOn());
@@ -272,7 +274,7 @@ public final class ReaderStyleDialogController {
     private Runnable buildAutoApply(StyleDialogViews refs, String[] selectedReaderTheme, Runnable refreshTextColorPreview) {
         return () -> {
             int anchorOffset = content.currentCharOffset();
-            String previousResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(activity);
+            String previousResolvedAppearance = ThemeModeHelper.getResolvedReaderAppearanceLabel(activity);
             runtime.settingsStore.setReaderFontFamily(ReaderOptionCatalog.READER_FONT_FAMILY_KEYS[refs.fontFamilySpinner.getSelectedItemPosition()]);
             runtime.settingsStore.setReaderTextColor(ReaderOptionCatalog.READER_TEXT_COLOR_KEYS[refs.textColorSpinner.getSelectedItemPosition()]);
             runtime.settingsStore.setFontSizeSp(refs.fontSeek.getProgress() + 12);
@@ -282,7 +284,7 @@ public final class ReaderStyleDialogController {
             runtime.settingsStore.setRightPaddingDp(refs.rightSeek.getProgress());
             runtime.settingsStore.setTopPaddingDp(refs.topSeek.getProgress());
             runtime.settingsStore.setBottomPaddingDp(refs.bottomSeek.getProgress());
-            runtime.settingsStore.setLetterSpacing(refs.letterSpacingSeek.getProgress() / 10f);
+            runtime.settingsStore.setLetterSpacing(refs.letterSpacingSeek.getProgress() * LETTER_SPACING_STEP);
             runtime.settingsStore.setFirstLineIndentDp(refs.firstLineIndentSeek.getProgress());
             runtime.settingsStore.setBackgroundBlurPercent(refs.backgroundBlurSeek.getProgress());
             runtime.settingsStore.setKeepScreenOn(refs.keepScreenOn.isChecked());
@@ -290,14 +292,12 @@ public final class ReaderStyleDialogController {
             runtime.settingsStore.setReaderTheme(selectedReaderTheme[0]);
             runtime.settingsStore.setReaderUiThemeMode(ReaderOptionCatalog.UI_THEME_KEYS[refs.uiThemeSpinner.getSelectedItemPosition()]);
             refreshTextColorPreview.run();
-            String nextResolvedUiMode = ThemeModeHelper.getResolvedReaderThemeMode(activity);
-            content.clearPageCache();
-            if (!previousResolvedUiMode.equals(nextResolvedUiMode)) {
+            String nextResolvedAppearance = ThemeModeHelper.getResolvedReaderAppearanceLabel(activity);
+            if (!previousResolvedAppearance.equals(nextResolvedAppearance)) {
                 activity.recreate();
                 return;
             }
-            style.applyReaderSettings();
-            navigation.openChapter(state.currentChapterIndex, anchorOffset, false, 0);
+            content.scheduleReflowAfterLayout(state.currentChapterIndex, anchorOffset);
         };
     }
 
@@ -316,7 +316,7 @@ public final class ReaderStyleDialogController {
                     Button applyButton = new Button(activity);
                     applyButton.setText(theme.name);
                     applyButton.setBackgroundResource(R.drawable.bg_outline_button);
-                    applyButton.setTextColor(activity.getColor(R.color.primary));
+                    applyButton.setTextColor(ThemeModeHelper.resolveColor(activity, R.color.primary));
                     com.metahumanz.pacilread.ui.GlassUiHelper.applyToView(activity, applyButton, runtime.settingsStore.getGlassOpacityPercent());
                     Button deleteButton = new Button(activity);
                     deleteButton.setText("删除");

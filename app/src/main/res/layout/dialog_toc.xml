@@ -19,7 +19,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="目录"
-            android:textColor="@color/on_surface"
+            android:textColor="?attr/themeColorOnSurface"
             android:textSize="24sp"
             android:textStyle="bold" />
 
@@ -28,14 +28,14 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:text="拖动右侧定位条可快速跳到章节，点击条目进入阅读。"
-            android:textColor="@color/on_surface_muted"
+            android:textColor="?attr/themeColorOnSurfaceMuted"
             android:textSize="12sp" />
 
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:layout_marginTop="16dp"
-            android:background="@color/divider" />
+            android:background="?attr/themeColorDivider" />
 
         <FrameLayout
             android:id="@+id/toc_body"
@@ -72,7 +72,7 @@
                 android:paddingTop="10dp"
                 android:paddingRight="14dp"
                 android:paddingBottom="10dp"
-                android:textColor="@color/on_surface"
+                android:textColor="?attr/themeColorOnSurface"
                 android:textSize="13sp"
                 android:visibility="invisible" />
 

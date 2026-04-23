@@ -7,7 +7,7 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/bg_card"
+        android:background="@drawable/bg_app_card"
         android:elevation="4dp"
         android:orientation="vertical"
         android:padding="10dp">
@@ -33,45 +33,41 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="bottom|end"
                 android:layout_margin="8dp"
-                android:background="@drawable/bg_primary_button"
-                android:fontFamily="sans-serif-medium"
+                android:background="@drawable/bg_app_primary_button"
                 android:paddingLeft="8dp"
                 android:paddingTop="5dp"
                 android:paddingRight="8dp"
                 android:paddingBottom="5dp"
                 android:text="导入"
-                android:textColor="@android:color/white"
+                android:textColor="?attr/themeColorAppButtonPrimaryText"
                 android:textSize="10sp" />
         </FrameLayout>
 
         <TextView
+            style="@style/AppChromeBodyStrong"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
             android:ellipsize="end"
-            android:fontFamily="sans-serif-medium"
             android:maxLines="2"
             android:text="添加书籍"
-            android:textColor="@color/on_surface"
             android:textSize="15sp" />
 
         <TextView
+            style="@style/AppChromeCaption"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:ellipsize="end"
             android:maxLines="1"
-            android:text="导入 TXT / EPUB / PDF"
-            android:textColor="@color/on_surface_muted"
-            android:textSize="12sp" />
+            android:text="导入 TXT / EPUB / PDF" />
 
         <TextView
+            style="@style/AppChromeMicro"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="点击导入新书"
-            android:textColor="@color/on_surface_muted"
-            android:textSize="11sp" />
+            android:text="点击导入新书" />
     </LinearLayout>
 
 </FrameLayout>

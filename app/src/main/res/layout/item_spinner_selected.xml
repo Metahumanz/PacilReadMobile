@@ -9,5 +9,5 @@
     android:paddingTop="12dp"
     android:paddingEnd="36dp"
     android:paddingBottom="12dp"
-    android:textColor="@color/on_surface"
+    android:textColor="?attr/themeColorOnSurface"
     android:textSize="14sp" />

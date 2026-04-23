@@ -16,6 +16,7 @@ import android.widget.SeekBar;
 import androidx.core.view.WindowCompat;
 
 import com.metahumanz.pacilread.R;
+import com.metahumanz.pacilread.ReadingStatsActivity;
 import com.metahumanz.pacilread.reader.modern.content.ReaderContentController;
 import com.metahumanz.pacilread.reader.modern.dialog.ReaderDialogSupport;
 import com.metahumanz.pacilread.reader.modern.dialog.ReaderLibraryDialogs;
@@ -24,6 +25,7 @@ import com.metahumanz.pacilread.reader.modern.dialog.ReaderStyleDialogController
 import com.metahumanz.pacilread.reader.modern.paging.ReaderNavigationController;
 import com.metahumanz.pacilread.reader.modern.paging.ReaderPagingAnimator;
 import com.metahumanz.pacilread.reader.modern.playback.ReaderAutoPageController;
+import com.metahumanz.pacilread.reader.modern.stats.ReaderReadingStatsTracker;
 import com.metahumanz.pacilread.reader.modern.tts.ReaderTtsController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderStyleController;
@@ -47,6 +49,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private ReaderLibraryDialogs libraryDialogs;
     private ReaderStyleDialogController styleDialogs;
     private ReaderOptionsDialogController optionsDialogs;
+    private ReaderReadingStatsTracker readingStatsTracker;
     private GestureDetector gestureDetector;
     private BroadcastReceiver sysMetricsReceiver;
 
@@ -58,11 +61,13 @@ public class ModernReaderActivity extends ThemedReaderActivity {
 
         runtime = new ReaderRuntime(this);
         state = new ReaderSessionState();
+        readingStatsTracker = new ReaderReadingStatsTracker(runtime, state);
         state.pagingTouchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
         state.bookId = getIntent().getLongExtra("book_id", -1L);
         if (savedInstanceState != null) {
             state.restoredChapterIndex = savedInstanceState.getInt("restored_chapter_index", -1);
             state.restoredPageIndex = savedInstanceState.getInt("restored_page_index", -1);
+            state.restoredProgressOffset = savedInstanceState.getInt("restored_progress_offset", -1);
         }
 
         views = ReaderViewRefs.bind(this);
@@ -84,6 +89,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (readingStatsTracker != null) {
+            readingStatsTracker.resume();
+        }
         chrome.updateSystemBarsVisibility(state.controlsVisible);
         chrome.applyGlassOpacity();
         if (state.controlsVisible) {
@@ -98,19 +106,23 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         super.onSaveInstanceState(outState);
         outState.putInt("restored_chapter_index", state.currentChapterIndex);
         outState.putInt("restored_page_index", state.currentPageIndex);
+        outState.putInt("restored_progress_offset", content == null ? -1 : content.currentCharOffset());
     }
 
     @Override
     protected void onPause() {
         super.onPause();
+        if (readingStatsTracker != null) {
+            readingStatsTracker.pause();
+        }
         chrome.cancelAutoHide();
         paging.cancelInteractiveAnimator();
         paging.cancelInteractivePaging();
         autoPage.stopAutoPage();
         tts.stopTts();
         content.cancelPendingProgressSave();
+        content.cancelPendingReflow();
         content.persistProgress();
-        content.recordSessionStats();
         state.pendingTapPagingDelta = 0;
         paging.removeWarmupCallbacks();
     }
@@ -120,6 +132,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         super.onDestroy();
         if (sysMetricsReceiver != null) {
             unregisterReceiver(sysMetricsReceiver);
+        }
+        if (readingStatsTracker != null) {
+            readingStatsTracker.shutdown();
         }
         runtime.shutdown();
         paging.cancelInteractiveAnimator();
@@ -138,6 +153,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            markReadingActivity();
+        }
         if (paging.handleReaderPagingTouchEvent(event)) {
             return true;
         }
@@ -208,8 +226,8 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         registerReceiver(sysMetricsReceiver, filter);
 
         findViewById(R.id.button_back).setOnClickListener(v -> finish());
-        findViewById(R.id.button_prev_chapter).setOnClickListener(v -> navigation.openChapter(state.currentChapterIndex - 1, 0, true, -1));
-        findViewById(R.id.button_next_chapter).setOnClickListener(v -> navigation.openChapter(state.currentChapterIndex + 1, 0, true, 1));
+        findViewById(R.id.button_prev_chapter).setOnClickListener(v -> navigation.openChapterFromStart(state.currentChapterIndex - 1, true, -1));
+        findViewById(R.id.button_next_chapter).setOnClickListener(v -> navigation.openChapterFromStart(state.currentChapterIndex + 1, true, 1));
         findViewById(R.id.button_toc).setOnClickListener(v -> libraryDialogs.showTocDialog());
         findViewById(R.id.button_search).setOnClickListener(v -> libraryDialogs.showSearchDialog());
         findViewById(R.id.button_rules).setOnClickListener(v -> libraryDialogs.showRulesDialog());
@@ -218,6 +236,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         views.themeToggleButton.setOnClickListener(v -> chrome.toggleReaderUiTheme());
         views.ttsButton.setOnClickListener(v -> tts.showTtsDialog());
         views.autoPageButton.setOnClickListener(v -> autoPage.showAutoPageDialog());
+        views.readerTitle.setOnClickListener(v -> openReadingStatsForCurrentBook());
 
         View.OnTouchListener keepMenuAliveListener = (view, event) -> {
             if (state.controlsVisible && event.getActionMasked() == MotionEvent.ACTION_DOWN) {
@@ -243,7 +262,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 if ("book".equals(runtime.settingsStore.getReaderSliderMode())) {
                     int chapterIndex = ui.clamp(seekBar.getProgress(), 0, state.chapters.size() - 1);
                     int direction = chapterIndex >= state.currentChapterIndex ? 1 : -1;
-                    navigation.openChapter(chapterIndex, 0, true, direction);
+                    navigation.openChapterFromStart(chapterIndex, true, direction);
                     return;
                 }
                 int direction = seekBar.getProgress() >= state.currentPageIndex ? 1 : -1;
@@ -305,5 +324,26 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 return false;
             }
         });
+    }
+
+    public void markReadingActivity() {
+        if (readingStatsTracker != null) {
+            readingStatsTracker.markActivity();
+        }
+    }
+
+    public void onReaderBookLoaded() {
+        if (readingStatsTracker != null) {
+            readingStatsTracker.bindBook(state.book);
+        }
+    }
+
+    public void openReadingStatsForCurrentBook() {
+        if (!runtime.settingsStore.isReadingTimeTrackingEnabled() || state.book == null) {
+            return;
+        }
+        Intent intent = new Intent(this, ReadingStatsActivity.class);
+        intent.putExtra("book_id", state.book.id);
+        startActivity(intent);
     }
 }
