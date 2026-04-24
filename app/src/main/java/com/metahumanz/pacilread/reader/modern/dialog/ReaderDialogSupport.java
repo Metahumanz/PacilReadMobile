@@ -56,8 +56,7 @@ public final class ReaderDialogSupport {
     }
 
     public void showStyledDialog(AlertDialog dialog) {
-        dialog.show();
-        Window window = dialog.getWindow();
+        Window window = showDialogWithAnimation(dialog, R.style.ReaderPopDialogAnimation);
         if (window != null) {
             window.setBackgroundDrawableResource(android.R.color.transparent);
         }
@@ -65,11 +64,12 @@ public final class ReaderDialogSupport {
     }
 
     public void showFullscreenDialog(AlertDialog dialog) {
-        showStyledDialog(dialog);
-        Window window = dialog.getWindow();
+        Window window = showDialogWithAnimation(dialog, R.style.ReaderFullscreenDialogAnimation);
         if (window != null) {
+            window.setBackgroundDrawableResource(android.R.color.transparent);
             window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         }
+        GlassUiHelper.applyToHierarchy(activity, dialog.findViewById(android.R.id.content), runtime.settingsStore.getGlassOpacityPercent());
     }
 
     public void applyTocStyleFullscreenInsets(View root, View contentContainer) {
@@ -104,8 +104,7 @@ public final class ReaderDialogSupport {
     }
 
     public void showImmersiveFullscreenDialog(AlertDialog dialog, boolean restoreShowSystemBars) {
-        dialog.show();
-        Window window = dialog.getWindow();
+        Window window = showDialogWithAnimation(dialog, R.style.ReaderFullscreenDialogAnimation);
         if (window != null) {
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             window.getDecorView().setPadding(0, 0, 0, 0);
@@ -114,6 +113,20 @@ public final class ReaderDialogSupport {
             applySystemBarsVisibility(window, false);
         }
         dialog.setOnDismissListener(unused -> applySystemBarsVisibility(activity.getWindow(), restoreShowSystemBars));
+    }
+
+    private Window showDialogWithAnimation(AlertDialog dialog, int animationStyleResId) {
+        applyWindowAnimation(dialog, animationStyleResId);
+        dialog.show();
+        applyWindowAnimation(dialog, animationStyleResId);
+        return dialog.getWindow();
+    }
+
+    private void applyWindowAnimation(AlertDialog dialog, int animationStyleResId) {
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setWindowAnimations(animationStyleResId);
+        }
     }
 
     private void configureEdgeToEdgeWindow(Window window) {
