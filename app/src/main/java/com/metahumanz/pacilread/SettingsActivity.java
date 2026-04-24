@@ -62,6 +62,7 @@ public class SettingsActivity extends ThemedActivity {
 
     private CheckBox autoOpenCheck;
     private CheckBox readerMenuAutoHideCheck;
+    private CheckBox bookshelfShowAddEntryCheck;
     private CheckBox readingTimeTrackingCheck;
     private CheckBox webDavEnabledCheck;
     private EditText urlInput;
@@ -125,6 +126,7 @@ public class SettingsActivity extends ThemedActivity {
 
         autoOpenCheck = findViewById(R.id.check_auto_open);
         readerMenuAutoHideCheck = findViewById(R.id.check_reader_menu_auto_hide);
+        bookshelfShowAddEntryCheck = findViewById(R.id.check_bookshelf_show_add_entry);
         readingTimeTrackingCheck = findViewById(R.id.check_reading_time_tracking);
         webDavEnabledCheck = findViewById(R.id.check_webdav_enabled);
         urlInput = findViewById(R.id.input_webdav_url);
@@ -242,6 +244,7 @@ public class SettingsActivity extends ThemedActivity {
         bindingSettingsValues = true;
         autoOpenCheck.setChecked(settingsStore.isAutoOpenLastBook());
         readerMenuAutoHideCheck.setChecked(settingsStore.isReaderMenuAutoHideEnabled());
+        bookshelfShowAddEntryCheck.setChecked(settingsStore.isBookshelfAddEntryVisible());
         readingTimeTrackingCheck.setChecked(settingsStore.isReadingTimeTrackingEnabled());
         webDavEnabledCheck.setChecked(settingsStore.isWebDavEnabled());
         urlInput.setText(settingsStore.getWebDavUrl());
@@ -284,6 +287,7 @@ public class SettingsActivity extends ThemedActivity {
         String previousAppStyleVariant = ThemeModeHelper.getResolvedAppStyleVariant(this);
         settingsStore.setAutoOpenLastBook(autoOpenCheck.isChecked());
         settingsStore.setReaderMenuAutoHideEnabled(readerMenuAutoHideCheck.isChecked());
+        settingsStore.setBookshelfAddEntryVisible(bookshelfShowAddEntryCheck.isChecked());
         settingsStore.setReadingTimeTrackingEnabled(readingTimeTrackingCheck.isChecked());
         settingsStore.setWebDavEnabled(webDavEnabledCheck.isChecked());
         settingsStore.setWebDavUrl(urlInput.getText().toString());
@@ -446,6 +450,7 @@ public class SettingsActivity extends ThemedActivity {
         mimoApiKeyInput.addTextChangedListener(autoSaveTextWatcher);
         autoOpenCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsChanged());
         readerMenuAutoHideCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsChanged());
+        bookshelfShowAddEntryCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsChanged());
         readingTimeTrackingCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleReadingTimeTrackingToggle(isChecked));
         webDavEnabledCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsChanged());
     }

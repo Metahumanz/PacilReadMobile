@@ -221,6 +221,15 @@
                         android:minHeight="48dp"
                         android:text="阅读界面自动收起菜单" />
 
+                    <CheckBox
+                        android:id="@+id/check_bookshelf_show_add_entry"
+                        style="@style/AppChromeCheckBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:minHeight="48dp"
+                        android:text="书架末尾显示添加书籍入口" />
+
                     <TextView
                         style="@style/AppChromeBody"
                         android:layout_width="wrap_content"

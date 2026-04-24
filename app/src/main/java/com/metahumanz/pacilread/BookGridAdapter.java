@@ -26,6 +26,7 @@ public class BookGridAdapter extends BaseAdapter {
     private final LayoutInflater inflater;
     private final DateFormat dateFormat = DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.SIMPLIFIED_CHINESE);
     private final List<BookRecord> books = new ArrayList<>();
+    private boolean showAddEntry = true;
 
     public BookGridAdapter(Context context) {
         this.inflater = LayoutInflater.from(context);
@@ -37,8 +38,16 @@ public class BookGridAdapter extends BaseAdapter {
         notifyDataSetChanged();
     }
 
+    public void setShowAddEntry(boolean showAddEntry) {
+        if (this.showAddEntry == showAddEntry) {
+            return;
+        }
+        this.showAddEntry = showAddEntry;
+        notifyDataSetChanged();
+    }
+
     public boolean isAddPosition(int position) {
-        return position == books.size();
+        return showAddEntry && position == books.size();
     }
 
     @Override
@@ -53,7 +62,7 @@ public class BookGridAdapter extends BaseAdapter {
 
     @Override
     public int getCount() {
-        return books.size() + 1;
+        return books.size() + (showAddEntry ? 1 : 0);
     }
 
     @Override

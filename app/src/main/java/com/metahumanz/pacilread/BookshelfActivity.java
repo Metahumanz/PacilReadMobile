@@ -47,6 +47,7 @@ public class BookshelfActivity extends ThemedActivity {
     private AppDrawerController drawerController;
     private BookListAdapter listAdapter;
     private BookGridAdapter gridAdapter;
+    private View listFooterView;
 
     // Views
     private View mainRoot;
@@ -93,6 +94,7 @@ public class BookshelfActivity extends ThemedActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        updateAddEntryVisibility();
         refreshBooks();
         updateDrawerStatus();
     }
@@ -174,13 +176,14 @@ public class BookshelfActivity extends ThemedActivity {
     // ==================== Adapters ====================
 
     private void setupAdapters() {
-        View footerView = getLayoutInflater().inflate(R.layout.item_book_footer, listBooks, false);
-        footerView.findViewById(R.id.button_footer_add_book).setOnClickListener(v -> openPicker());
-        listBooks.addFooterView(footerView, null, true);
+        listFooterView = getLayoutInflater().inflate(R.layout.item_book_footer, listBooks, false);
+        listFooterView.findViewById(R.id.button_footer_add_book).setOnClickListener(v -> openPicker());
+        listBooks.addFooterView(listFooterView, null, true);
         listAdapter = new BookListAdapter(this);
         gridAdapter = new BookGridAdapter(this);
         listBooks.setAdapter(listAdapter);
         gridBooks.setAdapter(gridAdapter);
+        updateAddEntryVisibility();
     }
 
     // ==================== Interactions ====================
@@ -371,8 +374,23 @@ public class BookshelfActivity extends ThemedActivity {
         }
         listAdapter.setItems(filtered);
         gridAdapter.setItems(filtered);
+        updateAddEntryVisibility();
         updateStats(filtered);
         updateEmptyState(query);
+    }
+
+    private void updateAddEntryVisibility() {
+        if (settingsStore == null) {
+            return;
+        }
+        boolean visible = settingsStore.isBookshelfAddEntryVisible();
+        if (gridAdapter != null) {
+            gridAdapter.setShowAddEntry(visible);
+        }
+        if (listFooterView != null) {
+            listFooterView.setVisibility(visible ? View.VISIBLE : View.GONE);
+            listFooterView.setEnabled(visible);
+        }
     }
 
     private void updateEmptyState(String query) {
