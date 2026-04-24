@@ -85,6 +85,7 @@ public final class ReaderStyleController {
         state.currentReaderPageColor = palette.pageColor;
         state.currentReaderTextColor = resolvedTextColor;
         views.readerRoot.setBackgroundColor(palette.backgroundColor);
+        chrome.applyReaderMenuPalette(palette, resolvedTextColor);
         views.pageCurrent.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         views.pageIncoming.setBackgroundColor(android.graphics.Color.TRANSPARENT);
 

@@ -20,6 +20,7 @@ import com.metahumanz.pacilread.model.ChapterRecord;
 import com.metahumanz.pacilread.model.ReplacementRuleRecord;
 import com.metahumanz.pacilread.reader.PageSlice;
 import com.metahumanz.pacilread.reader.ReaderPaginator;
+import com.metahumanz.pacilread.reader.ReaderParagraphBottomSpacingSpan;
 import com.metahumanz.pacilread.reader.ReaderTitleSpan;
 import com.metahumanz.pacilread.reader.ReplacementEngine;
 import com.metahumanz.pacilread.reader.modern.ModernReaderActivity;
@@ -402,13 +403,13 @@ public final class ReaderContentController {
                 }
                 if (end < length && isNextLineVisible(processed, paragraphLimit) && paragraphSpacingPx > 0) {
                     spannable.setSpan(
-                            new ParagraphBottomSpacingSpan(paragraphSpacingPx),
+                            new ReaderParagraphBottomSpacingSpan(paragraphSpacingPx),
                             end,
                             paragraphLimit,
                             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                     );
                 }
-            } else if (end < length) {
+            } else if (end < length && paragraphSpacingPx > 0) {
                 spannable.setSpan(
                         new FixedLineHeightSpan(paragraphSpacingPx),
                         start,
@@ -708,20 +709,4 @@ public final class ReaderContentController {
         }
     }
 
-    private static final class ParagraphBottomSpacingSpan implements LineHeightSpan {
-        private final int spacingPx;
-
-        private ParagraphBottomSpacingSpan(int spacingPx) {
-            this.spacingPx = Math.max(spacingPx, 0);
-        }
-
-        @Override
-        public void chooseHeight(CharSequence text, int start, int end, int spanstartv, int v, android.graphics.Paint.FontMetricsInt fontMetricsInt) {
-            if (fontMetricsInt == null || spacingPx <= 0) {
-                return;
-            }
-            fontMetricsInt.descent += spacingPx;
-            fontMetricsInt.bottom += spacingPx;
-        }
-    }
 }

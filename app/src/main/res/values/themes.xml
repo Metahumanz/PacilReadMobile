@@ -561,6 +561,16 @@
         <item name="backgroundTint">@null</item>
     </style>
 
+    <style name="ReaderFullscreenDialogAnimation">
+        <item name="android:windowEnterAnimation">@anim/activity_slide_forward</item>
+        <item name="android:windowExitAnimation">@anim/activity_slide_backward</item>
+    </style>
+
+    <style name="ReaderPopDialogAnimation">
+        <item name="android:windowEnterAnimation">@anim/dialog_reader_pop_enter</item>
+        <item name="android:windowExitAnimation">@anim/dialog_reader_pop_exit</item>
+    </style>
+
     <style name="AppChromeSurfaceTheme">
         <item name="android:textColorPrimary">?attr/themeColorAppTextPrimary</item>
         <item name="android:textColorSecondary">?attr/themeColorAppTextSecondary</item>

@@ -1,6 +1,5 @@
 package com.metahumanz.pacilread.reader;
 
-import android.graphics.text.LineBreaker;
 import android.text.Layout;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -56,7 +55,7 @@ public final class ReaderPaginator {
             int pageHeight = pages.isEmpty() ? firstPageHeight : regularPageHeight;
             int endLine = startLine;
             while (endLine + 1 < lineCount
-                    && layout.getLineBottom(endLine + 1) - layout.getLineTop(startLine) <= pageHeight) {
+                    && lineBottomForPageEnd(safeSource, layout, endLine + 1) - layout.getLineTop(startLine) <= pageHeight) {
                 endLine++;
             }
             int start = layout.getLineStart(startLine);
@@ -105,9 +104,40 @@ public final class ReaderPaginator {
                 .setAlignment(Layout.Alignment.ALIGN_NORMAL)
                 .setIncludePad(false)
                 .setLineSpacing(lineSpacingExtra, 1f)
-                .setBreakStrategy(LineBreaker.BREAK_STRATEGY_HIGH_QUALITY)
-                .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NORMAL)
+                .setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE)
+                .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
                 .build();
+    }
+
+    private static int lineBottomForPageEnd(CharSequence source, StaticLayout layout, int lineIndex) {
+        int lineBottom = layout.getLineBottom(lineIndex);
+        if (!(source instanceof Spanned)) {
+            return lineBottom;
+        }
+        int lineStart = layout.getLineStart(lineIndex);
+        int visibleEnd = layout.getLineVisibleEnd(lineIndex);
+        int lineEnd = layout.getLineEnd(lineIndex);
+        if (lineStart >= visibleEnd || visibleEnd >= lineEnd) {
+            return lineBottom;
+        }
+        Spanned spanned = (Spanned) source;
+        ReaderParagraphBottomSpacingSpan[] spans = spanned.getSpans(
+                visibleEnd,
+                lineEnd,
+                ReaderParagraphBottomSpacingSpan.class
+        );
+        int spacingPx = 0;
+        for (ReaderParagraphBottomSpacingSpan span : spans) {
+            int spanStart = spanned.getSpanStart(span);
+            int spanEnd = spanned.getSpanEnd(span);
+            if (spanStart < lineEnd && spanEnd > visibleEnd) {
+                spacingPx += span.getSpacingPx();
+            }
+        }
+        if (spacingPx <= 0) {
+            return lineBottom;
+        }
+        return Math.max(layout.getLineTop(lineIndex), lineBottom - spacingPx);
     }
 
     private static PageSlice buildPageSlice(CharSequence source, int bodyStartIndex, int contentStart, int contentEnd) {

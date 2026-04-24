@@ -2,8 +2,10 @@ package com.metahumanz.pacilread.reader.modern.ui;
 
 import android.graphics.Color;
 import android.graphics.Insets;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.SystemClock;
+import android.util.TypedValue;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -24,6 +26,7 @@ import com.metahumanz.pacilread.reader.modern.ReaderUiUtils;
 import com.metahumanz.pacilread.reader.modern.ReaderViewRefs;
 import com.metahumanz.pacilread.reader.modern.content.ReaderContentController;
 import com.metahumanz.pacilread.reader.modern.paging.ReaderPagingAnimator;
+import com.metahumanz.pacilread.reader.modern.theme.ReaderThemePalette;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.ui.GlassUiHelper;
 
@@ -42,6 +45,17 @@ public final class ReaderChromeController {
     private final ReaderSessionState state;
     private final ReaderUiUtils ui;
     private final Runnable autoHideRunnable = () -> setControlsVisible(false);
+
+    private int menuPanelColor = 0xFFF7F0E1;
+    private int menuPanelStrokeColor = 0xFFE3D6C7;
+    private int menuButtonColor = 0xFFF1E8D7;
+    private int menuButtonStrokeColor = 0xFFD8CAB7;
+    private int menuTextColor = 0xFF5C4B37;
+    private int menuMutedTextColor = 0xFF6F5E46;
+    private int menuButtonTextColor = 0xFF5C4B37;
+    private int menuActiveFillColor = 0xFF1B61C9;
+    private int menuActiveStrokeColor = 0xFF254FAD;
+    private int menuActiveTextColor = 0xFFFFFFFF;
 
     private ReaderContentController content;
     private ReaderPagingAnimator paging;
@@ -236,13 +250,45 @@ public final class ReaderChromeController {
         activity.recreate();
     }
 
-    public void styleReaderMenuButton(Button button, boolean active) {
-        button.setBackgroundResource(active ? R.drawable.bg_reader_menu_button_active : R.drawable.bg_reader_menu_button_solid);
-        button.setTag(R.id.tag_glass_background, Boolean.FALSE);
-        button.setTextColor(ThemeModeHelper.resolveColor(
-                activity,
-                active ? R.color.reader_menu_button_active_text : R.color.reader_menu_button_text
+    public void applyReaderMenuPalette(ReaderThemePalette palette, int readerTextColor) {
+        if (palette == null) {
+            return;
+        }
+        menuPanelColor = opaqueColor(palette.pageColor);
+        boolean darkPanel = isDarkColor(menuPanelColor);
+        menuPanelStrokeColor = shiftSurfaceColor(menuPanelColor, darkPanel ? 0.22f : 0.13f);
+        menuButtonColor = shiftSurfaceColor(menuPanelColor, darkPanel ? 0.08f : 0.04f);
+        menuButtonStrokeColor = shiftSurfaceColor(menuPanelColor, darkPanel ? 0.24f : 0.16f);
+        menuTextColor = ensureReadableText(readerTextColor, menuPanelColor, 4.5d);
+        menuMutedTextColor = ensureReadableText(blendColors(menuTextColor, menuPanelColor, 0.18f), menuPanelColor, 4.5d);
+        menuButtonTextColor = ensureReadableText(menuTextColor, menuButtonColor, 4.5d);
+        menuActiveFillColor = opaqueColor(colorOrDefault(
+                ThemeModeHelper.resolveThemeAttrColor(activity, R.attr.themeColorReaderMenuButtonActiveFill),
+                darkPanel ? shiftSurfaceColor(menuPanelColor, 0.32f) : ThemeModeHelper.resolveColor(activity, R.color.primary)
         ));
+        menuActiveStrokeColor = opaqueColor(colorOrDefault(
+                ThemeModeHelper.resolveThemeAttrColor(activity, R.attr.themeColorReaderMenuButtonActiveStroke),
+                shiftSurfaceColor(menuActiveFillColor, isDarkColor(menuActiveFillColor) ? 0.18f : 0.16f)
+        ));
+        menuActiveTextColor = ensureReadableText(
+                ThemeModeHelper.resolveThemeAttrColor(activity, R.attr.themeColorReaderMenuButtonActiveText),
+                menuActiveFillColor,
+                4.5d
+        );
+        applyReaderMenuSurfaces();
+    }
+
+    public void styleReaderMenuButton(Button button, boolean active) {
+        if (button == null) {
+            return;
+        }
+        button.setTag(R.id.tag_glass_background, Boolean.FALSE);
+        button.setBackground(createRoundedDrawable(
+                active ? menuActiveFillColor : menuButtonColor,
+                active ? menuActiveStrokeColor : menuButtonStrokeColor,
+                resolveDimensionAttr(R.attr.themeRadiusReaderButton, 18)
+        ));
+        button.setTextColor(active ? menuActiveTextColor : menuButtonTextColor);
     }
 
     public void applyGlassOpacity() {
@@ -258,12 +304,16 @@ public final class ReaderChromeController {
     }
 
     public void styleThemeButton(Button button, boolean active) {
-        button.setBackgroundResource(active ? R.drawable.bg_reader_menu_button_active : R.drawable.bg_reader_menu_button_solid);
-        button.setTextColor(ThemeModeHelper.resolveColor(
-                activity,
-                active ? R.color.reader_menu_button_active_text : R.color.reader_menu_text_muted
+        if (button == null) {
+            return;
+        }
+        button.setTag(R.id.tag_glass_background, Boolean.FALSE);
+        button.setBackground(createRoundedDrawable(
+                active ? menuActiveFillColor : menuButtonColor,
+                active ? menuActiveStrokeColor : menuButtonStrokeColor,
+                resolveDimensionAttr(R.attr.themeRadiusReaderButton, 18)
         ));
-        button.setTag(R.id.tag_glass_background, !active);
+        button.setTextColor(active ? menuActiveTextColor : menuMutedTextColor);
     }
 
     public void setControlsVisible(boolean visible) {
@@ -356,6 +406,136 @@ public final class ReaderChromeController {
         params.rightMargin = right;
         params.bottomMargin = bottom;
         view.setLayoutParams(params);
+    }
+
+    private void applyReaderMenuSurfaces() {
+        applyReaderMenuPanel(views.menuTopPanel);
+        applyReaderMenuPanel(views.menuInfoPanel);
+        applyReaderMenuPanel(views.menuBottomPanel);
+        applyReaderMenuHierarchy(views.menuTopPanel);
+        applyReaderMenuHierarchy(views.menuInfoPanel);
+        applyReaderMenuHierarchy(views.menuBottomPanel);
+        if (views.readerProgress != null) {
+            views.readerProgress.setTag(R.id.tag_glass_background, Boolean.FALSE);
+            views.readerProgress.setBackground(createRoundedDrawable(
+                    menuButtonColor,
+                    menuButtonStrokeColor,
+                    resolveDimensionAttr(R.attr.themeRadiusPill, 999)
+            ));
+            views.readerProgress.setTextColor(menuTextColor);
+        }
+        styleReaderMenuButton(views.ttsButton, tts != null && tts.isActive());
+        styleReaderMenuButton(views.autoPageButton, autoPage != null && autoPage.isActive());
+        styleReaderMenuButton(views.themeToggleButton, ThemeModeHelper.isDark(activity.getResources()));
+    }
+
+    private void applyReaderMenuPanel(View panel) {
+        if (panel == null) {
+            return;
+        }
+        panel.setTag(R.id.tag_glass_background, Boolean.FALSE);
+        panel.setBackground(createRoundedDrawable(
+                menuPanelColor,
+                menuPanelStrokeColor,
+                resolveDimensionAttr(R.attr.themeRadiusReaderPanel, 24)
+        ));
+    }
+
+    private void applyReaderMenuHierarchy(View view) {
+        if (view == null) {
+            return;
+        }
+        if (view instanceof Button) {
+            styleReaderMenuButton((Button) view, false);
+        } else if (view instanceof TextView) {
+            ((TextView) view).setTextColor(isMutedMenuText(view) ? menuMutedTextColor : menuTextColor);
+        }
+        if (!(view instanceof ViewGroup)) {
+            return;
+        }
+        ViewGroup group = (ViewGroup) view;
+        for (int index = 0; index < group.getChildCount(); index++) {
+            applyReaderMenuHierarchy(group.getChildAt(index));
+        }
+    }
+
+    private boolean isMutedMenuText(View view) {
+        return view.getId() == R.id.text_page_meta;
+    }
+
+    private GradientDrawable createRoundedDrawable(int fillColor, int strokeColor, float radiusPx) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setShape(GradientDrawable.RECTANGLE);
+        drawable.setColor(fillColor);
+        drawable.setCornerRadius(radiusPx);
+        drawable.setStroke(Math.max(1, ui.dp(1)), strokeColor);
+        return drawable;
+    }
+
+    private float resolveDimensionAttr(int attrResId, int fallbackDp) {
+        TypedValue value = new TypedValue();
+        if (activity.getTheme().resolveAttribute(attrResId, value, true)
+                && value.type == TypedValue.TYPE_DIMENSION) {
+            return value.getDimension(activity.getResources().getDisplayMetrics());
+        }
+        return ui.dp(fallbackDp);
+    }
+
+    private int colorOrDefault(int color, int fallback) {
+        return color == 0 ? fallback : color;
+    }
+
+    private int opaqueColor(int color) {
+        return Color.rgb(Color.red(color), Color.green(color), Color.blue(color));
+    }
+
+    private int shiftSurfaceColor(int color, float amount) {
+        return blendColors(color, isDarkColor(color) ? Color.WHITE : Color.BLACK, amount);
+    }
+
+    private int ensureReadableText(int preferredColor, int backgroundColor, double minimumContrast) {
+        int preferred = opaqueColor(preferredColor);
+        if (contrastRatio(preferred, backgroundColor) >= minimumContrast) {
+            return preferred;
+        }
+        int darkText = 0xFF181D26;
+        int lightText = 0xFFFFFFFF;
+        return contrastRatio(darkText, backgroundColor) >= contrastRatio(lightText, backgroundColor)
+                ? darkText
+                : lightText;
+    }
+
+    private int blendColors(int fromColor, int toColor, float amount) {
+        float safeAmount = Math.max(0f, Math.min(1f, amount));
+        float inverse = 1f - safeAmount;
+        return Color.rgb(
+                Math.round(Color.red(fromColor) * inverse + Color.red(toColor) * safeAmount),
+                Math.round(Color.green(fromColor) * inverse + Color.green(toColor) * safeAmount),
+                Math.round(Color.blue(fromColor) * inverse + Color.blue(toColor) * safeAmount)
+        );
+    }
+
+    private boolean isDarkColor(int color) {
+        return relativeLuminance(color) < 0.32d;
+    }
+
+    private double contrastRatio(int firstColor, int secondColor) {
+        double first = relativeLuminance(firstColor) + 0.05d;
+        double second = relativeLuminance(secondColor) + 0.05d;
+        return Math.max(first, second) / Math.min(first, second);
+    }
+
+    private double relativeLuminance(int color) {
+        double red = linearizeColorChannel(Color.red(color) / 255d);
+        double green = linearizeColorChannel(Color.green(color) / 255d);
+        double blue = linearizeColorChannel(Color.blue(color) / 255d);
+        return 0.2126d * red + 0.7152d * green + 0.0722d * blue;
+    }
+
+    private double linearizeColorChannel(double value) {
+        return value <= 0.03928d
+                ? value / 12.92d
+                : Math.pow((value + 0.055d) / 1.055d, 2.4d);
     }
 
     private void applyHudSlot(TextView textView, String type) {
