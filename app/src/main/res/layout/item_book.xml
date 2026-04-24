@@ -2,21 +2,25 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:paddingTop="4dp"
-    android:paddingBottom="4dp">
+    android:paddingTop="3dp"
+    android:paddingBottom="3dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_app_card"
-        android:elevation="4dp"
+        android:elevation="3dp"
         android:gravity="center_vertical"
+        android:minHeight="112dp"
         android:orientation="horizontal"
-        android:padding="12dp">
+        android:paddingStart="12dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="10dp">
 
         <FrameLayout
-            android:layout_width="52dp"
-            android:layout_height="72dp"
+            android:layout_width="66dp"
+            android:layout_height="90dp"
             android:background="@drawable/bg_book_cover"
             android:clipToOutline="true"
             android:outlineProvider="background">
@@ -34,27 +38,13 @@
                 android:gravity="center"
                 android:text="PR"
                 android:textColor="?attr/themeColorAppButtonPrimaryText"
-                android:textSize="18sp" />
-
-            <TextView
-                android:id="@+id/text_type"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="bottom|end"
-                android:layout_margin="5dp"
-                android:background="@drawable/bg_app_outline_button_light"
-                android:paddingLeft="6dp"
-                android:paddingTop="3dp"
-                android:paddingRight="6dp"
-                android:paddingBottom="3dp"
-                android:textColor="?attr/themeColorAppBadgeText"
-                android:textSize="9sp" />
+                android:textSize="22sp" />
         </FrameLayout>
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="14dp"
+            android:layout_marginStart="12dp"
             android:layout_weight="1"
             android:orientation="vertical">
 
@@ -78,33 +68,57 @@
                     android:id="@+id/text_pin"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="10dp"
+                    android:layout_marginStart="8dp"
                     android:background="@drawable/bg_chip"
-                    android:paddingLeft="9dp"
-                    android:paddingTop="4dp"
-                    android:paddingRight="9dp"
-                    android:paddingBottom="4dp"
+                    android:paddingStart="8dp"
+                    android:paddingTop="3dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="3dp"
                     android:text="置顶"
                     android:textColor="?attr/themeColorAppButtonPrimaryText"
                     android:textSize="10sp"
                     android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/text_type"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_app_outline_button_light"
+                    android:paddingStart="7dp"
+                    android:paddingTop="3dp"
+                    android:paddingEnd="7dp"
+                    android:paddingBottom="3dp"
+                    android:textColor="?attr/themeColorAppBadgeText"
+                    android:textSize="10sp" />
             </LinearLayout>
 
             <TextView
                 android:id="@+id/text_author"
                 style="@style/AppChromeBodyMuted"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="7dp"
                 android:ellipsize="end"
                 android:maxLines="1" />
 
             <TextView
-                android:id="@+id/text_meta"
+                android:id="@+id/text_current_chapter"
                 style="@style/AppChromeCaption"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp" />
+                android:layout_marginTop="8dp"
+                android:ellipsize="end"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/text_recent_read"
+                style="@style/AppChromeMicro"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:ellipsize="end"
+                android:maxLines="1" />
         </LinearLayout>
     </LinearLayout>
 

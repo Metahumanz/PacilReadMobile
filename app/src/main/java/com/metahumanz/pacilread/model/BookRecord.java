@@ -12,4 +12,6 @@ public class BookRecord {
     public int progressOffset;
     public long lastReadAt;
     public boolean pinned;
+    public String currentChapterTitle;
+    public int chapterCount;
 }

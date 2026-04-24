@@ -266,7 +266,8 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
 
     public synchronized List<BookRecord> getBooks() {
         List<BookRecord> books = new ArrayList<>();
-        try (Cursor cursor = getReadableDatabase().query(
+        SQLiteDatabase db = getReadableDatabase();
+        try (Cursor cursor = db.query(
                 "books",
                 null,
                 null,
@@ -276,7 +277,9 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 "pinned DESC, last_read_at DESC, title COLLATE NOCASE ASC"
         )) {
             while (cursor.moveToNext()) {
-                books.add(readBook(cursor));
+                BookRecord book = readBook(cursor);
+                populateBookshelfSummary(db, book);
+                books.add(book);
             }
         }
         return books;
@@ -941,6 +944,35 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         book.lastReadAt = cursor.getLong(cursor.getColumnIndexOrThrow("last_read_at"));
         book.pinned = cursor.getInt(cursor.getColumnIndexOrThrow("pinned")) == 1;
         return book;
+    }
+
+    private void populateBookshelfSummary(SQLiteDatabase db, BookRecord book) {
+        if (book == null) {
+            return;
+        }
+        try (Cursor cursor = db.query(
+                "chapters",
+                new String[]{"title"},
+                "book_id=?",
+                new String[]{String.valueOf(book.id)},
+                null,
+                null,
+                "order_index ASC"
+        )) {
+            book.chapterCount = cursor.getCount();
+            if (book.chapterCount <= 0) {
+                book.progressIndex = 0;
+                book.currentChapterTitle = "";
+                return;
+            }
+            int safeProgressIndex = Math.max(0, Math.min(book.progressIndex, book.chapterCount - 1));
+            book.progressIndex = safeProgressIndex;
+            if (cursor.moveToPosition(safeProgressIndex)) {
+                book.currentChapterTitle = cursor.getString(cursor.getColumnIndexOrThrow("title"));
+            } else {
+                book.currentChapterTitle = "";
+            }
+        }
     }
 
     private String getOptionalString(Cursor cursor, String columnName, String fallbackColumnName) {

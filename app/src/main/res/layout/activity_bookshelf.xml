@@ -185,10 +185,11 @@
                     android:layout_height="match_parent"
                     android:clipToPadding="false"
                     android:divider="@android:color/transparent"
-                    android:dividerHeight="8dp"
+                    android:dividerHeight="4dp"
                     android:listSelector="@android:color/transparent"
                     android:overScrollMode="never"
-                    android:paddingBottom="6dp"
+                    android:paddingTop="1dp"
+                    android:paddingBottom="10dp"
                     android:scrollbars="none"
                     android:visibility="gone" />
 
