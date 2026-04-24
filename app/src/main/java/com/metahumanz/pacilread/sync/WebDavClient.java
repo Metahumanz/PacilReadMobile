@@ -49,11 +49,7 @@ public class WebDavClient {
         String base = requireConfiguredServerUrl();
         Response response = request(base, "PROPFIND", null, "0");
         requireSuccessfulResponse(response, "连接服务器", false);
-        try {
-            ensureProgressDirectory();
-        } catch (Exception ignored) {
-            // Match the Win11 probe behavior: connection success is determined by the root PROPFIND.
-        }
+        ensureProgressDirectory();
         return response;
     }
 
@@ -218,7 +214,7 @@ public class WebDavClient {
     }
 
     public void downloadFile(String remoteUrl, File destination) throws Exception {
-        Response response = request(remoteUrl, "GET", null, null);
+        BinaryResponse response = requestBinary(remoteUrl, "GET");
         if (response.code < 200 || response.code >= 300) {
             throw new IllegalStateException("HTTP " + response.code);
         }
@@ -226,7 +222,7 @@ public class WebDavClient {
             throw new IllegalStateException("无法创建目录: " + destination.getParent());
         }
         try (FileOutputStream outputStream = new FileOutputStream(destination)) {
-            outputStream.write(response.body.getBytes(StandardCharsets.ISO_8859_1));
+            outputStream.write(response.bytes);
         }
     }
 
