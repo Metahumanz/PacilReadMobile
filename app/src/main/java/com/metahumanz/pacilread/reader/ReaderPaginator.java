@@ -1,6 +1,5 @@
 package com.metahumanz.pacilread.reader;
 
-import android.graphics.text.LineBreaker;
 import android.text.Layout;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -105,8 +104,8 @@ public final class ReaderPaginator {
                 .setAlignment(Layout.Alignment.ALIGN_NORMAL)
                 .setIncludePad(false)
                 .setLineSpacing(lineSpacingExtra, 1f)
-                .setBreakStrategy(LineBreaker.BREAK_STRATEGY_HIGH_QUALITY)
-                .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NORMAL)
+                .setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE)
+                .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
                 .build();
     }
 

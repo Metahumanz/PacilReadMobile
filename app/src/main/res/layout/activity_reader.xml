@@ -46,6 +46,7 @@
                 android:layout_weight="1"
                 android:fontFamily="serif"
                 android:gravity="start|top"
+                android:includeFontPadding="false"
                 android:lineSpacingExtra="9sp"
                 android:textColor="?attr/themeColorOnSurface"
                 android:textSize="19sp" />
@@ -81,6 +82,7 @@
                 android:layout_weight="1"
                 android:fontFamily="serif"
                 android:gravity="start|top"
+                android:includeFontPadding="false"
                 android:lineSpacingExtra="9sp"
                 android:textColor="?attr/themeColorOnSurface"
                 android:textSize="19sp" />

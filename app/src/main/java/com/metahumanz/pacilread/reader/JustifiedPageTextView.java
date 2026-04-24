@@ -3,12 +3,10 @@ package com.metahumanz.pacilread.reader;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.graphics.text.LineBreaker;
 import android.text.Layout;
 import android.text.Spanned;
 import android.text.TextPaint;
 import android.text.style.AlignmentSpan;
-import android.text.style.LeadingMarginSpan;
 import android.text.style.LineHeightSpan;
 import android.util.AttributeSet;
 
@@ -42,8 +40,9 @@ public class JustifiedPageTextView extends AppCompatTextView {
     }
 
     private void init() {
-        setBreakStrategy(LineBreaker.BREAK_STRATEGY_HIGH_QUALITY);
-        setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NORMAL);
+        setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE);
+        setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE);
+        setIncludeFontPadding(false);
         highlightPaint.setColor(0x40FFC107);
         highlightPaint.setStyle(Paint.Style.FILL);
     }
@@ -91,7 +90,7 @@ public class JustifiedPageTextView extends AppCompatTextView {
                 continue;
             }
             if (shouldUsePlatformLine(text, start, end)) {
-                float platformLineLeft = layout.getLineLeft(lineIndex) + getLeadingMargin(text, start, visibleEnd);
+                float platformLineLeft = layout.getLineLeft(lineIndex);
                 drawLineHighlight(canvas, platformLineLeft, layout.getLineBaseline(lineIndex), paint, text, start, visibleEnd);
                 drawPlatformLine(canvas, layout, lineIndex, availableWidth);
                 continue;
@@ -102,9 +101,9 @@ public class JustifiedPageTextView extends AppCompatTextView {
             if (drawLine.isEmpty()) {
                 continue;
             }
-            float lineLeft = layout.getLineLeft(lineIndex) + getLeadingMargin(text, start, visibleEnd);
+            float lineLeft = lineContentLeft(layout, lineIndex);
             float baseline = layout.getLineBaseline(lineIndex);
-            float lineAvailableWidth = Math.max(0f, availableWidth - Math.max(0f, lineLeft));
+            float lineAvailableWidth = lineContentWidth(layout, lineIndex, availableWidth);
 
             if (shouldJustify(drawLine, paragraphEnd, lineAvailableWidth, paint)) {
                 drawJustifiedLineWithHighlight(canvas, drawLine, lineLeft, baseline, lineAvailableWidth, paint, text, start, visibleEnd);
@@ -126,23 +125,14 @@ public class JustifiedPageTextView extends AppCompatTextView {
                 || spanned.getSpans(lineStart, lineEnd, LineHeightSpan.class).length > 0;
     }
 
-    private int getLeadingMargin(CharSequence text, int lineStart, int lineEnd) {
-        if (!(text instanceof Spanned) || lineEnd <= lineStart) {
-            return 0;
-        }
-        Spanned spanned = (Spanned) text;
-        LeadingMarginSpan[] spans = spanned.getSpans(lineStart, lineEnd, LeadingMarginSpan.class);
-        int margin = 0;
-        for (LeadingMarginSpan span : spans) {
-            int spanStart = spanned.getSpanStart(span);
-            int spanEnd = spanned.getSpanEnd(span);
-            if (spanStart < 0 || spanEnd <= lineStart || spanStart >= lineEnd) {
-                continue;
-            }
-            boolean firstLine = lineStart <= spanStart;
-            margin += span.getLeadingMargin(firstLine);
-        }
-        return Math.max(0, margin);
+    private float lineContentLeft(Layout layout, int lineIndex) {
+        return Math.max(0f, layout.getParagraphLeft(lineIndex));
+    }
+
+    private float lineContentWidth(Layout layout, int lineIndex, int availableWidth) {
+        float paragraphLeft = lineContentLeft(layout, lineIndex);
+        float paragraphRight = Math.min(availableWidth, layout.getParagraphRight(lineIndex));
+        return Math.max(0f, paragraphRight - paragraphLeft);
     }
 
     private void drawPlatformLine(Canvas canvas, Layout layout, int lineIndex, int availableWidth) {
@@ -168,7 +158,7 @@ public class JustifiedPageTextView extends AppCompatTextView {
             if (start >= visibleEnd) {
                 continue;
             }
-            float lineLeft = layout.getLineLeft(lineIndex) + getLeadingMargin(text, start, visibleEnd);
+            float lineLeft = layout.getLineLeft(lineIndex);
             drawLineHighlight(canvas, lineLeft, layout.getLineBaseline(lineIndex), paint, text, start, visibleEnd);
         }
         canvas.restoreToCount(saveCount);
