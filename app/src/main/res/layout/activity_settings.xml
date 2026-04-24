@@ -114,8 +114,9 @@
 
                         <Button
                             android:id="@+id/button_light_style_yaobai"
+                            style="@style/AppChromeCompactToggleButton"
                             android:layout_width="0dp"
-                            android:layout_height="40dp"
+                            android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:background="@drawable/bg_app_outline_button"
                             android:text="曜白"
@@ -124,8 +125,9 @@
 
                         <Button
                             android:id="@+id/button_light_style_yunbai"
+                            style="@style/AppChromeCompactToggleButton"
                             android:layout_width="0dp"
-                            android:layout_height="40dp"
+                            android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
                             android:layout_weight="1"
                             android:background="@drawable/bg_app_outline_button"
@@ -149,8 +151,9 @@
 
                         <Button
                             android:id="@+id/button_dark_style_yemu"
+                            style="@style/AppChromeCompactToggleButton"
                             android:layout_width="0dp"
-                            android:layout_height="40dp"
+                            android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:background="@drawable/bg_app_outline_button"
                             android:text="夜幕"
@@ -159,8 +162,9 @@
 
                         <Button
                             android:id="@+id/button_dark_style_jiye"
+                            style="@style/AppChromeCompactToggleButton"
                             android:layout_width="0dp"
-                            android:layout_height="40dp"
+                            android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
                             android:layout_weight="1"
                             android:background="@drawable/bg_app_outline_button"
@@ -309,8 +313,9 @@
 
                             <Button
                                 android:id="@+id/button_stats_period_today"
+                                style="@style/AppChromeCompactToggleButton"
                                 android:layout_width="0dp"
-                                android:layout_height="40dp"
+                                android:layout_height="wrap_content"
                                 android:layout_weight="1"
                                 android:background="@drawable/bg_app_primary_button"
                                 android:text="本日"
@@ -319,8 +324,9 @@
 
                             <Button
                                 android:id="@+id/button_stats_period_week"
+                                style="@style/AppChromeCompactToggleButton"
                                 android:layout_width="0dp"
-                                android:layout_height="40dp"
+                                android:layout_height="wrap_content"
                                 android:layout_marginStart="8dp"
                                 android:layout_weight="1"
                                 android:background="@drawable/bg_app_outline_button"
@@ -330,8 +336,9 @@
 
                             <Button
                                 android:id="@+id/button_stats_period_year"
+                                style="@style/AppChromeCompactToggleButton"
                                 android:layout_width="0dp"
-                                android:layout_height="40dp"
+                                android:layout_height="wrap_content"
                                 android:layout_marginStart="8dp"
                                 android:layout_weight="1"
                                 android:background="@drawable/bg_app_outline_button"
@@ -352,9 +359,11 @@
 
                         <Button
                             android:id="@+id/button_open_reading_stats"
+                            style="@style/AppChromeCompactToggleButton"
                             android:layout_width="match_parent"
-                            android:layout_height="46dp"
+                            android:layout_height="wrap_content"
                             android:layout_marginTop="14dp"
+                            android:minHeight="46dp"
                             android:background="@drawable/bg_app_outline_button"
                             android:text="查看详细统计"
                             android:textAllCaps="false"
@@ -482,8 +491,9 @@
 
                             <Button
                                 android:id="@+id/button_webdav_sync_bookshelf"
+                                style="@style/AppChromeCompactToggleButton"
                                 android:layout_width="0dp"
-                                android:layout_height="40dp"
+                                android:layout_height="wrap_content"
                                 android:layout_columnWeight="1"
                                 android:layout_margin="2dp"
                                 android:background="@drawable/bg_app_outline_button"
@@ -494,8 +504,9 @@
 
                             <Button
                                 android:id="@+id/button_webdav_sync_files"
+                                style="@style/AppChromeCompactToggleButton"
                                 android:layout_width="0dp"
-                                android:layout_height="40dp"
+                                android:layout_height="wrap_content"
                                 android:layout_columnWeight="1"
                                 android:layout_margin="2dp"
                                 android:background="@drawable/bg_app_outline_button"
@@ -506,8 +517,9 @@
 
                             <Button
                                 android:id="@+id/button_webdav_sync_ui"
+                                style="@style/AppChromeCompactToggleButton"
                                 android:layout_width="0dp"
-                                android:layout_height="40dp"
+                                android:layout_height="wrap_content"
                                 android:layout_columnWeight="1"
                                 android:layout_margin="2dp"
                                 android:background="@drawable/bg_app_outline_button"
@@ -518,8 +530,9 @@
 
                             <Button
                                 android:id="@+id/button_webdav_sync_themes"
+                                style="@style/AppChromeCompactToggleButton"
                                 android:layout_width="0dp"
-                                android:layout_height="40dp"
+                                android:layout_height="wrap_content"
                                 android:layout_columnWeight="1"
                                 android:layout_margin="2dp"
                                 android:background="@drawable/bg_app_outline_button"
@@ -530,8 +543,9 @@
 
                             <Button
                                 android:id="@+id/button_webdav_sync_backgrounds"
+                                style="@style/AppChromeCompactToggleButton"
                                 android:layout_width="0dp"
-                                android:layout_height="40dp"
+                                android:layout_height="wrap_content"
                                 android:layout_columnWeight="1"
                                 android:layout_margin="2dp"
                                 android:background="@drawable/bg_app_outline_button"
@@ -542,8 +556,9 @@
 
                             <Button
                                 android:id="@+id/button_webdav_sync_reading_stats"
+                                style="@style/AppChromeCompactToggleButton"
                                 android:layout_width="0dp"
-                                android:layout_height="40dp"
+                                android:layout_height="wrap_content"
                                 android:layout_columnWeight="1"
                                 android:layout_margin="2dp"
                                 android:background="@drawable/bg_app_outline_button"
@@ -555,9 +570,11 @@
 
                         <Button
                             android:id="@+id/button_test_webdav"
+                            style="@style/AppChromeCompactToggleButton"
                             android:layout_width="match_parent"
-                            android:layout_height="48dp"
+                            android:layout_height="wrap_content"
                             android:layout_marginTop="16dp"
+                            android:minHeight="48dp"
                             android:background="@drawable/bg_app_outline_button"
                             android:text="测试 WebDAV 连接"
                             android:textAllCaps="false"
@@ -607,10 +624,12 @@
 
                         <Button
                             android:id="@+id/button_full_backup"
+                            style="@style/AppChromeCompactToggleButton"
                             android:layout_width="0dp"
-                            android:layout_height="46dp"
+                            android:layout_height="wrap_content"
                             android:layout_marginEnd="5dp"
                             android:layout_weight="1"
+                            android:minHeight="46dp"
                             android:background="@drawable/bg_app_positive_button"
                             android:text="全量备份"
                             android:textAllCaps="false"
@@ -618,10 +637,12 @@
 
                         <Button
                             android:id="@+id/button_full_restore"
+                            style="@style/AppChromeCompactToggleButton"
                             android:layout_width="0dp"
-                            android:layout_height="46dp"
+                            android:layout_height="wrap_content"
                             android:layout_marginStart="5dp"
                             android:layout_weight="1"
+                            android:minHeight="46dp"
                             android:background="@drawable/bg_app_outline_button"
                             android:text="全量恢复"
                             android:textAllCaps="false"
@@ -644,10 +665,12 @@
 
                         <Button
                             android:id="@+id/button_lite_backup"
+                            style="@style/AppChromeCompactToggleButton"
                             android:layout_width="0dp"
-                            android:layout_height="46dp"
+                            android:layout_height="wrap_content"
                             android:layout_marginEnd="5dp"
                             android:layout_weight="1"
+                            android:minHeight="46dp"
                             android:background="@drawable/bg_app_positive_button"
                             android:text="增量备份"
                             android:textAllCaps="false"
@@ -655,10 +678,12 @@
 
                         <Button
                             android:id="@+id/button_lite_restore"
+                            style="@style/AppChromeCompactToggleButton"
                             android:layout_width="0dp"
-                            android:layout_height="46dp"
+                            android:layout_height="wrap_content"
                             android:layout_marginStart="5dp"
                             android:layout_weight="1"
+                            android:minHeight="46dp"
                             android:background="@drawable/bg_app_outline_button"
                             android:text="增量恢复"
                             android:textAllCaps="false"
@@ -725,9 +750,11 @@
 
                     <Button
                         android:id="@+id/button_test_tts"
+                        style="@style/AppChromeCompactToggleButton"
                         android:layout_width="match_parent"
-                        android:layout_height="46dp"
+                        android:layout_height="wrap_content"
                         android:layout_marginTop="14dp"
+                        android:minHeight="46dp"
                         android:background="@drawable/bg_app_outline_button"
                         android:text="测试朗读"
                         android:textAllCaps="false"
