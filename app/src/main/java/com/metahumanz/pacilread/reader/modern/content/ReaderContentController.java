@@ -14,6 +14,7 @@ import android.text.style.LineHeightSpan;
 import android.util.Log;
 import android.util.LruCache;
 import android.view.View;
+import android.view.ViewTreeObserver;
 
 import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.model.ChapterRecord;
@@ -42,6 +43,8 @@ import java.util.Map;
 public final class ReaderContentController {
     private static final String TAG = "PacilReadReader";
     private static final long REFLOW_DEBOUNCE_MS = 32L;
+    private static final long LAYOUT_WAIT_FALLBACK_MS = 180L;
+    private static final int MAX_LAYOUT_WAIT_PASSES = 2;
 
     private static long lastCachedBookId = -1L;
     private static BookRecord cachedBook;
@@ -67,6 +70,7 @@ public final class ReaderContentController {
     private int pendingReflowChapterIndex = -1;
     private int pendingReflowAnchorOffset = 0;
     private int reflowGeneration = 0;
+    private Boolean lastAppliedDoublePageActive = null;
 
     public ReaderContentController(
             ModernReaderActivity activity,
@@ -478,6 +482,7 @@ public final class ReaderContentController {
 
     public void clearPageCache() {
         cachedPageSlicesMap.clear();
+        cachedLayoutSignature = null;
     }
 
     public void clearAllReaderCaches() {
@@ -619,59 +624,141 @@ public final class ReaderContentController {
         final int generation = reflowGeneration;
         final int chapterIndex = ui.clamp(pendingReflowChapterIndex, 0, state.chapters.size() - 1);
         final int anchorOffset = Math.max(pendingReflowAnchorOffset, 0);
+        final Boolean previousDoublePageActive = lastAppliedDoublePageActive;
         style.applyReaderSettings();
+        final boolean nextDoublePageActive = isDoublePageActive();
+        final boolean doublePageStateChanged = previousDoublePageActive == null
+                || previousDoublePageActive != nextDoublePageActive;
         runAfterNextPageLayout(generation, () -> {
             if (generation != reflowGeneration) {
                 return;
             }
+            if (doublePageStateChanged) {
+                clearPageCache();
+                paging.invalidatePreparedPagingSnapshots();
+            }
             ensurePaginationCacheMatchesLayout();
             navigation.openChapter(chapterIndex, anchorOffset, false, 0);
+            lastAppliedDoublePageActive = isDoublePageActive();
         });
     }
 
     private void runAfterNextPageLayout(int generation, Runnable action) {
-        if (views.pageBodyCurrent == null) {
+        View target = views.pageCurrent == null ? views.pageBodyCurrent : views.pageCurrent;
+        if (target == null) {
+            action.run();
+            return;
+        }
+        waitForNextPagePreDraw(generation, target, 0, action);
+    }
+
+    private void waitForNextPagePreDraw(int generation, View target, int pass, Runnable action) {
+        if (generation != reflowGeneration) {
+            return;
+        }
+        if (pass > 0 && isPaginationLayoutReady()) {
             action.run();
             return;
         }
         final boolean[] completed = new boolean[]{false};
-        View.OnLayoutChangeListener listener = new View.OnLayoutChangeListener() {
-            @Override
-            public void onLayoutChange(
-                    View view,
-                    int left,
-                    int top,
-                    int right,
-                    int bottom,
-                    int oldLeft,
-                    int oldTop,
-                    int oldRight,
-                    int oldBottom
-            ) {
-                if (completed[0]) {
-                    return;
-                }
-                completed[0] = true;
-                view.removeOnLayoutChangeListener(this);
-                if (generation == reflowGeneration) {
-                    action.run();
-                }
-            }
-        };
-        views.pageBodyCurrent.addOnLayoutChangeListener(listener);
-        views.pageCurrent.requestLayout();
-        views.pageIncoming.requestLayout();
-        views.pageBodyCurrent.requestLayout();
-        views.pageBodyCurrent.post(() -> {
+        final ViewTreeObserver.OnPreDrawListener[] listenerRef = new ViewTreeObserver.OnPreDrawListener[1];
+        Runnable complete = () -> {
             if (completed[0]) {
                 return;
             }
             completed[0] = true;
-            views.pageBodyCurrent.removeOnLayoutChangeListener(listener);
-            if (generation == reflowGeneration) {
-                action.run();
+            removePreDrawListener(target, listenerRef[0]);
+            if (generation != reflowGeneration) {
+                return;
             }
-        });
+            if (isPaginationLayoutReady() || pass >= MAX_LAYOUT_WAIT_PASSES) {
+                action.run();
+                return;
+            }
+            requestPageLayerLayout();
+            waitForNextPagePreDraw(generation, target, pass + 1, action);
+        };
+        listenerRef[0] = new ViewTreeObserver.OnPreDrawListener() {
+            @Override
+            public boolean onPreDraw() {
+                target.post(complete);
+                return true;
+            }
+        };
+        target.getViewTreeObserver().addOnPreDrawListener(listenerRef[0]);
+        requestPageLayerLayout();
+        target.postDelayed(complete, LAYOUT_WAIT_FALLBACK_MS);
+    }
+
+    private void requestPageLayerLayout() {
+        requestLayout(views.pageCurrent);
+        requestLayout(views.pageIncoming);
+        requestLayout(views.pageCurrentLeftPane);
+        requestLayout(views.pageCurrentRightPane);
+        requestLayout(views.pageCurrentGutter);
+        requestLayout(views.pageIncomingLeftPane);
+        requestLayout(views.pageIncomingRightPane);
+        requestLayout(views.pageIncomingGutter);
+        requestLayout(views.pageBodyCurrent);
+        requestLayout(views.pageBodyCurrentRight);
+        requestLayout(views.pageBodyIncoming);
+        requestLayout(views.pageBodyIncomingRight);
+    }
+
+    private void requestLayout(View view) {
+        if (view != null) {
+            view.requestLayout();
+        }
+    }
+
+    private void removePreDrawListener(View target, ViewTreeObserver.OnPreDrawListener listener) {
+        if (target == null || listener == null) {
+            return;
+        }
+        ViewTreeObserver observer = target.getViewTreeObserver();
+        if (observer != null && observer.isAlive()) {
+            observer.removeOnPreDrawListener(listener);
+        }
+    }
+
+    private boolean isPaginationLayoutReady() {
+        if (views.pageCurrent == null || views.pageBodyCurrent == null) {
+            return true;
+        }
+        if (views.pageCurrent.isLayoutRequested() || views.pageBodyCurrent.isLayoutRequested()) {
+            return false;
+        }
+        int pageWidth = views.pageCurrent.getWidth();
+        int bodyWidth = views.pageBodyCurrent.getWidth();
+        int bodyHeight = views.pageBodyCurrent.getHeight();
+        if (pageWidth <= 0 || bodyWidth <= 0 || bodyHeight <= 0) {
+            return false;
+        }
+        int contentWidth = Math.max(0, pageWidth
+                - views.pageCurrent.getPaddingLeft()
+                - views.pageCurrent.getPaddingRight());
+        if (contentWidth <= 0) {
+            return false;
+        }
+        boolean doublePageActive = isDoublePageActive();
+        int expectedVisibility = doublePageActive ? View.VISIBLE : View.GONE;
+        if (!hasVisibility(views.pageCurrentRightPane, expectedVisibility)
+                || !hasVisibility(views.pageCurrentGutter, expectedVisibility)) {
+            return false;
+        }
+        int tolerance = ui.dp(4);
+        if (!doublePageActive) {
+            return bodyWidth >= contentWidth - tolerance;
+        }
+        int gutterWidth = views.pageCurrentGutter == null
+                ? ui.dp(22)
+                : Math.max(views.pageCurrentGutter.getWidth(), ui.dp(22));
+        int expectedPaneWidth = Math.max(0, (contentWidth - gutterWidth) / 2);
+        return Math.abs(bodyWidth - expectedPaneWidth) <= tolerance;
+    }
+
+    private boolean hasVisibility(View view, int visibility) {
+        return view == null || view.getVisibility() == visibility;
     }
 
     private List<PageSlice> sanitizePageSlices(List<PageSlice> pages) {
