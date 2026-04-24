@@ -237,6 +237,19 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         views.ttsButton.setOnClickListener(v -> tts.showTtsDialog());
         views.autoPageButton.setOnClickListener(v -> autoPage.showAutoPageDialog());
         views.readerTitle.setOnClickListener(v -> openReadingStatsForCurrentBook());
+        views.pageStage.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            int width = right - left;
+            int height = bottom - top;
+            int oldWidth = oldRight - oldLeft;
+            int oldHeight = oldBottom - oldTop;
+            if (width <= 0 || height <= 0 || (width == oldWidth && height == oldHeight)) {
+                return;
+            }
+            chrome.updateReaderHud();
+            if (state.book != null && !state.chapters.isEmpty()) {
+                content.scheduleReflowAfterLayout(state.currentChapterIndex, content.currentCharOffset());
+            }
+        });
 
         View.OnTouchListener keepMenuAliveListener = (view, event) -> {
             if (state.controlsVisible && event.getActionMasked() == MotionEvent.ACTION_DOWN) {

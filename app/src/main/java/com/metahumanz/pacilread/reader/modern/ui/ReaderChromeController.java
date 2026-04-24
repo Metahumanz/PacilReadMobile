@@ -26,6 +26,7 @@ import com.metahumanz.pacilread.reader.modern.ReaderUiUtils;
 import com.metahumanz.pacilread.reader.modern.ReaderViewRefs;
 import com.metahumanz.pacilread.reader.modern.content.ReaderContentController;
 import com.metahumanz.pacilread.reader.modern.paging.ReaderPagingAnimator;
+import com.metahumanz.pacilread.reader.modern.theme.ReaderDisplayModeHelper;
 import com.metahumanz.pacilread.reader.modern.theme.ReaderThemePalette;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.ui.GlassUiHelper;
@@ -199,11 +200,11 @@ public final class ReaderChromeController {
                 chapter.title
         ));
         if ("book".equals(runtime.settingsStore.getReaderSliderMode())) {
-            views.pageMeta.setText(String.format(Locale.SIMPLIFIED_CHINESE, "第 %d/%d 页 · 全书章节", state.currentPageIndex + 1, safePageCount));
+            views.pageMeta.setText(currentChapterPageText() + " · 全书章节");
             views.progressSeekBar.setMax(Math.max(state.chapters.size() - 1, 0));
             views.progressSeekBar.setProgress(state.currentChapterIndex);
         } else {
-            views.pageMeta.setText(String.format(Locale.SIMPLIFIED_CHINESE, "第 %d/%d 页 · 本章页数", state.currentPageIndex + 1, safePageCount));
+            views.pageMeta.setText(currentChapterPageText() + " · 本章页数");
             views.progressSeekBar.setMax(Math.max(safePageCount - 1, 0));
             views.progressSeekBar.setProgress(state.currentPageIndex);
         }
@@ -236,11 +237,20 @@ public final class ReaderChromeController {
         if (state.book == null || state.chapters.isEmpty()) {
             return;
         }
+        boolean showCenterSlots = isLandscapeHudMode();
         applyHudSlot(views.hudTopLeft, runtime.settingsStore.getHudTopLeft());
-        applyHudSlot(views.hudTopCenter, runtime.settingsStore.getHudTopCenter());
+        if (showCenterSlots) {
+            applyHudSlot(views.hudTopCenter, runtime.settingsStore.getHudTopCenter());
+        } else {
+            hideHudSlot(views.hudTopCenter);
+        }
         applyHudSlot(views.hudTopRight, runtime.settingsStore.getHudTopRight());
         applyHudSlot(views.hudBottomLeft, runtime.settingsStore.getHudBottomLeft());
-        applyHudSlot(views.hudBottomCenter, runtime.settingsStore.getHudBottomCenter());
+        if (showCenterSlots) {
+            applyHudSlot(views.hudBottomCenter, runtime.settingsStore.getHudBottomCenter());
+        } else {
+            hideHudSlot(views.hudBottomCenter);
+        }
         applyHudSlot(views.hudBottomRight, runtime.settingsStore.getHudBottomRight());
     }
 
@@ -552,6 +562,14 @@ public final class ReaderChromeController {
         textView.setVisibility(View.VISIBLE);
     }
 
+    private void hideHudSlot(TextView textView) {
+        if (textView == null) {
+            return;
+        }
+        textView.setText("");
+        textView.setVisibility(View.GONE);
+    }
+
     private String hudTextForSlot(String type) {
         switch (type) {
             case "title":
@@ -607,7 +625,25 @@ public final class ReaderChromeController {
 
     private String currentChapterPageText() {
         int safePageCount = Math.max(content.getPagesForChapter(state.currentChapterIndex).size(), 1);
-        return String.format(Locale.SIMPLIFIED_CHINESE, "第 %d/%d 页", state.currentPageIndex + 1, safePageCount);
+        int pagesPerScreen = ReaderDisplayModeHelper.pagesPerScreen(
+                activity,
+                runtime.settingsStore,
+                views.pageStage == null ? 0 : views.pageStage.getWidth(),
+                views.pageStage == null ? 0 : views.pageStage.getHeight()
+        );
+        int startPage = Math.min(state.currentPageIndex + 1, safePageCount);
+        int endPage = Math.min(state.currentPageIndex + pagesPerScreen, safePageCount);
+        if (pagesPerScreen > 1 && endPage > startPage) {
+            return String.format(Locale.SIMPLIFIED_CHINESE, "第 %d-%d/%d 页", startPage, endPage, safePageCount);
+        }
+        return String.format(Locale.SIMPLIFIED_CHINESE, "第 %d/%d 页", startPage, safePageCount);
+    }
+
+    private boolean isLandscapeHudMode() {
+        return views.pageStage != null
+                && views.pageStage.getWidth() > 0
+                && views.pageStage.getHeight() > 0
+                && views.pageStage.getWidth() > views.pageStage.getHeight();
     }
 
     private String currentBookProgressPercentText() {

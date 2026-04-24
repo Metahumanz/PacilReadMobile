@@ -32,10 +32,10 @@ public final class ReaderThemePalette {
         }
         if ("night".equals(key)) {
             return new ReaderThemePalette(
-                    0xFF0F172A,
-                    0xFF172033,
-                    0xFFE2E8F0,
-                    0xCC0A0F17,
+                    0xFF0B1320,
+                    0xFF121C2B,
+                    0xFFDDE7EE,
+                    0xD20B121D,
                     R.drawable.theme_bg_night,
                     "夜航"
             );

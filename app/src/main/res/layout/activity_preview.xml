@@ -127,6 +127,7 @@
                         android:text="阅读页预览" />
 
                     <FrameLayout
+                        android:id="@+id/layout_preview_reader_stage"
                         android:layout_width="match_parent"
                         android:layout_height="360dp"
                         android:layout_marginTop="14dp"
@@ -148,29 +149,74 @@
                             android:id="@+id/layout_preview_reader_page"
                             android:layout_width="match_parent"
                             android:layout_height="match_parent"
-                            android:orientation="vertical"
+                            android:orientation="horizontal"
                             android:padding="18dp">
 
-                            <TextView
-                                android:id="@+id/text_preview_reader_heading"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:includeFontPadding="false"
-                                android:text="前言"
-                                android:textColor="?attr/themeColorOnSurface"
-                                android:textSize="18sp"
-                                android:textStyle="bold" />
-
-                            <com.metahumanz.pacilread.reader.JustifiedPageTextView
-                                android:id="@+id/text_preview_reader_body"
-                                android:layout_width="match_parent"
-                                android:layout_height="0dp"
-                                android:layout_marginTop="14dp"
+                            <LinearLayout
+                                android:id="@+id/layout_preview_reader_left_page"
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
                                 android:layout_weight="1"
-                                android:includeFontPadding="false"
-                                android:lineSpacingExtra="5sp"
-                                android:textColor="?attr/themeColorOnSurface"
-                                android:textSize="14sp" />
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:id="@+id/text_preview_reader_heading"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:includeFontPadding="false"
+                                    android:text="前言"
+                                    android:textColor="?attr/themeColorOnSurface"
+                                    android:textSize="18sp"
+                                    android:textStyle="bold" />
+
+                                <com.metahumanz.pacilread.reader.JustifiedPageTextView
+                                    android:id="@+id/text_preview_reader_body"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="0dp"
+                                    android:layout_marginTop="14dp"
+                                    android:layout_weight="1"
+                                    android:includeFontPadding="false"
+                                    android:lineSpacingExtra="5sp"
+                                    android:textColor="?attr/themeColorOnSurface"
+                                    android:textSize="14sp" />
+                            </LinearLayout>
+
+                            <View
+                                android:id="@+id/view_preview_reader_gutter"
+                                android:layout_width="18dp"
+                                android:layout_height="match_parent"
+                                android:visibility="gone" />
+
+                            <LinearLayout
+                                android:id="@+id/layout_preview_reader_right_page"
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:orientation="vertical"
+                                android:visibility="gone">
+
+                                <TextView
+                                    android:id="@+id/text_preview_reader_heading_right"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:includeFontPadding="false"
+                                    android:text="第一章"
+                                    android:textColor="?attr/themeColorOnSurface"
+                                    android:textSize="18sp"
+                                    android:textStyle="bold"
+                                    android:visibility="gone" />
+
+                                <com.metahumanz.pacilread.reader.JustifiedPageTextView
+                                    android:id="@+id/text_preview_reader_body_right"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="0dp"
+                                    android:layout_marginTop="14dp"
+                                    android:layout_weight="1"
+                                    android:includeFontPadding="false"
+                                    android:lineSpacingExtra="5sp"
+                                    android:textColor="?attr/themeColorOnSurface"
+                                    android:textSize="14sp" />
+                            </LinearLayout>
                         </LinearLayout>
                     </FrameLayout>
                 </LinearLayout>

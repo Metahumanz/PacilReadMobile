@@ -1,5 +1,6 @@
 package com.metahumanz.pacilread.reader.modern.ui;
 
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -11,6 +12,8 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.widget.CheckBox;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.metahumanz.pacilread.reader.modern.ModernReaderActivity;
@@ -21,7 +24,9 @@ import com.metahumanz.pacilread.reader.modern.ReaderViewRefs;
 import com.metahumanz.pacilread.reader.modern.config.ReaderOptionCatalog;
 import com.metahumanz.pacilread.reader.modern.content.ReaderContentController;
 import com.metahumanz.pacilread.reader.modern.paging.ReaderPagingAnimator;
+import com.metahumanz.pacilread.reader.modern.theme.ReaderDisplayModeHelper;
 import com.metahumanz.pacilread.reader.modern.theme.ReaderThemePalette;
+import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.tts.MimoTtsClient;
 import com.metahumanz.pacilread.util.FileAssetHelper;
 
@@ -44,6 +49,8 @@ public final class ReaderStyleController {
     private ReaderPagingAnimator paging;
     private ReaderContentController content;
     private com.metahumanz.pacilread.reader.modern.tts.ReaderTtsController tts;
+    private String autoNightSessionPolicy = "";
+    private boolean autoNightPolicyPromptShowing = false;
 
     public ReaderStyleController(
             ModernReaderActivity activity,
@@ -72,7 +79,7 @@ public final class ReaderStyleController {
     }
 
     public void applyReaderSettings() {
-        ReaderThemePalette palette = ReaderThemePalette.from(runtime.settingsStore.getReaderTheme());
+        ReaderThemePalette palette = ReaderDisplayModeHelper.resolvePalette(activity, runtime.settingsStore);
         Typeface bodyTypeface = buildReaderTypeface(
                 runtime.settingsStore.getReaderFontFamily(),
                 runtime.settingsStore.getReaderFontWeight()
@@ -81,6 +88,7 @@ public final class ReaderStyleController {
                 runtime.settingsStore.getReaderFontFamily(),
                 Math.max(600, Math.min(900, runtime.settingsStore.getReaderFontWeight() + 200))
         );
+        applyDoublePageVisibility();
         int resolvedTextColor = resolveReaderTextColor(palette);
         state.currentReaderPageColor = palette.pageColor;
         state.currentReaderTextColor = resolvedTextColor;
@@ -100,26 +108,14 @@ public final class ReaderStyleController {
         ((ViewGroup) views.pageCurrent).setPadding(leftPadding, topPadding, rightPadding, bottomPadding);
         ((ViewGroup) views.pageIncoming).setPadding(leftPadding, topPadding, rightPadding, bottomPadding);
 
-        views.pageTitleCurrent.setTextColor(resolvedTextColor);
-        views.pageTitleIncoming.setTextColor(resolvedTextColor);
-        views.pageBodyCurrent.setTextColor(resolvedTextColor);
-        views.pageBodyIncoming.setTextColor(resolvedTextColor);
-        views.pageTitleCurrent.setTypeface(titleTypeface);
-        views.pageTitleIncoming.setTypeface(titleTypeface);
-        views.pageBodyCurrent.setTypeface(bodyTypeface);
-        views.pageBodyIncoming.setTypeface(bodyTypeface);
-        views.pageTitleCurrent.setIncludeFontPadding(false);
-        views.pageTitleIncoming.setIncludeFontPadding(false);
-        views.pageTitleCurrent.setTextSize(runtime.settingsStore.getFontSizeSp() * CHAPTER_TITLE_SCALE);
-        views.pageTitleIncoming.setTextSize(runtime.settingsStore.getFontSizeSp() * CHAPTER_TITLE_SCALE);
-        views.pageBodyCurrent.setTextSize(runtime.settingsStore.getFontSizeSp());
-        views.pageBodyIncoming.setTextSize(runtime.settingsStore.getFontSizeSp());
-        views.pageBodyCurrent.setLineSpacing(runtime.settingsStore.getLineSpacingExtraSp(), 1f);
-        views.pageBodyIncoming.setLineSpacing(runtime.settingsStore.getLineSpacingExtraSp(), 1f);
-        views.pageBodyCurrent.setLetterSpacing(runtime.settingsStore.getLetterSpacing());
-        views.pageBodyIncoming.setLetterSpacing(runtime.settingsStore.getLetterSpacing());
-        views.pageBodyCurrent.setFullJustifyEnabled(runtime.settingsStore.isBodyTextJustified());
-        views.pageBodyIncoming.setFullJustifyEnabled(runtime.settingsStore.isBodyTextJustified());
+        stylePageTitleView(views.pageTitleCurrent, titleTypeface, resolvedTextColor);
+        stylePageTitleView(views.pageTitleCurrentRight, titleTypeface, resolvedTextColor);
+        stylePageTitleView(views.pageTitleIncoming, titleTypeface, resolvedTextColor);
+        stylePageTitleView(views.pageTitleIncomingRight, titleTypeface, resolvedTextColor);
+        stylePageBodyView(views.pageBodyCurrent, bodyTypeface, resolvedTextColor);
+        stylePageBodyView(views.pageBodyCurrentRight, bodyTypeface, resolvedTextColor);
+        stylePageBodyView(views.pageBodyIncoming, bodyTypeface, resolvedTextColor);
+        stylePageBodyView(views.pageBodyIncomingRight, bodyTypeface, resolvedTextColor);
         styleHudTextView(views.hudTopLeft, bodyTypeface, resolvedTextColor);
         styleHudTextView(views.hudTopCenter, bodyTypeface, resolvedTextColor);
         styleHudTextView(views.hudTopRight, bodyTypeface, resolvedTextColor);
@@ -127,22 +123,12 @@ public final class ReaderStyleController {
         styleHudTextView(views.hudBottomCenter, bodyTypeface, resolvedTextColor);
         styleHudTextView(views.hudBottomRight, bodyTypeface, resolvedTextColor);
 
-        views.pageBodyCurrent.setPadding(
-                0,
-                0,
-                0,
-                0
-        );
-        views.pageBodyIncoming.setPadding(
-                0,
-                0,
-                0,
-                0
-        );
-
         String alignment = runtime.settingsStore.getChapterTitleAlignment();
-        views.pageTitleCurrent.setGravity("center".equals(alignment) ? Gravity.CENTER : Gravity.LEFT);
-        views.pageTitleIncoming.setGravity("center".equals(alignment) ? Gravity.CENTER : Gravity.LEFT);
+        int titleGravity = "center".equals(alignment) ? Gravity.CENTER : Gravity.LEFT;
+        views.pageTitleCurrent.setGravity(titleGravity);
+        views.pageTitleCurrentRight.setGravity(titleGravity);
+        views.pageTitleIncoming.setGravity(titleGravity);
+        views.pageTitleIncomingRight.setGravity(titleGravity);
 
         paging.invalidatePreparedPagingSnapshots();
         if (tts != null) {
@@ -158,11 +144,14 @@ public final class ReaderStyleController {
         views.pageCurrent.requestLayout();
         views.pageIncoming.requestLayout();
         views.pageBodyCurrent.requestLayout();
+        views.pageBodyCurrentRight.requestLayout();
         views.pageBodyIncoming.requestLayout();
+        views.pageBodyIncomingRight.requestLayout();
         chrome.updateSystemBarsVisibility(state.controlsVisible);
         chrome.applyGlassOpacity();
         chrome.updateReaderHud();
         paging.invalidatePreparedPagingSnapshots();
+        maybePromptAutoNightCustomPolicy();
     }
 
     public void attachBackground(Uri uri) {
@@ -183,8 +172,9 @@ public final class ReaderStyleController {
 
     public void applyBackgroundImage() {
         String path = runtime.settingsStore.getReaderBackgroundPath();
-        if (path == null || path.isBlank()) {
-            int builtInRes = ReaderThemePalette.from(runtime.settingsStore.getReaderTheme()).backgroundDrawableRes;
+        ReaderThemePalette palette = ReaderDisplayModeHelper.resolvePalette(activity, runtime.settingsStore);
+        if (!shouldUseCustomBackground(path)) {
+            int builtInRes = palette.backgroundDrawableRes;
             if (builtInRes != 0) {
                 views.readerBackgroundImage.setImageResource(builtInRes);
                 views.readerBackgroundImage.setVisibility(View.VISIBLE);
@@ -197,7 +187,7 @@ public final class ReaderStyleController {
         }
         Bitmap bitmap = BitmapFactory.decodeFile(path);
         if (bitmap == null) {
-            int builtInRes = ReaderThemePalette.from(runtime.settingsStore.getReaderTheme()).backgroundDrawableRes;
+            int builtInRes = palette.backgroundDrawableRes;
             if (builtInRes != 0) {
                 views.readerBackgroundImage.setImageResource(builtInRes);
                 views.readerBackgroundImage.setVisibility(View.VISIBLE);
@@ -244,14 +234,22 @@ public final class ReaderStyleController {
 
     public String currentBackgroundLabel() {
         String path = runtime.settingsStore.getReaderBackgroundPath();
-        if (path == null || path.isBlank()) {
-            return "当前背景：使用" + ReaderThemePalette.from(runtime.settingsStore.getReaderTheme()).displayName + "内置壁纸";
+        ReaderThemePalette palette = ReaderDisplayModeHelper.resolvePalette(activity, runtime.settingsStore);
+        if (!shouldUseCustomBackground(path)) {
+            String suffix = ReaderDisplayModeHelper.isAutoNightActive(activity, runtime.settingsStore)
+                    ? "（自动夜航）"
+                    : "";
+            return "当前背景：使用" + palette.displayName + "内置壁纸" + suffix;
         }
         return "当前背景：" + new File(path).getName();
     }
 
     public int resolveReaderTextColor(ReaderThemePalette palette) {
-        return resolveReaderTextColorValue(runtime.settingsStore.getReaderTextColor(), palette);
+        String colorKey = runtime.settingsStore.getReaderTextColor();
+        if (ReaderDisplayModeHelper.shouldOverrideCustomVisuals(activity, runtime.settingsStore, autoNightSessionPolicy)) {
+            colorKey = "theme_default";
+        }
+        return resolveReaderTextColorValue(colorKey, palette);
     }
 
     public int resolveReaderTextColorValue(String colorKey, ReaderThemePalette palette) {
@@ -297,9 +295,10 @@ public final class ReaderStyleController {
     }
 
     private int computeHudReservedTopPx() {
+        boolean showCenterSlots = isLandscapeHudMode();
         if (!hasVisibleHudSlot(
                 runtime.settingsStore.getHudTopLeft(),
-                runtime.settingsStore.getHudTopCenter(),
+                showCenterSlots ? runtime.settingsStore.getHudTopCenter() : "none",
                 runtime.settingsStore.getHudTopRight()
         )) {
             return 0;
@@ -308,14 +307,22 @@ public final class ReaderStyleController {
     }
 
     private int computeHudReservedBottomPx() {
+        boolean showCenterSlots = isLandscapeHudMode();
         if (!hasVisibleHudSlot(
                 runtime.settingsStore.getHudBottomLeft(),
-                runtime.settingsStore.getHudBottomCenter(),
+                showCenterSlots ? runtime.settingsStore.getHudBottomCenter() : "none",
                 runtime.settingsStore.getHudBottomRight()
         )) {
             return 0;
         }
         return ui.dp(runtime.settingsStore.getHudBottomMarginDp() + HUD_BAR_HEIGHT_DP);
+    }
+
+    private boolean isLandscapeHudMode() {
+        return views.pageStage != null
+                && views.pageStage.getWidth() > 0
+                && views.pageStage.getHeight() > 0
+                && views.pageStage.getWidth() > views.pageStage.getHeight();
     }
 
     private boolean hasVisibleHudSlot(String... slots) {
@@ -328,6 +335,91 @@ public final class ReaderStyleController {
             }
         }
         return false;
+    }
+
+    private void applyDoublePageVisibility() {
+        boolean active = ReaderDisplayModeHelper.isDoublePageActive(
+                activity,
+                runtime.settingsStore,
+                views.pageStage == null ? 0 : views.pageStage.getWidth(),
+                views.pageStage == null ? 0 : views.pageStage.getHeight()
+        );
+        int visibility = active ? View.VISIBLE : View.GONE;
+        views.pageCurrentRightPane.setVisibility(visibility);
+        views.pageIncomingRightPane.setVisibility(visibility);
+        views.pageCurrentGutter.setVisibility(visibility);
+        views.pageIncomingGutter.setVisibility(visibility);
+    }
+
+    private boolean shouldUseCustomBackground(String path) {
+        if (path == null || path.isBlank()) {
+            return false;
+        }
+        return !ReaderDisplayModeHelper.shouldOverrideCustomVisuals(activity, runtime.settingsStore, autoNightSessionPolicy);
+    }
+
+    private void maybePromptAutoNightCustomPolicy() {
+        if (autoNightPolicyPromptShowing
+                || !ReaderDisplayModeHelper.isAutoNightActive(activity, runtime.settingsStore)
+                || !ReaderDisplayModeHelper.hasCustomReaderVisuals(runtime.settingsStore)
+                || !ReaderDisplayModeHelper.AUTO_NIGHT_POLICY_ASK.equals(runtime.settingsStore.getReaderAutoNightCustomPolicy())
+                || (autoNightSessionPolicy != null && !autoNightSessionPolicy.isBlank())) {
+            return;
+        }
+        autoNightPolicyPromptShowing = true;
+        CheckBox rememberCheck = new CheckBox(activity);
+        rememberCheck.setText("记住我的选择");
+        rememberCheck.setTextColor(resolveReaderTextColor(ReaderDisplayModeHelper.resolvePalette(activity, runtime.settingsStore)));
+        int padding = ui.dp(20);
+        rememberCheck.setPadding(padding, ui.dp(8), padding, ui.dp(4));
+        LinearLayout container = new LinearLayout(activity);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.addView(rememberCheck);
+        new AlertDialog.Builder(activity)
+                .setTitle("自动夜航")
+                .setMessage("当前阅读样式有自定义背景或字色。进入深色阅读界面时，要使用夜航背景和字色，还是保留自定义视觉？")
+                .setView(container)
+                .setPositiveButton("使用夜航视觉", (dialog, which) -> applyAutoNightPolicyChoice(
+                        ReaderDisplayModeHelper.AUTO_NIGHT_POLICY_OVERRIDE,
+                        rememberCheck.isChecked()
+                ))
+                .setNegativeButton("保留自定义", (dialog, which) -> applyAutoNightPolicyChoice(
+                        ReaderDisplayModeHelper.AUTO_NIGHT_POLICY_PRESERVE,
+                        rememberCheck.isChecked()
+                ))
+                .setOnDismissListener(dialog -> autoNightPolicyPromptShowing = false)
+                .show();
+    }
+
+    private void applyAutoNightPolicyChoice(String policy, boolean remember) {
+        autoNightSessionPolicy = SettingsStore.normalizeReaderAutoNightCustomPolicy(policy);
+        if (remember) {
+            runtime.settingsStore.setReaderAutoNightCustomPolicy(autoNightSessionPolicy);
+        }
+        applyReaderSettings();
+    }
+
+    private void stylePageTitleView(TextView textView, Typeface typeface, int textColor) {
+        if (textView == null) {
+            return;
+        }
+        textView.setTextColor(textColor);
+        textView.setTypeface(typeface);
+        textView.setIncludeFontPadding(false);
+        textView.setTextSize(runtime.settingsStore.getFontSizeSp() * CHAPTER_TITLE_SCALE);
+    }
+
+    private void stylePageBodyView(com.metahumanz.pacilread.reader.JustifiedPageTextView textView, Typeface typeface, int textColor) {
+        if (textView == null) {
+            return;
+        }
+        textView.setTextColor(textColor);
+        textView.setTypeface(typeface);
+        textView.setTextSize(runtime.settingsStore.getFontSizeSp());
+        textView.setLineSpacing(runtime.settingsStore.getLineSpacingExtraSp(), 1f);
+        textView.setLetterSpacing(runtime.settingsStore.getLetterSpacing());
+        textView.setFullJustifyEnabled(runtime.settingsStore.isBodyTextJustified());
+        textView.setPadding(0, 0, 0, 0);
     }
 
     private void styleHudTextView(TextView textView, Typeface typeface, int textColor) {

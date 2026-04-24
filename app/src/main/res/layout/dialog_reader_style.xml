@@ -65,6 +65,36 @@
             android:paddingEnd="10dp"
             android:paddingBottom="8dp" />
 
+        <CheckBox
+            android:id="@+id/style_check_auto_night"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:minHeight="44dp"
+            android:text="深色阅读界面自动使用夜航"
+            android:textColor="?attr/themeColorOnSurface" />
+
+        <CheckBox
+            android:id="@+id/style_check_double_page"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:minHeight="44dp"
+            android:text="平板/横屏双页"
+            android:textColor="?attr/themeColorOnSurface" />
+
+        <Spinner
+            android:id="@+id/style_spinner_double_page_mode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:minHeight="48dp"
+            android:paddingStart="10dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="8dp" />
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

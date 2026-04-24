@@ -22,34 +22,82 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:gravity="top"
-            android:orientation="vertical"
+            android:orientation="horizontal"
             android:paddingLeft="18dp"
             android:paddingTop="18dp"
             android:paddingRight="18dp"
             android:paddingBottom="12dp">
 
-            <TextView
-                android:id="@+id/text_page_title_current"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:fontFamily="serif"
-                android:includeFontPadding="false"
-                android:textColor="?attr/themeColorOnSurface"
-                android:textSize="20sp"
-                android:textStyle="bold"
+            <LinearLayout
+                android:id="@+id/page_current_left_pane"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="top"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/text_page_title_current"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="serif"
+                    android:includeFontPadding="false"
+                    android:textColor="?attr/themeColorOnSurface"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <com.metahumanz.pacilread.reader.JustifiedPageTextView
+                    android:id="@+id/text_page_body_current"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:fontFamily="serif"
+                    android:gravity="start|top"
+                    android:includeFontPadding="false"
+                    android:lineSpacingExtra="9sp"
+                    android:textColor="?attr/themeColorOnSurface"
+                    android:textSize="19sp" />
+            </LinearLayout>
+
+            <View
+                android:id="@+id/page_current_gutter"
+                android:layout_width="22dp"
+                android:layout_height="match_parent"
                 android:visibility="gone" />
 
-            <com.metahumanz.pacilread.reader.JustifiedPageTextView
-                android:id="@+id/text_page_body_current"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
+            <LinearLayout
+                android:id="@+id/page_current_right_pane"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:fontFamily="serif"
-                android:gravity="start|top"
-                android:includeFontPadding="false"
-                android:lineSpacingExtra="9sp"
-                android:textColor="?attr/themeColorOnSurface"
-                android:textSize="19sp" />
+                android:gravity="top"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/text_page_title_current_right"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="serif"
+                    android:includeFontPadding="false"
+                    android:textColor="?attr/themeColorOnSurface"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <com.metahumanz.pacilread.reader.JustifiedPageTextView
+                    android:id="@+id/text_page_body_current_right"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:fontFamily="serif"
+                    android:gravity="start|top"
+                    android:includeFontPadding="false"
+                    android:lineSpacingExtra="9sp"
+                    android:textColor="?attr/themeColorOnSurface"
+                    android:textSize="19sp" />
+            </LinearLayout>
         </LinearLayout>
 
         <LinearLayout
@@ -57,35 +105,83 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:gravity="top"
-            android:orientation="vertical"
+            android:orientation="horizontal"
             android:paddingLeft="18dp"
             android:paddingTop="18dp"
             android:paddingRight="18dp"
             android:paddingBottom="12dp"
             android:visibility="gone">
 
-            <TextView
-                android:id="@+id/text_page_title_incoming"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:fontFamily="serif"
-                android:includeFontPadding="false"
-                android:textColor="?attr/themeColorOnSurface"
-                android:textSize="20sp"
-                android:textStyle="bold"
+            <LinearLayout
+                android:id="@+id/page_incoming_left_pane"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="top"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/text_page_title_incoming"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="serif"
+                    android:includeFontPadding="false"
+                    android:textColor="?attr/themeColorOnSurface"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <com.metahumanz.pacilread.reader.JustifiedPageTextView
+                    android:id="@+id/text_page_body_incoming"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:fontFamily="serif"
+                    android:gravity="start|top"
+                    android:includeFontPadding="false"
+                    android:lineSpacingExtra="9sp"
+                    android:textColor="?attr/themeColorOnSurface"
+                    android:textSize="19sp" />
+            </LinearLayout>
+
+            <View
+                android:id="@+id/page_incoming_gutter"
+                android:layout_width="22dp"
+                android:layout_height="match_parent"
                 android:visibility="gone" />
 
-            <com.metahumanz.pacilread.reader.JustifiedPageTextView
-                android:id="@+id/text_page_body_incoming"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
+            <LinearLayout
+                android:id="@+id/page_incoming_right_pane"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:fontFamily="serif"
-                android:gravity="start|top"
-                android:includeFontPadding="false"
-                android:lineSpacingExtra="9sp"
-                android:textColor="?attr/themeColorOnSurface"
-                android:textSize="19sp" />
+                android:gravity="top"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/text_page_title_incoming_right"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="serif"
+                    android:includeFontPadding="false"
+                    android:textColor="?attr/themeColorOnSurface"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <com.metahumanz.pacilread.reader.JustifiedPageTextView
+                    android:id="@+id/text_page_body_incoming_right"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:fontFamily="serif"
+                    android:gravity="start|top"
+                    android:includeFontPadding="false"
+                    android:lineSpacingExtra="9sp"
+                    android:textColor="?attr/themeColorOnSurface"
+                    android:textSize="19sp" />
+            </LinearLayout>
         </LinearLayout>
 
         <ImageView

@@ -72,9 +72,11 @@ public final class ReaderStyleDialogController {
         StyleDialogViews refs = StyleDialogViews.bind(contentView);
         dialogSupport.applyTocStyleFullscreenInsets(contentView, refs.contentContainer);
         ArrayAdapter<String> uiThemeAdapter = dialogSupport.buildSpinnerAdapter(new String[]{"跟随应用", "跟随系统", "浅色", "深色"});
+        ArrayAdapter<String> doublePageModeAdapter = dialogSupport.buildSpinnerAdapter(ReaderOptionCatalog.DOUBLE_PAGE_MODE_LABELS);
         ArrayAdapter<String> fontFamilyAdapter = dialogSupport.buildSpinnerAdapter(ReaderOptionCatalog.READER_FONT_FAMILY_LABELS);
         ArrayAdapter<String> textColorAdapter = dialogSupport.buildSpinnerAdapter(ReaderOptionCatalog.READER_TEXT_COLOR_LABELS);
         refs.uiThemeSpinner.setAdapter(uiThemeAdapter);
+        refs.doublePageModeSpinner.setAdapter(doublePageModeAdapter);
         refs.fontFamilySpinner.setAdapter(fontFamilyAdapter);
         refs.textColorSpinner.setAdapter(textColorAdapter);
         refs.fontFamilySpinner.setSelection(
@@ -98,6 +100,17 @@ public final class ReaderStyleDialogController {
         refs.backgroundBlurSeek.setProgress(runtime.settingsStore.getBackgroundBlurPercent());
         refs.keepScreenOn.setChecked(runtime.settingsStore.isKeepScreenOn());
         refs.showTitleCheck.setChecked(runtime.settingsStore.isChapterTitleVisible());
+        refs.autoNightCheck.setChecked(runtime.settingsStore.isReaderAutoNightEnabled());
+        refs.doublePageCheck.setChecked(runtime.settingsStore.isReaderDoublePageEnabled());
+        refs.doublePageModeSpinner.setSelection(
+                ReaderOptionCatalog.indexOf(
+                        ReaderOptionCatalog.DOUBLE_PAGE_MODE_KEYS,
+                        runtime.settingsStore.getReaderDoublePageMode(),
+                        0
+                ),
+                false
+        );
+        updateDoublePageModeAvailability(refs);
         refs.backgroundText.setText(style.currentBackgroundLabel());
         refs.uiThemeSpinner.setSelection(
                 ReaderOptionCatalog.indexOf(ReaderOptionCatalog.UI_THEME_KEYS, runtime.settingsStore.getReaderUiThemeMode(), 0),
@@ -203,6 +216,11 @@ public final class ReaderStyleDialogController {
 
         refs.keepScreenOn.setOnCheckedChangeListener((buttonView, isChecked) -> autoApply.run());
         refs.showTitleCheck.setOnCheckedChangeListener((buttonView, isChecked) -> autoApply.run());
+        refs.autoNightCheck.setOnCheckedChangeListener((buttonView, isChecked) -> autoApply.run());
+        refs.doublePageCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            updateDoublePageModeAvailability(refs);
+            autoApply.run();
+        });
         refs.fontFamilySpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
@@ -225,6 +243,16 @@ public final class ReaderStyleDialogController {
             }
         });
         refs.uiThemeSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                autoApply.run();
+            }
+
+            @Override
+            public void onNothingSelected(android.widget.AdapterView<?> parent) {
+            }
+        });
+        refs.doublePageModeSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
                 autoApply.run();
@@ -260,6 +288,10 @@ public final class ReaderStyleDialogController {
             autoApply.run();
         });
         refs.customColorButton.setOnClickListener(v -> showCustomColorPickerDialog(() -> {
+            refs.textColorSpinner.setSelection(
+                    ReaderOptionCatalog.indexOf(ReaderOptionCatalog.READER_TEXT_COLOR_KEYS, "custom", 0),
+                    false
+            );
             refreshTextColorPreview.run();
             autoApply.run();
         }));
@@ -297,6 +329,11 @@ public final class ReaderStyleDialogController {
             runtime.settingsStore.setBackgroundBlurPercent(refs.backgroundBlurSeek.getProgress());
             runtime.settingsStore.setKeepScreenOn(refs.keepScreenOn.isChecked());
             runtime.settingsStore.setChapterTitleVisible(refs.showTitleCheck.isChecked());
+            runtime.settingsStore.setReaderAutoNightEnabled(refs.autoNightCheck.isChecked());
+            runtime.settingsStore.setReaderDoublePageEnabled(refs.doublePageCheck.isChecked());
+            runtime.settingsStore.setReaderDoublePageMode(ReaderOptionCatalog.DOUBLE_PAGE_MODE_KEYS[
+                    refs.doublePageModeSpinner.getSelectedItemPosition()
+            ]);
             runtime.settingsStore.setReaderTheme(selectedReaderTheme[0]);
             runtime.settingsStore.setReaderUiThemeMode(ReaderOptionCatalog.UI_THEME_KEYS[refs.uiThemeSpinner.getSelectedItemPosition()]);
             refreshTextColorPreview.run();
@@ -307,6 +344,15 @@ public final class ReaderStyleDialogController {
             }
             content.scheduleReflowAfterLayout(state.currentChapterIndex, anchorOffset);
         };
+    }
+
+    private void updateDoublePageModeAvailability(StyleDialogViews refs) {
+        if (refs.doublePageModeSpinner == null) {
+            return;
+        }
+        boolean enabled = refs.doublePageCheck != null && refs.doublePageCheck.isChecked();
+        refs.doublePageModeSpinner.setEnabled(enabled);
+        refs.doublePageModeSpinner.setAlpha(enabled ? 1f : 0.45f);
     }
 
     private void renderThemeRows(LinearLayout container, AlertDialog dialog, StyleDialogViews refs, String[] selectedReaderTheme) {
@@ -485,8 +531,11 @@ public final class ReaderStyleDialogController {
         final TextView paragraphSpacingValue;
         final TextView backgroundBlurValue;
         final Spinner uiThemeSpinner;
+        final Spinner doublePageModeSpinner;
         final CheckBox keepScreenOn;
         final CheckBox showTitleCheck;
+        final CheckBox autoNightCheck;
+        final CheckBox doublePageCheck;
         final TextView backgroundText;
         final LinearLayout customThemeList;
         final Button paperThemeButton;
@@ -526,8 +575,11 @@ public final class ReaderStyleDialogController {
             paragraphSpacingValue = root.findViewById(R.id.style_text_paragraph_spacing);
             backgroundBlurValue = root.findViewById(R.id.style_text_background_blur);
             uiThemeSpinner = root.findViewById(R.id.style_spinner_ui_theme_mode);
+            doublePageModeSpinner = root.findViewById(R.id.style_spinner_double_page_mode);
             keepScreenOn = root.findViewById(R.id.style_check_keep_screen_on);
             showTitleCheck = root.findViewById(R.id.style_check_show_title);
+            autoNightCheck = root.findViewById(R.id.style_check_auto_night);
+            doublePageCheck = root.findViewById(R.id.style_check_double_page);
             backgroundText = root.findViewById(R.id.style_text_background);
             customThemeList = root.findViewById(R.id.style_custom_theme_list);
             paperThemeButton = root.findViewById(R.id.style_button_theme_paper);

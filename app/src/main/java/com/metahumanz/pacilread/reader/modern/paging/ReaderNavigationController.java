@@ -87,7 +87,7 @@ public final class ReaderNavigationController {
         if (!animate || state.isAnimating || state.book == null) {
             state.pendingTapPagingDelta = 0;
             paging.invalidatePreparedPagingSnapshots();
-            bindPage(views.pageTitleCurrent, views.pageBodyCurrent, safeChapterIndex, safePageIndex);
+            bindCurrentSpread(safeChapterIndex, safePageIndex);
             state.currentChapterIndex = safeChapterIndex;
             state.currentPageIndex = safePageIndex;
             activity.markReadingActivity();
@@ -101,7 +101,7 @@ public final class ReaderNavigationController {
             paging.schedulePagingSnapshotWarmup();
             return;
         }
-        bindPage(views.pageTitleIncoming, views.pageBodyIncoming, safeChapterIndex, safePageIndex);
+        bindIncomingSpread(safeChapterIndex, safePageIndex);
         views.pageIncoming.setVisibility(View.VISIBLE);
         paging.animateTransition(safeChapterIndex, safePageIndex, direction == 0 ? 1 : direction);
     }
@@ -111,8 +111,9 @@ public final class ReaderNavigationController {
             return false;
         }
         List<PageSlice> pages = content.getPagesForChapter(state.currentChapterIndex);
-        if (state.currentPageIndex < pages.size() - 1) {
-            showPage(state.currentChapterIndex, state.currentPageIndex + 1, true, 1);
+        int nextPageIndex = state.currentPageIndex + pageStep();
+        if (nextPageIndex < pages.size()) {
+            showPage(state.currentChapterIndex, nextPageIndex, true, 1);
             return true;
         }
         if (state.currentChapterIndex < state.chapters.size() - 1) {
@@ -161,15 +162,50 @@ public final class ReaderNavigationController {
             return false;
         }
         if (state.currentPageIndex > 0) {
-            showPage(state.currentChapterIndex, state.currentPageIndex - 1, true, -1);
+            showPage(state.currentChapterIndex, Math.max(0, state.currentPageIndex - pageStep()), true, -1);
             return true;
         }
         if (state.currentChapterIndex > 0) {
             List<PageSlice> pages = content.getPagesForChapter(state.currentChapterIndex - 1);
-            showPage(state.currentChapterIndex - 1, pages.size() - 1, true, -1);
+            showPage(state.currentChapterIndex - 1, lastSpreadStart(pages), true, -1);
             return true;
         }
         return false;
+    }
+
+    public void bindCurrentSpread(int chapterIndex, int pageIndex) {
+        bindSpread(
+                views.pageTitleCurrent,
+                views.pageBodyCurrent,
+                views.pageTitleCurrentRight,
+                views.pageBodyCurrentRight,
+                views.pageCurrentRightPane,
+                views.pageCurrentGutter,
+                chapterIndex,
+                pageIndex
+        );
+    }
+
+    public void bindIncomingSpread(int chapterIndex, int pageIndex) {
+        bindSpread(
+                views.pageTitleIncoming,
+                views.pageBodyIncoming,
+                views.pageTitleIncomingRight,
+                views.pageBodyIncomingRight,
+                views.pageIncomingRightPane,
+                views.pageIncomingGutter,
+                chapterIndex,
+                pageIndex
+        );
+    }
+
+    public int pageStep() {
+        return content != null && content.isDoublePageActive() ? 2 : 1;
+    }
+
+    public int lastSpreadStart(List<PageSlice> pages) {
+        int pageCount = pages == null ? 0 : pages.size();
+        return Math.max(0, pageCount - pageStep());
     }
 
     public void bindPage(TextView titleView, TextView bodyView, int chapterIndex, int pageIndex) {
@@ -179,6 +215,58 @@ public final class ReaderNavigationController {
         titleView.setText(null);
         paging.updateBodyTopMargin(bodyView, 0);
         bodyView.setText(slice.text == null ? "" : slice.text);
+    }
+
+    private void bindSpread(
+            TextView leftTitleView,
+            com.metahumanz.pacilread.reader.JustifiedPageTextView leftBodyView,
+            TextView rightTitleView,
+            com.metahumanz.pacilread.reader.JustifiedPageTextView rightBodyView,
+            View rightPane,
+            View gutter,
+            int chapterIndex,
+            int pageIndex
+    ) {
+        bindPage(leftTitleView, leftBodyView, chapterIndex, pageIndex);
+        boolean showRight = content.isDoublePageActive();
+        if (!showRight) {
+            clearRightPane(rightTitleView, rightBodyView, rightPane, gutter);
+            return;
+        }
+        List<PageSlice> pages = content.getPagesForChapter(chapterIndex);
+        int rightPageIndex = pageIndex + 1;
+        if (rightPageIndex >= pages.size()) {
+            clearRightPane(rightTitleView, rightBodyView, rightPane, gutter);
+            return;
+        }
+        if (rightPane != null) {
+            rightPane.setVisibility(View.VISIBLE);
+        }
+        if (gutter != null) {
+            gutter.setVisibility(View.VISIBLE);
+        }
+        bindPage(rightTitleView, rightBodyView, chapterIndex, rightPageIndex);
+    }
+
+    private void clearRightPane(
+            TextView rightTitleView,
+            com.metahumanz.pacilread.reader.JustifiedPageTextView rightBodyView,
+            View rightPane,
+            View gutter
+    ) {
+        if (rightTitleView != null) {
+            rightTitleView.setText(null);
+            rightTitleView.setVisibility(View.GONE);
+        }
+        if (rightBodyView != null) {
+            rightBodyView.setText("");
+        }
+        if (rightPane != null) {
+            rightPane.setVisibility(View.GONE);
+        }
+        if (gutter != null) {
+            gutter.setVisibility(View.GONE);
+        }
     }
 
     public int chapterIndexFromOrder(int orderIndex) {

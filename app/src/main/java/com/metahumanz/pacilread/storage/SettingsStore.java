@@ -75,6 +75,11 @@ public class SettingsStore {
     private static final String KEY_READER_MENU_AUTO_HIDE = "reader_menu_auto_hide";
     private static final String KEY_READING_TIME_TRACKING_ENABLED = "reading_time_tracking_enabled";
     private static final String KEY_READING_STATS_DEVICE_ID = "reading_stats_device_id";
+    private static final String KEY_READER_DOUBLE_PAGE_ENABLED = "reader_double_page_enabled";
+    private static final String KEY_READER_DOUBLE_PAGE_MODE = "reader_double_page_mode";
+    private static final String KEY_READER_AUTO_NIGHT_ENABLED = "reader_auto_night_enabled";
+    private static final String KEY_READER_AUTO_NIGHT_CUSTOM_POLICY = "reader_auto_night_custom_policy";
+    private static final String KEY_BOOKSHELF_SHOW_ADD_ENTRY = "bookshelf_show_add_entry";
 
     private final SharedPreferences preferences;
 
@@ -453,6 +458,51 @@ public class SettingsStore {
         preferences.edit().putBoolean(KEY_READER_MENU_AUTO_HIDE, enabled).apply();
     }
 
+    public boolean isReaderDoublePageEnabled() {
+        return preferences.getBoolean(KEY_READER_DOUBLE_PAGE_ENABLED, false);
+    }
+
+    public void setReaderDoublePageEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_READER_DOUBLE_PAGE_ENABLED, enabled).apply();
+    }
+
+    public String getReaderDoublePageMode() {
+        return normalizeReaderDoublePageMode(preferences.getString(KEY_READER_DOUBLE_PAGE_MODE, "landscape"));
+    }
+
+    public void setReaderDoublePageMode(String value) {
+        preferences.edit().putString(KEY_READER_DOUBLE_PAGE_MODE, normalizeReaderDoublePageMode(value)).apply();
+    }
+
+    public boolean isReaderAutoNightEnabled() {
+        return preferences.getBoolean(KEY_READER_AUTO_NIGHT_ENABLED, true);
+    }
+
+    public void setReaderAutoNightEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_READER_AUTO_NIGHT_ENABLED, enabled).apply();
+    }
+
+    public String getReaderAutoNightCustomPolicy() {
+        return normalizeReaderAutoNightCustomPolicy(
+                preferences.getString(KEY_READER_AUTO_NIGHT_CUSTOM_POLICY, "ask")
+        );
+    }
+
+    public void setReaderAutoNightCustomPolicy(String value) {
+        preferences.edit().putString(
+                KEY_READER_AUTO_NIGHT_CUSTOM_POLICY,
+                normalizeReaderAutoNightCustomPolicy(value)
+        ).apply();
+    }
+
+    public boolean isBookshelfAddEntryVisible() {
+        return preferences.getBoolean(KEY_BOOKSHELF_SHOW_ADD_ENTRY, true);
+    }
+
+    public void setBookshelfAddEntryVisible(boolean visible) {
+        preferences.edit().putBoolean(KEY_BOOKSHELF_SHOW_ADD_ENTRY, visible).apply();
+    }
+
     public String getReaderSliderMode() {
         String value = preferences.getString(KEY_READER_SLIDER_MODE, "book");
         return "chapter".equals(value) ? "chapter" : "book";
@@ -697,6 +747,20 @@ public class SettingsStore {
         return "jiye".equals(value) ? "jiye" : "yemu";
     }
 
+    public static String normalizeReaderDoublePageMode(String value) {
+        if ("always".equals(value) || "landscape_or_tablet".equals(value)) {
+            return value;
+        }
+        return "landscape";
+    }
+
+    public static String normalizeReaderAutoNightCustomPolicy(String value) {
+        if ("override".equals(value) || "preserve".equals(value)) {
+            return value;
+        }
+        return "ask";
+    }
+
     private static String normalizeTtsEngine(String value) {
         return "mimo".equals(value) ? "mimo" : "system";
     }
@@ -737,6 +801,7 @@ public class SettingsStore {
                 || "jade_ink".equals(value)
                 || "forest_ink".equals(value)
                 || "moon_white".equals(value)
+                || "custom".equals(value)
                 || "theme_default".equals(value)) {
             return value;
         }

@@ -30,6 +30,7 @@ import com.metahumanz.pacilread.reader.modern.ReaderUiUtils;
 import com.metahumanz.pacilread.reader.modern.ReaderViewRefs;
 import com.metahumanz.pacilread.reader.modern.paging.ReaderNavigationController;
 import com.metahumanz.pacilread.reader.modern.paging.ReaderPagingAnimator;
+import com.metahumanz.pacilread.reader.modern.theme.ReaderDisplayModeHelper;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderStyleController;
 
@@ -276,9 +277,16 @@ public final class ReaderContentController {
                     ? views.pageCurrent.getWidth()
                     : views.pageCurrent.getMeasuredWidth();
             if (width > 0) {
-                return Math.max(0, width
+                int contentWidth = Math.max(0, width
                         - views.pageCurrent.getPaddingLeft()
                         - views.pageCurrent.getPaddingRight());
+                if (isDoublePageActive()) {
+                    int gutterWidth = views.pageCurrentGutter == null
+                            ? ui.dp(22)
+                            : Math.max(views.pageCurrentGutter.getWidth(), ui.dp(22));
+                    return Math.max(0, (contentWidth - gutterWidth) / 2);
+                }
+                return contentWidth;
             }
         }
         return 0;
@@ -303,6 +311,19 @@ public final class ReaderContentController {
             return ui.dp(16);
         }
         return Math.max(ui.dp(16), Math.round(views.pageTitleCurrent.getTextSize() * 1.5f));
+    }
+
+    public boolean isDoublePageActive() {
+        return ReaderDisplayModeHelper.isDoublePageActive(
+                activity,
+                runtime.settingsStore,
+                views.pageStage == null ? 0 : views.pageStage.getWidth(),
+                views.pageStage == null ? 0 : views.pageStage.getHeight()
+        );
+    }
+
+    public int pagesPerScreen() {
+        return isDoublePageActive() ? 2 : 1;
     }
 
     public String getProcessedChapterText(int chapterIndex) {
@@ -530,7 +551,8 @@ public final class ReaderContentController {
                 runtime.settingsStore.getTopPaddingDp(),
                 runtime.settingsStore.getBottomPaddingDp(),
                 state.systemInsetTop,
-                state.systemInsetBottom
+                state.systemInsetBottom,
+                isDoublePageActive()
         );
     }
 

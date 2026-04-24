@@ -264,6 +264,27 @@
         android:layout_marginTop="8dp"
         android:text="章节首页显示标题" />
 
+    <CheckBox
+        android:id="@+id/preview_style_check_double_page"
+        style="@style/AppChromeCheckBox"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="平板/横屏双页" />
+
+    <Spinner
+        android:id="@+id/preview_style_spinner_double_page_mode"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_app_input"
+        android:minHeight="48dp"
+        android:paddingStart="10dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="8dp"
+        android:popupBackground="@drawable/bg_app_dialog" />
+
     <TextView
         style="@style/AppChromeFieldLabel"
         android:layout_width="wrap_content"

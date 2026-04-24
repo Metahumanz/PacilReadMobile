@@ -21,6 +21,7 @@ final class ReaderLayoutSignature {
     private final int bottomPaddingDp;
     private final int systemInsetTopPx;
     private final int systemInsetBottomPx;
+    private final boolean doublePageActive;
 
     ReaderLayoutSignature(
             int availableWidthPx,
@@ -40,7 +41,8 @@ final class ReaderLayoutSignature {
             int topPaddingDp,
             int bottomPaddingDp,
             int systemInsetTopPx,
-            int systemInsetBottomPx
+            int systemInsetBottomPx,
+            boolean doublePageActive
     ) {
         this.availableWidthPx = availableWidthPx;
         this.availableHeightPx = availableHeightPx;
@@ -60,6 +62,7 @@ final class ReaderLayoutSignature {
         this.bottomPaddingDp = bottomPaddingDp;
         this.systemInsetTopPx = systemInsetTopPx;
         this.systemInsetBottomPx = systemInsetBottomPx;
+        this.doublePageActive = doublePageActive;
     }
 
     @Override
@@ -87,6 +90,7 @@ final class ReaderLayoutSignature {
                 && bottomPaddingDp == that.bottomPaddingDp
                 && systemInsetTopPx == that.systemInsetTopPx
                 && systemInsetBottomPx == that.systemInsetBottomPx
+                && doublePageActive == that.doublePageActive
                 && Objects.equals(chapterTitleAlignment, that.chapterTitleAlignment)
                 && Objects.equals(bodyFontFamily, that.bodyFontFamily);
     }
@@ -111,7 +115,8 @@ final class ReaderLayoutSignature {
                 topPaddingDp,
                 bottomPaddingDp,
                 systemInsetTopPx,
-                systemInsetBottomPx
+                systemInsetBottomPx,
+                doublePageActive
         );
     }
 }
