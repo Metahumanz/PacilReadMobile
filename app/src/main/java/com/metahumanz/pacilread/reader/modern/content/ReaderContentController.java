@@ -408,7 +408,7 @@ public final class ReaderContentController {
                             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                     );
                 }
-            } else if (end < length) {
+            } else if (end < length && paragraphSpacingPx > 0) {
                 spannable.setSpan(
                         new FixedLineHeightSpan(paragraphSpacingPx),
                         start,
