@@ -1,7 +1,5 @@
 package com.metahumanz.pacilread;
 
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -11,8 +9,8 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.metahumanz.pacilread.model.BookRecord;
+import com.metahumanz.pacilread.ui.BookCoverViewHelper;
 
-import java.io.File;
 import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -77,56 +75,17 @@ public class BookListAdapter extends BaseAdapter {
                 : "最近阅读：尚未阅读");
         holder.pin.setVisibility(book.pinned ? View.VISIBLE : View.GONE);
         holder.type.setText(typeLabel(book.bookType));
-
-        Bitmap coverBitmap = decodeCover(book.coverPath);
-        if (coverBitmap != null) {
-            holder.cover.setImageBitmap(coverBitmap);
-            holder.coverFallback.setVisibility(View.GONE);
-        } else {
-            holder.cover.setImageDrawable(null);
-            holder.coverFallback.setText(initialsFor(book.title));
-            holder.coverFallback.setVisibility(View.VISIBLE);
-        }
+        BookCoverViewHelper.bindCover(holder.cover, holder.coverFallback, book.coverPath, book.title);
         return convertView;
-    }
-
-    private Bitmap decodeCover(String path) {
-        if (path == null || path.isBlank()) {
-            return null;
-        }
-        File file = new File(path);
-        if (!file.exists()) {
-            return null;
-        }
-        return BitmapFactory.decodeFile(file.getAbsolutePath());
-    }
-
-    private String initialsFor(String title) {
-        if (title == null || title.isBlank()) {
-            return "PR";
-        }
-        String trimmed = title.trim();
-        if (trimmed.length() == 1) {
-            return trimmed.toUpperCase(Locale.ROOT);
-        }
-        return trimmed.substring(0, Math.min(2, trimmed.length())).toUpperCase(Locale.ROOT);
     }
 
     private String currentChapterText(BookRecord book) {
         if (book.chapterCount <= 0) {
-            return "当前阅读：未生成章节";
+            return "未生成章节";
         }
-        String chapterTitle = book.currentChapterTitle == null || book.currentChapterTitle.isBlank()
+        return book.currentChapterTitle == null || book.currentChapterTitle.isBlank()
                 ? "未命名章节"
                 : book.currentChapterTitle.trim();
-        int chapterPosition = Math.max(1, Math.min(book.progressIndex + 1, book.chapterCount));
-        return String.format(
-                Locale.SIMPLIFIED_CHINESE,
-                "当前阅读：第 %d/%d 章 · %s",
-                chapterPosition,
-                book.chapterCount,
-                chapterTitle
-        );
     }
 
     private String typeLabel(String bookType) {
