@@ -66,6 +66,29 @@ public class ReaderPaginatorInstrumentedTest {
     }
 
     @Test
+    public void paginate_keepsParagraphEndLineWhenOnlyBottomSpacingOverflows() {
+        SpannableStringBuilder source = new SpannableStringBuilder()
+                .append("第一行\n");
+        source.append("第二行");
+        int secondLineVisibleEnd = source.length();
+        source.append("\n");
+        int secondLineEnd = source.length();
+        source.setSpan(
+                new ReaderParagraphBottomSpacingSpan(120),
+                secondLineVisibleEnd,
+                secondLineEnd,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        );
+        source.append("第三行");
+
+        List<PageSlice> pages = ReaderPaginator.paginate(source, newPaint(), 800, 100, 100, 0f, 0);
+
+        assertTrue(pages.size() > 1);
+        assertTrue(pages.get(0).text.toString().contains("第二行"));
+        assertFalse(pages.get(0).text.toString().contains("第三行"));
+    }
+
+    @Test
     public void paginate_preservesTitleSpansOnTitlePages() {
         SpannableStringBuilder source = new SpannableStringBuilder();
         int titleStart = source.length();
