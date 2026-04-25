@@ -12,7 +12,6 @@ import com.metahumanz.pacilread.model.ReadingBookStatRecord;
 import com.metahumanz.pacilread.stats.ReadingStatsUtils;
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
-import com.metahumanz.pacilread.theme.ThemeModeHelper;
 
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -95,9 +94,9 @@ public final class HomeStatsPanelController {
     }
 
     private void updatePeriodButtons() {
-        styleToggleButton(todayButton, ReadingStatsUtils.PERIOD_TODAY.equals(selectedPeriod));
-        styleToggleButton(weekButton, ReadingStatsUtils.PERIOD_WEEK.equals(selectedPeriod));
-        styleToggleButton(yearButton, ReadingStatsUtils.PERIOD_YEAR.equals(selectedPeriod));
+        AppUiUtils.styleToggleButton(activity, todayButton, ReadingStatsUtils.PERIOD_TODAY.equals(selectedPeriod));
+        AppUiUtils.styleToggleButton(activity, weekButton, ReadingStatsUtils.PERIOD_WEEK.equals(selectedPeriod));
+        AppUiUtils.styleToggleButton(activity, yearButton, ReadingStatsUtils.PERIOD_YEAR.equals(selectedPeriod));
     }
 
     private void render(int totalSeconds, List<ReadingBookStatRecord> records) {
@@ -139,17 +138,5 @@ public final class HomeStatsPanelController {
             }
             listLayout.addView(row);
         }
-    }
-
-    private void styleToggleButton(Button button, boolean selected) {
-        if (button == null) {
-            return;
-        }
-        button.setSelected(selected);
-        button.setBackgroundResource(selected ? R.drawable.bg_app_primary_button : R.drawable.bg_app_outline_button);
-        button.setTextColor(ThemeModeHelper.resolveColor(
-                activity,
-                selected ? R.color.app_button_primary_text : R.color.app_button_outline_text
-        ));
     }
 }

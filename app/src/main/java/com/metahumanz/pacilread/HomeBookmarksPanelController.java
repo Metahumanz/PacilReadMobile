@@ -7,7 +7,6 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.model.BookmarkRecord;
@@ -68,12 +67,12 @@ public final class HomeBookmarksPanelController {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(android.view.Gravity.CENTER_VERTICAL);
         row.setBackgroundResource(R.drawable.bg_app_input);
-        row.setPadding(dp(14), dp(12), dp(10), dp(12));
+        row.setPadding(AppUiUtils.dp(activity, 14), AppUiUtils.dp(activity, 12), AppUiUtils.dp(activity, 10), AppUiUtils.dp(activity, 12));
         LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
         );
-        rowParams.setMargins(0, dp(8), 0, 0);
+        rowParams.setMargins(0, AppUiUtils.dp(activity, 8), 0, 0);
         row.setLayoutParams(rowParams);
         row.setClickable(true);
         row.setFocusable(true);
@@ -120,7 +119,7 @@ public final class HomeBookmarksPanelController {
         deleteButton.setAllCaps(false);
         deleteButton.setMinWidth(0);
         deleteButton.setMinHeight(0);
-        deleteButton.setPadding(dp(12), dp(8), dp(12), dp(8));
+        deleteButton.setPadding(AppUiUtils.dp(activity, 12), AppUiUtils.dp(activity, 8), AppUiUtils.dp(activity, 12), AppUiUtils.dp(activity, 8));
         deleteButton.setBackgroundResource(R.drawable.bg_app_danger_button);
         deleteButton.setTextColor(ThemeModeHelper.resolveColor(activity, R.color.app_button_danger_text));
         deleteButton.setOnClickListener(v -> confirmDeleteBookmark(bookmark));
@@ -164,10 +163,6 @@ public final class HomeBookmarksPanelController {
     }
 
     private void showToast(String message) {
-        Toast.makeText(activity, message, Toast.LENGTH_SHORT).show();
-    }
-
-    private int dp(int value) {
-        return Math.round(activity.getResources().getDisplayMetrics().density * value);
+        AppUiUtils.showToast(activity, message);
     }
 }
