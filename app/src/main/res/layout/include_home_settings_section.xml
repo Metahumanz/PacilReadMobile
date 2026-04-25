@@ -1,0 +1,371 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/section_home_settings"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipToPadding="false"
+    android:overScrollMode="never"
+    android:padding="18dp"
+    android:scrollbarStyle="outsideOverlay"
+    android:visibility="gone">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingBottom="28dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/button_home_sidebar_settings"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_nav_item_idle"
+                android:contentDescription="打开侧栏"
+                android:padding="9dp"
+                android:scaleType="center"
+                android:src="@drawable/ic_home_menu"
+                android:tint="?attr/themeColorAppNavTextIdle"
+                android:visibility="gone" />
+
+            <TextView
+                style="@style/AppChromeBarTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="偏好设置" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/text_home_settings_status"
+            style="@style/AppChromeCaption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="首页设置会立即应用到当前页面" />
+
+        <TextView
+            style="@style/AppChromeSectionLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="18dp"
+            android:layout_marginBottom="10dp"
+            android:text="首页导航" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            android:background="@drawable/bg_app_card"
+            android:elevation="2dp"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <TextView
+                style="@style/AppChromeBody"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="首页导航模式" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/button_home_nav_preset_auto"
+                    style="@style/AppChromeCompactToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_app_primary_button"
+                    android:text="全自动"
+                    android:textAllCaps="false"
+                    android:textColor="?attr/themeColorAppButtonPrimaryText"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/button_home_nav_preset_bottom"
+                    style="@style/AppChromeCompactToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_app_outline_button"
+                    android:text="全底栏"
+                    android:textAllCaps="false"
+                    android:textColor="?attr/themeColorAppButtonOutlineText"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/button_home_nav_preset_sidebar"
+                    style="@style/AppChromeCompactToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_app_outline_button"
+                    android:text="全侧栏"
+                    android:textAllCaps="false"
+                    android:textColor="?attr/themeColorAppButtonOutlineText"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/button_home_nav_preset_custom"
+                    style="@style/AppChromeCompactToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_app_outline_button"
+                    android:text="自定义"
+                    android:textAllCaps="false"
+                    android:textColor="?attr/themeColorAppButtonOutlineText"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layout_home_nav_custom"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    style="@style/AppChromeCaption"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="竖屏使用" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/button_home_nav_portrait_auto"
+                        style="@style/AppChromeCompactToggleButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_app_primary_button"
+                        android:text="自动"
+                        android:textAllCaps="false"
+                        android:textColor="?attr/themeColorAppButtonPrimaryText"
+                        android:textSize="13sp" />
+
+                    <Button
+                        android:id="@+id/button_home_nav_portrait_bottom"
+                        style="@style/AppChromeCompactToggleButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_app_outline_button"
+                        android:text="底栏"
+                        android:textAllCaps="false"
+                        android:textColor="?attr/themeColorAppButtonOutlineText"
+                        android:textSize="13sp" />
+
+                    <Button
+                        android:id="@+id/button_home_nav_portrait_sidebar"
+                        style="@style/AppChromeCompactToggleButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_app_outline_button"
+                        android:text="侧栏"
+                        android:textAllCaps="false"
+                        android:textColor="?attr/themeColorAppButtonOutlineText"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <TextView
+                    style="@style/AppChromeCaption"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="横屏使用" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/button_home_nav_landscape_auto"
+                        style="@style/AppChromeCompactToggleButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_app_primary_button"
+                        android:text="自动"
+                        android:textAllCaps="false"
+                        android:textColor="?attr/themeColorAppButtonPrimaryText"
+                        android:textSize="13sp" />
+
+                    <Button
+                        android:id="@+id/button_home_nav_landscape_bottom"
+                        style="@style/AppChromeCompactToggleButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_app_outline_button"
+                        android:text="底栏"
+                        android:textAllCaps="false"
+                        android:textColor="?attr/themeColorAppButtonOutlineText"
+                        android:textSize="13sp" />
+
+                    <Button
+                        android:id="@+id/button_home_nav_landscape_sidebar"
+                        style="@style/AppChromeCompactToggleButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_app_outline_button"
+                        android:text="侧栏"
+                        android:textAllCaps="false"
+                        android:textColor="?attr/themeColorAppButtonOutlineText"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                style="@style/AppChromeBody"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="侧栏显示方式" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/button_home_sidebar_slide"
+                    style="@style/AppChromeCompactToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_app_primary_button"
+                    android:text="滑出"
+                    android:textAllCaps="false"
+                    android:textColor="?attr/themeColorAppButtonPrimaryText" />
+
+                <Button
+                    android:id="@+id/button_home_sidebar_fixed"
+                    style="@style/AppChromeCompactToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_app_outline_button"
+                    android:text="宽屏固定"
+                    android:textAllCaps="false"
+                    android:textColor="?attr/themeColorAppButtonOutlineText" />
+            </LinearLayout>
+
+            <TextView
+                style="@style/AppChromeBody"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="固定侧栏样式" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/button_home_fixed_sidebar_full"
+                    style="@style/AppChromeCompactToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_app_primary_button"
+                    android:text="图标+文字"
+                    android:textAllCaps="false"
+                    android:textColor="?attr/themeColorAppButtonPrimaryText" />
+
+                <Button
+                    android:id="@+id/button_home_fixed_sidebar_icons"
+                    style="@style/AppChromeCompactToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_app_outline_button"
+                    android:text="仅图标"
+                    android:textAllCaps="false"
+                    android:textColor="?attr/themeColorAppButtonOutlineText" />
+            </LinearLayout>
+
+            <TextView
+                style="@style/AppChromeBody"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="首页底栏样式" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/button_home_nav_icons"
+                    style="@style/AppChromeCompactToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_app_primary_button"
+                    android:text="图标"
+                    android:textAllCaps="false"
+                    android:textColor="?attr/themeColorAppButtonPrimaryText" />
+
+                <Button
+                    android:id="@+id/button_home_nav_text"
+                    style="@style/AppChromeCompactToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_app_outline_button"
+                    android:text="文字"
+                    android:textAllCaps="false"
+                    android:textColor="?attr/themeColorAppButtonOutlineText" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <include layout="@layout/include_settings_reading_stats" />
+
+        <Button
+            android:id="@+id/button_home_open_full_settings"
+            style="@style/AppChromeCompactToggleButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:background="@drawable/bg_app_outline_button"
+            android:text="打开完整偏好设置"
+            android:textAllCaps="false"
+            android:textColor="?attr/themeColorAppButtonOutlineText" />
+    </LinearLayout>
+</ScrollView>

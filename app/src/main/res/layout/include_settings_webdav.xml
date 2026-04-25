@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <TextView
+        style="@style/AppChromeSectionLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginBottom="10dp"
+        android:text="云端同步 (WebDAV)" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="20dp"
+        android:background="@drawable/bg_app_card"
+        android:elevation="2dp"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <CheckBox
+            android:id="@+id/check_webdav_enabled"
+            style="@style/AppChromeCheckBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:text="启用 WebDAV 多端同步" />
+
+        <LinearLayout
+            android:id="@+id/layout_webdav_config"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="vertical">
+
+            <EditText
+                android:id="@+id/input_webdav_url"
+                style="@style/AppChromeInputText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_app_input"
+                android:hint="服务器 URL (例如 https://dav.jianguoyun.com/dav/)"
+                android:minHeight="48dp"
+                android:padding="12dp" />
+
+            <EditText
+                android:id="@+id/input_webdav_dir"
+                style="@style/AppChromeInputText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_app_input"
+                android:hint="根目录名称 (默认为 PacilRead)"
+                android:minHeight="48dp"
+                android:padding="12dp" />
+
+            <EditText
+                android:id="@+id/input_webdav_settings_subdir"
+                style="@style/AppChromeInputText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_app_input"
+                android:hint="设置子目录（可选，例如 mobile）"
+                android:minHeight="48dp"
+                android:padding="12dp" />
+
+            <TextView
+                style="@style/AppChromeCaption"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="仅隔离 settings.json。留空时会与电脑共享设置，填写 mobile / android 等可分开同步手机设置。"
+                android:textColor="?attr/themeColorAppTextSecondary" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/input_webdav_user"
+                    style="@style/AppChromeInputText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="5dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_app_input"
+                    android:hint="用户名"
+                    android:minHeight="48dp"
+                    android:padding="12dp" />
+
+                <EditText
+                    android:id="@+id/input_webdav_password"
+                    style="@style/AppChromeInputText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_app_input"
+                    android:hint="密码/AppKey"
+                    android:inputType="textPassword"
+                    android:minHeight="48dp"
+                    android:padding="12dp" />
+            </LinearLayout>
+
+            <TextView
+                style="@style/AppChromeFieldLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:text="同步内容过滤" />
+
+            <GridLayout
+                android:id="@+id/layout_webdav_sync_options"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:columnCount="3">
+
+                <Button
+                    android:id="@+id/button_webdav_sync_bookshelf"
+                    style="@style/AppChromeCompactToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="2dp"
+                    android:background="@drawable/bg_app_outline_button"
+                    android:text="书架"
+                    android:textAllCaps="false"
+                    android:textColor="?attr/themeColorAppButtonOutlineText"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/button_webdav_sync_files"
+                    style="@style/AppChromeCompactToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="2dp"
+                    android:background="@drawable/bg_app_outline_button"
+                    android:text="文件"
+                    android:textAllCaps="false"
+                    android:textColor="?attr/themeColorAppButtonOutlineText"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/button_webdav_sync_ui"
+                    style="@style/AppChromeCompactToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="2dp"
+                    android:background="@drawable/bg_app_outline_button"
+                    android:text="界面"
+                    android:textAllCaps="false"
+                    android:textColor="?attr/themeColorAppButtonOutlineText"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/button_webdav_sync_themes"
+                    style="@style/AppChromeCompactToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="2dp"
+                    android:background="@drawable/bg_app_outline_button"
+                    android:text="主题"
+                    android:textAllCaps="false"
+                    android:textColor="?attr/themeColorAppButtonOutlineText"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/button_webdav_sync_backgrounds"
+                    style="@style/AppChromeCompactToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="2dp"
+                    android:background="@drawable/bg_app_outline_button"
+                    android:text="背景"
+                    android:textAllCaps="false"
+                    android:textColor="?attr/themeColorAppButtonOutlineText"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/button_webdav_sync_reading_stats"
+                    style="@style/AppChromeCompactToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="2dp"
+                    android:background="@drawable/bg_app_outline_button"
+                    android:text="阅读时长"
+                    android:textAllCaps="false"
+                    android:textColor="?attr/themeColorAppButtonOutlineText"
+                    android:textSize="13sp" />
+            </GridLayout>
+
+            <Button
+                android:id="@+id/button_test_webdav"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:minHeight="48dp"
+                android:background="@drawable/bg_app_outline_button"
+                android:text="测试 WebDAV 连接"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonOutlineText" />
+
+            <TextView
+                android:id="@+id/text_status"
+                style="@style/AppChromeMicro"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="状态：就绪"
+                android:textAlignment="center"
+                android:textColor="?attr/themeColorAppPrimary" />
+        </LinearLayout>
+    </LinearLayout>
+</merge>

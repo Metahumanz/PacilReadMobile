@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <TextView
+        style="@style/AppChromeSectionLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginBottom="10dp"
+        android:text="数据备份与迁移" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="20dp"
+        android:background="@drawable/bg_app_card"
+        android:elevation="2dp"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <TextView
+            android:id="@+id/text_backup_full"
+            style="@style/AppChromeCaption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="全量备份：从未执行" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/button_full_backup"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="5dp"
+                android:layout_weight="1"
+                android:minHeight="46dp"
+                android:background="@drawable/bg_app_positive_button"
+                android:text="全量备份"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonPositiveText" />
+
+            <Button
+                android:id="@+id/button_full_restore"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="5dp"
+                android:layout_weight="1"
+                android:minHeight="46dp"
+                android:background="@drawable/bg_app_outline_button"
+                android:text="全量恢复"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonOutlineText" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/text_backup_lite"
+            style="@style/AppChromeCaption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="增量备份：从未执行" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/button_lite_backup"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="5dp"
+                android:layout_weight="1"
+                android:minHeight="46dp"
+                android:background="@drawable/bg_app_positive_button"
+                android:text="增量备份"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonPositiveText" />
+
+            <Button
+                android:id="@+id/button_lite_restore"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="5dp"
+                android:layout_weight="1"
+                android:minHeight="46dp"
+                android:background="@drawable/bg_app_outline_button"
+                android:text="增量恢复"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonOutlineText" />
+        </LinearLayout>
+    </LinearLayout>
+</merge>
