@@ -20,8 +20,6 @@ import com.metahumanz.pacilread.importer.BookImportService;
 import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
-import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
-import com.metahumanz.pacilread.sync.WebDavClient;
 import com.metahumanz.pacilread.theme.ThemedActivity;
 import com.metahumanz.pacilread.util.FileAssetHelper;
 
@@ -43,16 +41,13 @@ public class BookshelfActivity extends ThemedActivity {
 
     private ReaderDatabaseHelper databaseHelper;
     private SettingsStore settingsStore;
-    private WebDavClient webDavClient;
-    private ReadingStatsSyncManager readingStatsSyncManager;
     private BookImportService importService;
     private BookListAdapter listAdapter;
     private BookGridAdapter gridAdapter;
     private HomeNavigationController homeNavigationController;
     private HomeStatsPanelController homeStatsPanelController;
     private HomeBookmarksPanelController homeBookmarksPanelController;
-    private SettingsHomeNavigationController homeNavigationSettingsController;
-    private SettingsReadingStatsController homeReadingStatsSettingsController;
+    private SettingsScreenController homeSettingsController;
     private View listFooterView;
 
     // Views
@@ -70,14 +65,11 @@ public class BookshelfActivity extends ThemedActivity {
     private Button buttonModeCard;
     private Button buttonModeList;
     private Button emptyActionButton;
-    private Button homeOpenFullSettingsButton;
     private View containerSearch;
     private View iconSearch;
-    private TextView homeSettingsStatusText;
     private long pendingCoverBookId = -1L;
     private boolean booksLoaded = false;
     private boolean booksLoading = false;
-    private boolean homeSettingsBusy = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -86,8 +78,6 @@ public class BookshelfActivity extends ThemedActivity {
 
         databaseHelper = ReaderDatabaseHelper.getInstance(this);
         settingsStore = new SettingsStore(this);
-        webDavClient = new WebDavClient(settingsStore);
-        readingStatsSyncManager = new ReadingStatsSyncManager(this, databaseHelper, settingsStore, webDavClient);
         importService = new BookImportService(this);
 
         bindViews();
@@ -104,7 +94,6 @@ public class BookshelfActivity extends ThemedActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        bindHomeSettingsValues();
         updateAddEntryVisibility();
         if (homeNavigationController != null) {
             homeNavigationController.refreshFromSettings();
@@ -114,7 +103,18 @@ public class BookshelfActivity extends ThemedActivity {
     }
 
     @Override
+    protected void onPause() {
+        if (homeSettingsController != null) {
+            homeSettingsController.onPause();
+        }
+        super.onPause();
+    }
+
+    @Override
     protected void onDestroy() {
+        if (homeSettingsController != null) {
+            homeSettingsController.onDestroy();
+        }
         super.onDestroy();
         executor.shutdownNow();
     }
@@ -145,6 +145,12 @@ public class BookshelfActivity extends ThemedActivity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode != RESULT_OK || data == null) {
+            return;
+        }
+        if (requestCode == SettingsScreenController.REQUEST_PICK_BOOK) {
+            if (homeSettingsController != null && data.getData() != null) {
+                homeSettingsController.onBookPicked(data.getData());
+            }
             return;
         }
         if (requestCode == REQUEST_PICK_BOOK) {
@@ -182,10 +188,8 @@ public class BookshelfActivity extends ThemedActivity {
         buttonModeCard = findViewById(R.id.button_mode_card);
         buttonModeList = findViewById(R.id.button_mode_list);
         emptyActionButton = findViewById(R.id.button_empty_action);
-        homeOpenFullSettingsButton = findViewById(R.id.button_home_open_full_settings);
         containerSearch = findViewById(R.id.container_search);
         iconSearch = findViewById(R.id.icon_search);
-        homeSettingsStatusText = findViewById(R.id.text_home_settings_status);
     }
 
     // ==================== Adapters ====================
@@ -274,9 +278,6 @@ public class BookshelfActivity extends ThemedActivity {
         };
         if (containerSearch != null) containerSearch.setOnClickListener(focusSearch);
         if (iconSearch != null) iconSearch.setOnClickListener(focusSearch);
-        if (homeOpenFullSettingsButton != null) {
-            homeOpenFullSettingsButton.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
-        }
 
         searchInput.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH ||
@@ -299,50 +300,30 @@ public class BookshelfActivity extends ThemedActivity {
     private void setupHomeControllers() {
         homeStatsPanelController = new HomeStatsPanelController(this, databaseHelper, settingsStore, executor);
         homeBookmarksPanelController = new HomeBookmarksPanelController(this, databaseHelper, executor);
-        homeNavigationSettingsController = new SettingsHomeNavigationController(
-                this,
-                settingsStore,
-                this::saveHomeSettingsAndRefreshNavigation
-        );
-        homeReadingStatsSettingsController = new SettingsReadingStatsController(
-                this,
-                databaseHelper,
-                settingsStore,
-                readingStatsSyncManager,
-                executor,
-                new SettingsReadingStatsController.Callback() {
-                    @Override
-                    public boolean isSettingsBusy() {
-                        return homeSettingsBusy;
-                    }
+        homeSettingsController = new SettingsScreenController(this, new SettingsScreenController.Host() {
+            @Override
+            public void openBookPicker(Intent intent, int requestCode) {
+                startActivityForResult(intent, requestCode);
+            }
 
-                    @Override
-                    public void saveSettings() {
-                        saveHomeSettingsAndRefreshNavigation();
-                    }
+            @Override
+            public void openReader(long bookId) {
+                refreshBooks();
+                Intent intent = new Intent(BookshelfActivity.this, ReaderActivity.class);
+                intent.putExtra("book_id", bookId);
+                startActivity(intent);
+            }
 
-                    @Override
-                    public void setBusy(boolean busy) {
-                        homeSettingsBusy = busy;
-                        if (homeReadingStatsSettingsController != null) {
-                            homeReadingStatsSettingsController.setBusy(busy);
-                        }
-                    }
+            @Override
+            public void onSettingsSaved() {
+                handleEmbeddedSettingsSaved();
+            }
 
-                    @Override
-                    public void setStatusText(String text) {
-                        if (homeSettingsStatusText != null) {
-                            homeSettingsStatusText.setText(text);
-                        }
-                    }
-
-                    @Override
-                    public void showToast(String text) {
-                        BookshelfActivity.this.showToast(text);
-                    }
-                }
-        );
-        bindHomeSettingsValues();
+            @Override
+            public void onThemeChanged() {
+                recreate();
+            }
+        });
         homeNavigationController = new HomeNavigationController(this, settingsStore, new HomeNavigationController.Callback() {
             @Override
             public boolean isReadingTimeTrackingEnabled() {
@@ -356,29 +337,14 @@ public class BookshelfActivity extends ThemedActivity {
         });
     }
 
-    private void bindHomeSettingsValues() {
-        if (homeNavigationSettingsController != null) {
-            homeNavigationSettingsController.bindValues();
-        }
-        if (homeReadingStatsSettingsController != null) {
-            homeReadingStatsSettingsController.bindValues();
-        }
-    }
-
-    private void saveHomeSettingsAndRefreshNavigation() {
-        if (homeNavigationSettingsController != null) {
-            homeNavigationSettingsController.saveValues();
-        }
-        if (homeReadingStatsSettingsController != null) {
-            homeReadingStatsSettingsController.saveValues();
-        }
+    private void handleEmbeddedSettingsSaved() {
         updateAddEntryVisibility();
         if (homeNavigationController != null) {
             homeNavigationController.refreshFromSettings();
         }
-        refreshCurrentHomePage(false);
-        if (homeSettingsStatusText != null && !homeSettingsBusy) {
-            homeSettingsStatusText.setText("首页设置已应用");
+        if (homeNavigationController == null
+                || homeNavigationController.getCurrentPage() != HomeNavigationController.PAGE_SETTINGS) {
+            refreshCurrentHomePage(false);
         }
     }
 
@@ -394,9 +360,9 @@ public class BookshelfActivity extends ThemedActivity {
             homeBookmarksPanelController.refreshIfVisible(currentPage);
         }
         if (currentPage == HomeNavigationController.PAGE_SETTINGS) {
-            bindHomeSettingsValues();
-            if (homeReadingStatsSettingsController != null) {
-                homeReadingStatsSettingsController.refreshSummary(syncFirst);
+            if (homeSettingsController != null) {
+                homeSettingsController.bindCurrentValues();
+                homeSettingsController.refreshReadingStatsSummary(syncFirst);
             }
         }
     }

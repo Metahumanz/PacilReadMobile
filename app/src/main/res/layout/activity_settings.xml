@@ -47,24 +47,7 @@
             android:padding="18dp"
             android:scrollbarStyle="outsideOverlay">
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingBottom="40dp">
-
-                <include layout="@layout/include_settings_appearance" />
-
-                <include layout="@layout/include_settings_interaction" />
-
-                <include layout="@layout/include_settings_reading_stats" />
-
-                <include layout="@layout/include_settings_webdav" />
-
-                <include layout="@layout/include_settings_backup" />
-
-                <include layout="@layout/include_settings_tts" />
-            </LinearLayout>
+            <include layout="@layout/include_settings_content" />
         </ScrollView>
     </LinearLayout>
 </FrameLayout>
