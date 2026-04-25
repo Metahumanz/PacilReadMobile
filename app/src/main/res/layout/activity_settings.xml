@@ -239,6 +239,43 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
+                        android:text="首页底栏样式" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/button_home_nav_icons"
+                            style="@style/AppChromeCompactToggleButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_app_primary_button"
+                            android:text="图标"
+                            android:textAllCaps="false"
+                            android:textColor="?attr/themeColorAppButtonPrimaryText" />
+
+                        <Button
+                            android:id="@+id/button_home_nav_text"
+                            style="@style/AppChromeCompactToggleButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_app_outline_button"
+                            android:text="文字"
+                            android:textAllCaps="false"
+                            android:textColor="?attr/themeColorAppButtonOutlineText" />
+                    </LinearLayout>
+
+                    <TextView
+                        style="@style/AppChromeBody"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
                         android:text="音量上键翻页行为" />
 
                     <Spinner

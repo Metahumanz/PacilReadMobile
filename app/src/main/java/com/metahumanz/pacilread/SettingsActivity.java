@@ -77,6 +77,8 @@ public class SettingsActivity extends ThemedActivity {
     private Button lightStyleYunbaiButton;
     private Button darkStyleYemuButton;
     private Button darkStyleJiyeButton;
+    private Button homeNavIconsButton;
+    private Button homeNavTextButton;
     private Spinner ttsEngineSpinner;
     private Spinner volumeKeyUpActionSpinner;
     private Spinner volumeKeyDownActionSpinner;
@@ -108,6 +110,7 @@ public class SettingsActivity extends ThemedActivity {
     private String selectedReadingStatsPeriod = ReadingStatsUtils.PERIOD_TODAY;
     private String selectedLightStyleVariant = ThemeModeHelper.LIGHT_STYLE_YUNBAI;
     private String selectedDarkStyleVariant = ThemeModeHelper.DARK_STYLE_YEMU;
+    private String selectedHomeBottomNavStyle = "icons";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -141,6 +144,8 @@ public class SettingsActivity extends ThemedActivity {
         lightStyleYunbaiButton = findViewById(R.id.button_light_style_yunbai);
         darkStyleYemuButton = findViewById(R.id.button_dark_style_yemu);
         darkStyleJiyeButton = findViewById(R.id.button_dark_style_jiye);
+        homeNavIconsButton = findViewById(R.id.button_home_nav_icons);
+        homeNavTextButton = findViewById(R.id.button_home_nav_text);
         ttsEngineSpinner = findViewById(R.id.spinner_tts_engine);
         volumeKeyUpActionSpinner = findViewById(R.id.spinner_volume_key_up_action);
         volumeKeyDownActionSpinner = findViewById(R.id.spinner_volume_key_down_action);
@@ -173,6 +178,7 @@ public class SettingsActivity extends ThemedActivity {
 
         setupThemeSpinners();
         setupStyleVariantButtons();
+        setupHomeNavStyleButtons();
         bindCurrentValues();
         setupGlassOpacityControl();
         setupAutoSaveListeners();
@@ -257,7 +263,9 @@ public class SettingsActivity extends ThemedActivity {
         readerUiThemeSpinner.setSelection(indexOf(READER_THEME_KEYS, settingsStore.getReaderUiThemeMode(), 0));
         selectedLightStyleVariant = settingsStore.getAppLightStyleVariant();
         selectedDarkStyleVariant = settingsStore.getAppDarkStyleVariant();
+        selectedHomeBottomNavStyle = settingsStore.getHomeBottomNavStyle();
         updateStyleVariantButtons();
+        updateHomeNavStyleButtons();
         if (ttsEngineSpinner != null) {
             ttsEngineSpinner.setSelection(indexOf(TTS_ENGINE_KEYS, settingsStore.getTtsEngine(), 0));
         }
@@ -303,6 +311,7 @@ public class SettingsActivity extends ThemedActivity {
         settingsStore.setReaderUiThemeMode(READER_THEME_KEYS[readerUiThemeSpinner.getSelectedItemPosition()]);
         settingsStore.setAppLightStyleVariant(selectedLightStyleVariant);
         settingsStore.setAppDarkStyleVariant(selectedDarkStyleVariant);
+        settingsStore.setHomeBottomNavStyle(selectedHomeBottomNavStyle);
         if (volumeKeyUpActionSpinner != null) {
             settingsStore.setVolumeKeyUpAction(VOLUME_KEY_ACTION_KEYS[volumeKeyUpActionSpinner.getSelectedItemPosition()]);
         }
@@ -424,6 +433,15 @@ public class SettingsActivity extends ThemedActivity {
         }
         if (darkStyleJiyeButton != null) {
             darkStyleJiyeButton.setOnClickListener(v -> selectDarkStyleVariant(ThemeModeHelper.DARK_STYLE_JIYE));
+        }
+    }
+
+    private void setupHomeNavStyleButtons() {
+        if (homeNavIconsButton != null) {
+            homeNavIconsButton.setOnClickListener(v -> selectHomeBottomNavStyle("icons"));
+        }
+        if (homeNavTextButton != null) {
+            homeNavTextButton.setOnClickListener(v -> selectHomeBottomNavStyle("text"));
         }
     }
 
@@ -733,11 +751,26 @@ public class SettingsActivity extends ThemedActivity {
         handleSettingsChanged();
     }
 
+    private void selectHomeBottomNavStyle(String style) {
+        String normalized = SettingsStore.normalizeHomeBottomNavStyle(style);
+        if (normalized.equals(selectedHomeBottomNavStyle)) {
+            return;
+        }
+        selectedHomeBottomNavStyle = normalized;
+        updateHomeNavStyleButtons();
+        handleSettingsChanged();
+    }
+
     private void updateStyleVariantButtons() {
         styleToggleButton(lightStyleYaobaiButton, ThemeModeHelper.LIGHT_STYLE_YAOBAI.equals(selectedLightStyleVariant));
         styleToggleButton(lightStyleYunbaiButton, ThemeModeHelper.LIGHT_STYLE_YUNBAI.equals(selectedLightStyleVariant));
         styleToggleButton(darkStyleYemuButton, ThemeModeHelper.DARK_STYLE_YEMU.equals(selectedDarkStyleVariant));
         styleToggleButton(darkStyleJiyeButton, ThemeModeHelper.DARK_STYLE_JIYE.equals(selectedDarkStyleVariant));
+    }
+
+    private void updateHomeNavStyleButtons() {
+        styleToggleButton(homeNavIconsButton, "icons".equals(selectedHomeBottomNavStyle));
+        styleToggleButton(homeNavTextButton, "text".equals(selectedHomeBottomNavStyle));
     }
 
     private void updateWebDavSyncOptionsVisibility() {

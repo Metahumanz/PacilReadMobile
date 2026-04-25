@@ -7,9 +7,12 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.GridView;
 import android.widget.LinearLayout;
@@ -18,7 +21,10 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.metahumanz.pacilread.importer.BookImportService;
+import com.metahumanz.pacilread.model.BookmarkRecord;
 import com.metahumanz.pacilread.model.BookRecord;
+import com.metahumanz.pacilread.model.ReadingBookStatRecord;
+import com.metahumanz.pacilread.stats.ReadingStatsUtils;
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedActivity;
@@ -37,39 +43,80 @@ public class BookshelfActivity extends ThemedActivity {
     private static final int REQUEST_PICK_BOOK = 1001;
     private static final int REQUEST_PICK_COVER = 1002;
     private static final String VIEW_MODE_CARD = "card";
+    private static final int PAGE_BOOKSHELF = 0;
+    private static final int PAGE_STATS = 1;
+    private static final int PAGE_BOOKMARKS = 2;
+    private static final int PAGE_SETTINGS = 3;
+    private static final int SWIPE_NONE = 0;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final List<BookRecord> allBooks = new ArrayList<>();
+    private final List<Integer> activeHomePages = new ArrayList<>();
 
     private ReaderDatabaseHelper databaseHelper;
     private SettingsStore settingsStore;
     private BookImportService importService;
-    private AppDrawerController drawerController;
     private BookListAdapter listAdapter;
     private BookGridAdapter gridAdapter;
     private View listFooterView;
 
     // Views
     private View mainRoot;
+    private View pageContainer;
+    private View sectionBookshelf;
+    private View sectionReadingStats;
+    private View sectionBookmarks;
+    private View sectionHomeSettings;
+    private View bottomNavigation;
+    private TextView navBookshelf;
+    private TextView navStats;
+    private TextView navBookmarks;
+    private TextView navSettings;
     private LinearLayout emptyLayout;
     private LinearLayout loadingLayout;
+    private LinearLayout homeStatsListLayout;
+    private LinearLayout homeBookmarksListLayout;
     private EditText searchInput;
     private GridView gridBooks;
     private ListView listBooks;
     private TextView sectionTitle;
     private TextView loadingText;
     private TextView statsText;
+    private TextView homeStatsStatusText;
+    private TextView homeStatsTotalText;
+    private TextView homeStatsEmptyText;
+    private TextView homeBookmarksEmptyText;
     private TextView emptyTitle;
     private TextView emptyHint;
     private Button headerActionButton;
     private Button buttonModeCard;
     private Button buttonModeList;
     private Button emptyActionButton;
+    private Button homeStatsTodayButton;
+    private Button homeStatsWeekButton;
+    private Button homeStatsYearButton;
+    private Button homeNavIconsButton;
+    private Button homeNavTextButton;
+    private Button openFullSettingsButton;
+    private CheckBox homeReadingTimeTrackingCheck;
     private View containerSearch;
     private View iconSearch;
     private long pendingCoverBookId = -1L;
     private boolean booksLoaded = false;
     private boolean booksLoading = false;
+    private String selectedHomeStatsPeriod = ReadingStatsUtils.PERIOD_TODAY;
+    private int currentHomePage = PAGE_BOOKSHELF;
+    private int pendingSwipePage = -1;
+    private int pendingSwipeDirection = SWIPE_NONE;
+    private int touchSlop = 0;
+    private float swipeDownX = 0f;
+    private float swipeDownY = 0f;
+    private float swipeLastX = 0f;
+    private long swipeLastEventTime = 0L;
+    private float swipeVelocityX = 0f;
+    private boolean homeSwipeCandidate = false;
+    private boolean homeSwipeDragging = false;
+    private boolean bindingHomeSettings = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -83,7 +130,8 @@ public class BookshelfActivity extends ThemedActivity {
         bindViews();
         setupAdapters();
         setupInteractions();
-        configureDrawer();
+        setupHomeNavigation();
+        touchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
         showBookshelfLoadingState();
 
         if (savedInstanceState == null && settingsStore.isAutoOpenLastBook()) {
@@ -95,8 +143,11 @@ public class BookshelfActivity extends ThemedActivity {
     protected void onResume() {
         super.onResume();
         updateAddEntryVisibility();
+        bindHomeSettingsValues();
+        rebuildHomeTabs();
         refreshBooks();
-        updateDrawerStatus();
+        refreshHomeStatsIfVisible(true);
+        refreshBookmarksIfVisible();
     }
 
     @Override
@@ -107,7 +158,8 @@ public class BookshelfActivity extends ThemedActivity {
 
     @Override
     public void onBackPressed() {
-        if (drawerController != null && drawerController.onBackPressed()) {
+        if (currentHomePage != PAGE_BOOKSHELF) {
+            selectHomePage(PAGE_BOOKSHELF, true);
             return;
         }
         super.onBackPressed();
@@ -115,13 +167,7 @@ public class BookshelfActivity extends ThemedActivity {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
-        if (drawerController != null && drawerController.handleTouchEvent(event)) {
-            if (drawerController.consumePendingChildTouchCancel()) {
-                MotionEvent cancelEvent = MotionEvent.obtain(event);
-                cancelEvent.setAction(MotionEvent.ACTION_CANCEL);
-                super.dispatchTouchEvent(cancelEvent);
-                cancelEvent.recycle();
-            }
+        if (handleHomeSwipe(event)) {
             return true;
         }
         return super.dispatchTouchEvent(event);
@@ -155,20 +201,43 @@ public class BookshelfActivity extends ThemedActivity {
 
     private void bindViews() {
         mainRoot = findViewById(R.id.main_root);
+        pageContainer = findViewById(R.id.page_container);
+        sectionBookshelf = findViewById(R.id.section_bookshelf);
+        sectionReadingStats = findViewById(R.id.section_reading_stats);
+        sectionBookmarks = findViewById(R.id.section_bookmarks);
+        sectionHomeSettings = findViewById(R.id.section_home_settings);
+        bottomNavigation = findViewById(R.id.bottom_navigation);
+        navBookshelf = findViewById(R.id.nav_home_bookshelf);
+        navStats = findViewById(R.id.nav_home_stats);
+        navBookmarks = findViewById(R.id.nav_home_bookmarks);
+        navSettings = findViewById(R.id.nav_home_settings);
         sectionTitle = findViewById(R.id.text_section_title);
         emptyLayout = findViewById(R.id.layout_empty);
         loadingLayout = findViewById(R.id.layout_loading);
+        homeStatsListLayout = findViewById(R.id.layout_home_stats_list);
+        homeBookmarksListLayout = findViewById(R.id.layout_home_bookmarks_list);
         searchInput = findViewById(R.id.input_search);
         gridBooks = findViewById(R.id.grid_books);
         listBooks = findViewById(R.id.list_books);
         loadingText = findViewById(R.id.text_loading);
         statsText = findViewById(R.id.text_stats);
+        homeStatsStatusText = findViewById(R.id.text_home_stats_status);
+        homeStatsTotalText = findViewById(R.id.text_home_stats_total);
+        homeStatsEmptyText = findViewById(R.id.text_home_stats_empty);
+        homeBookmarksEmptyText = findViewById(R.id.text_home_bookmarks_empty);
         emptyTitle = findViewById(R.id.text_empty_title);
         emptyHint = findViewById(R.id.text_empty_hint);
         headerActionButton = findViewById(R.id.button_header_action);
         buttonModeCard = findViewById(R.id.button_mode_card);
         buttonModeList = findViewById(R.id.button_mode_list);
         emptyActionButton = findViewById(R.id.button_empty_action);
+        homeStatsTodayButton = findViewById(R.id.button_home_stats_today);
+        homeStatsWeekButton = findViewById(R.id.button_home_stats_week);
+        homeStatsYearButton = findViewById(R.id.button_home_stats_year);
+        homeNavIconsButton = findViewById(R.id.button_home_nav_icons);
+        homeNavTextButton = findViewById(R.id.button_home_nav_text);
+        openFullSettingsButton = findViewById(R.id.button_open_full_settings);
+        homeReadingTimeTrackingCheck = findViewById(R.id.check_home_reading_time_tracking);
         containerSearch = findViewById(R.id.container_search);
         iconSearch = findViewById(R.id.icon_search);
     }
@@ -273,29 +342,556 @@ public class BookshelfActivity extends ThemedActivity {
             }
             return false;
         });
+
+        if (homeStatsTodayButton != null) {
+            homeStatsTodayButton.setOnClickListener(v -> selectHomeStatsPeriod(ReadingStatsUtils.PERIOD_TODAY));
+        }
+        if (homeStatsWeekButton != null) {
+            homeStatsWeekButton.setOnClickListener(v -> selectHomeStatsPeriod(ReadingStatsUtils.PERIOD_WEEK));
+        }
+        if (homeStatsYearButton != null) {
+            homeStatsYearButton.setOnClickListener(v -> selectHomeStatsPeriod(ReadingStatsUtils.PERIOD_YEAR));
+        }
+        if (homeNavIconsButton != null) {
+            homeNavIconsButton.setOnClickListener(v -> selectHomeBottomNavStyle("icons"));
+        }
+        if (homeNavTextButton != null) {
+            homeNavTextButton.setOnClickListener(v -> selectHomeBottomNavStyle("text"));
+        }
+        if (openFullSettingsButton != null) {
+            openFullSettingsButton.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
+        }
+        if (homeReadingTimeTrackingCheck != null) {
+            homeReadingTimeTrackingCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                if (bindingHomeSettings) {
+                    return;
+                }
+                settingsStore.setReadingTimeTrackingEnabled(isChecked);
+                rebuildHomeTabs();
+                refreshHomeStatsIfVisible(false);
+            });
+        }
     }
 
-    // ==================== Drawer ====================
+    // ==================== Home Navigation ====================
 
-    private void configureDrawer() {
-        drawerController = new AppDrawerController(this, mainRoot, destination -> {
-            if (destination == AppDrawerController.SECTION_PREVIEW) {
-                Intent intent = new Intent(this, PreviewActivity.class);
-                startActivity(intent);
-                drawerController.closeDrawer();
-                return;
+    private void setupHomeNavigation() {
+        if (navBookshelf != null) navBookshelf.setOnClickListener(v -> selectHomePage(PAGE_BOOKSHELF, true));
+        if (navStats != null) navStats.setOnClickListener(v -> selectHomePage(PAGE_STATS, true));
+        if (navBookmarks != null) navBookmarks.setOnClickListener(v -> selectHomePage(PAGE_BOOKMARKS, true));
+        if (navSettings != null) navSettings.setOnClickListener(v -> selectHomePage(PAGE_SETTINGS, true));
+        rebuildHomeTabs();
+    }
+
+    private void rebuildHomeTabs() {
+        activeHomePages.clear();
+        activeHomePages.add(PAGE_BOOKSHELF);
+        if (settingsStore != null && settingsStore.isReadingTimeTrackingEnabled()) {
+            activeHomePages.add(PAGE_STATS);
+            if (navStats != null) navStats.setVisibility(View.VISIBLE);
+        } else if (navStats != null) {
+            navStats.setVisibility(View.GONE);
+        }
+        activeHomePages.add(PAGE_BOOKMARKS);
+        activeHomePages.add(PAGE_SETTINGS);
+        if (!activeHomePages.contains(currentHomePage)) {
+            currentHomePage = PAGE_BOOKSHELF;
+        }
+        updateBottomNavLabels();
+        showHomePageImmediate(currentHomePage);
+    }
+
+    private void selectHomePage(int page, boolean animate) {
+        if (!activeHomePages.contains(page)) {
+            return;
+        }
+        if (page == currentHomePage) {
+            refreshCurrentHomePage(false);
+            return;
+        }
+        int oldPage = currentHomePage;
+        currentHomePage = page;
+        if (!animate || pageContainer == null || pageContainer.getWidth() <= 0) {
+            showHomePageImmediate(page);
+        } else {
+            animateHomePageTransition(oldPage, page);
+        }
+        refreshCurrentHomePage(false);
+    }
+
+    private void showHomePageImmediate(int page) {
+        for (int candidate : new int[]{PAGE_BOOKSHELF, PAGE_STATS, PAGE_BOOKMARKS, PAGE_SETTINGS}) {
+            View section = sectionForPage(candidate);
+            if (section == null) {
+                continue;
             }
-            if (destination == AppDrawerController.SECTION_SETTINGS) {
-                Intent intent = new Intent(this, SettingsActivity.class);
-                startActivity(intent);
-                drawerController.closeDrawer();
-                return;
-            }
-            // SECTION_BOOKSHELF - already here, just close drawer
-            drawerController.closeDrawer();
+            section.animate().cancel();
+            section.setTranslationX(0f);
+            section.setVisibility(candidate == page ? View.VISIBLE : View.GONE);
+        }
+        updateHomeNavSelection();
+    }
+
+    private void animateHomePageTransition(int oldPage, int newPage) {
+        View oldSection = sectionForPage(oldPage);
+        View newSection = sectionForPage(newPage);
+        if (oldSection == null || newSection == null || pageContainer == null) {
+            showHomePageImmediate(newPage);
+            return;
+        }
+        int width = Math.max(pageContainer.getWidth(), 1);
+        int direction = activeHomePages.indexOf(newPage) > activeHomePages.indexOf(oldPage) ? 1 : -1;
+        oldSection.animate().cancel();
+        newSection.animate().cancel();
+        newSection.setVisibility(View.VISIBLE);
+        newSection.setTranslationX(direction * width);
+        oldSection.animate()
+                .translationX(-direction * width)
+                .setDuration(220L)
+                .withEndAction(() -> {
+                    if (oldPage != currentHomePage) {
+                        oldSection.setVisibility(View.GONE);
+                        oldSection.setTranslationX(0f);
+                    }
+                })
+                .start();
+        newSection.animate()
+                .translationX(0f)
+                .setDuration(220L)
+                .withEndAction(this::updateHomeNavSelection)
+                .start();
+        updateHomeNavSelection();
+    }
+
+    private void updateBottomNavLabels() {
+        boolean textMode = settingsStore != null && "text".equals(settingsStore.getHomeBottomNavStyle());
+        setHomeNavText(navBookshelf, textMode ? "书架" : "▦", textMode);
+        setHomeNavText(navStats, textMode ? "时长" : "◷", textMode);
+        setHomeNavText(navBookmarks, textMode ? "书签" : "★", textMode);
+        setHomeNavText(navSettings, textMode ? "设置" : "⚙", textMode);
+        updateHomeNavSelection();
+    }
+
+    private void setHomeNavText(TextView item, String text, boolean textMode) {
+        if (item == null) {
+            return;
+        }
+        item.setText(text);
+        item.setTextSize(textMode ? 15f : 22f);
+    }
+
+    private void updateHomeNavSelection() {
+        styleHomeNavItem(navBookshelf, currentHomePage == PAGE_BOOKSHELF);
+        styleHomeNavItem(navStats, currentHomePage == PAGE_STATS);
+        styleHomeNavItem(navBookmarks, currentHomePage == PAGE_BOOKMARKS);
+        styleHomeNavItem(navSettings, currentHomePage == PAGE_SETTINGS);
+    }
+
+    private void styleHomeNavItem(TextView item, boolean selected) {
+        if (item == null) {
+            return;
+        }
+        item.setBackgroundResource(selected ? R.drawable.bg_nav_item_active : R.drawable.bg_nav_item_idle);
+        item.setTextColor(ThemeModeHelper.resolveColor(
+                this,
+                selected ? R.color.app_nav_text_active : R.color.app_nav_text_idle
+        ));
+    }
+
+    private View sectionForPage(int page) {
+        if (page == PAGE_STATS) return sectionReadingStats;
+        if (page == PAGE_BOOKMARKS) return sectionBookmarks;
+        if (page == PAGE_SETTINGS) return sectionHomeSettings;
+        return sectionBookshelf;
+    }
+
+    private void refreshCurrentHomePage(boolean syncFirst) {
+        if (currentHomePage == PAGE_STATS) {
+            refreshHomeStatsIfVisible(syncFirst);
+        } else if (currentHomePage == PAGE_BOOKMARKS) {
+            refreshBookmarksIfVisible();
+        } else if (currentHomePage == PAGE_SETTINGS) {
+            bindHomeSettingsValues();
+        }
+    }
+
+    private boolean handleHomeSwipe(MotionEvent event) {
+        if (activeHomePages.size() <= 1 || pageContainer == null || loadingLayout == null) {
+            return false;
+        }
+        if (loadingLayout.getVisibility() == View.VISIBLE || isTouchInBottomNavigation(event)) {
+            resetHomeSwipe();
+            return false;
+        }
+        float x = event.getX();
+        float y = event.getY();
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                homeSwipeCandidate = true;
+                homeSwipeDragging = false;
+                swipeDownX = x;
+                swipeDownY = y;
+                swipeLastX = x;
+                swipeLastEventTime = event.getEventTime();
+                swipeVelocityX = 0f;
+                pendingSwipePage = -1;
+                pendingSwipeDirection = SWIPE_NONE;
+                return false;
+            case MotionEvent.ACTION_MOVE:
+                if (!homeSwipeCandidate) {
+                    return false;
+                }
+                float deltaX = x - swipeDownX;
+                float deltaY = y - swipeDownY;
+                if (!homeSwipeDragging) {
+                    if (Math.abs(deltaY) > touchSlop && Math.abs(deltaY) > Math.abs(deltaX)) {
+                        resetHomeSwipe();
+                        return false;
+                    }
+                    if (Math.abs(deltaX) <= touchSlop * 1.5f || Math.abs(deltaX) <= Math.abs(deltaY) * 1.2f) {
+                        return false;
+                    }
+                    int targetPage = pageForSwipeDelta(deltaX);
+                    if (targetPage < 0) {
+                        resetHomeSwipe();
+                        return false;
+                    }
+                    homeSwipeDragging = true;
+                    pendingSwipePage = targetPage;
+                    pendingSwipeDirection = deltaX < 0 ? 1 : -1;
+                    prepareHomeSwipe();
+                    MotionEvent cancelEvent = MotionEvent.obtain(event);
+                    cancelEvent.setAction(MotionEvent.ACTION_CANCEL);
+                    super.dispatchTouchEvent(cancelEvent);
+                    cancelEvent.recycle();
+                }
+                updateHomeSwipe(deltaX);
+                long now = event.getEventTime();
+                long elapsed = Math.max(1L, now - swipeLastEventTime);
+                swipeVelocityX = (x - swipeLastX) / elapsed;
+                swipeLastX = x;
+                swipeLastEventTime = now;
+                return true;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                if (homeSwipeDragging) {
+                    finishHomeSwipe(x - swipeDownX);
+                    return true;
+                }
+                resetHomeSwipe();
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    private boolean isTouchInBottomNavigation(MotionEvent event) {
+        return bottomNavigation != null && event.getY() >= bottomNavigation.getTop();
+    }
+
+    private int pageForSwipeDelta(float deltaX) {
+        int currentIndex = activeHomePages.indexOf(currentHomePage);
+        int targetIndex = deltaX < 0 ? currentIndex + 1 : currentIndex - 1;
+        if (targetIndex < 0 || targetIndex >= activeHomePages.size()) {
+            return -1;
+        }
+        return activeHomePages.get(targetIndex);
+    }
+
+    private void prepareHomeSwipe() {
+        View current = sectionForPage(currentHomePage);
+        View target = sectionForPage(pendingSwipePage);
+        if (current == null || target == null || pageContainer == null) {
+            return;
+        }
+        current.animate().cancel();
+        target.animate().cancel();
+        current.setVisibility(View.VISIBLE);
+        target.setVisibility(View.VISIBLE);
+        target.setTranslationX(pendingSwipeDirection * Math.max(pageContainer.getWidth(), 1));
+    }
+
+    private void updateHomeSwipe(float deltaX) {
+        View current = sectionForPage(currentHomePage);
+        View target = sectionForPage(pendingSwipePage);
+        if (current == null || target == null || pageContainer == null) {
+            return;
+        }
+        int width = Math.max(pageContainer.getWidth(), 1);
+        float clamped = Math.max(-width, Math.min(width, deltaX));
+        current.setTranslationX(clamped);
+        target.setTranslationX(pendingSwipeDirection * width + clamped);
+    }
+
+    private void finishHomeSwipe(float deltaX) {
+        View current = sectionForPage(currentHomePage);
+        View target = sectionForPage(pendingSwipePage);
+        if (current == null || target == null || pageContainer == null || pendingSwipePage < 0) {
+            resetHomeSwipe();
+            showHomePageImmediate(currentHomePage);
+            return;
+        }
+        int width = Math.max(pageContainer.getWidth(), 1);
+        boolean commit = Math.abs(deltaX) > width * 0.24f
+                || (Math.abs(swipeVelocityX) > 0.65f && Math.signum(swipeVelocityX) == -pendingSwipeDirection);
+        int oldPage = currentHomePage;
+        int targetPage = pendingSwipePage;
+        if (commit) {
+            current.animate()
+                    .translationX(-pendingSwipeDirection * width)
+                    .setDuration(180L)
+                    .withEndAction(() -> {
+                        if (currentHomePage != oldPage) {
+                            current.setVisibility(View.GONE);
+                            current.setTranslationX(0f);
+                        }
+                    })
+                    .start();
+            target.animate()
+                    .translationX(0f)
+                    .setDuration(180L)
+                    .withEndAction(this::updateHomeNavSelection)
+                    .start();
+            currentHomePage = targetPage;
+            refreshCurrentHomePage(false);
+        } else {
+            current.animate().translationX(0f).setDuration(160L).start();
+            target.animate()
+                    .translationX(pendingSwipeDirection * width)
+                    .setDuration(160L)
+                    .withEndAction(() -> {
+                        target.setVisibility(View.GONE);
+                        target.setTranslationX(0f);
+                    })
+                    .start();
+        }
+        resetHomeSwipe();
+        updateHomeNavSelection();
+    }
+
+    private void resetHomeSwipe() {
+        homeSwipeCandidate = false;
+        homeSwipeDragging = false;
+        pendingSwipePage = -1;
+        pendingSwipeDirection = SWIPE_NONE;
+        swipeVelocityX = 0f;
+    }
+
+    private void bindHomeSettingsValues() {
+        if (homeReadingTimeTrackingCheck == null) {
+            return;
+        }
+        bindingHomeSettings = true;
+        homeReadingTimeTrackingCheck.setChecked(settingsStore.isReadingTimeTrackingEnabled());
+        styleToggleButton(homeNavIconsButton, "icons".equals(settingsStore.getHomeBottomNavStyle()));
+        styleToggleButton(homeNavTextButton, "text".equals(settingsStore.getHomeBottomNavStyle()));
+        bindingHomeSettings = false;
+    }
+
+    private void selectHomeBottomNavStyle(String style) {
+        settingsStore.setHomeBottomNavStyle(style);
+        bindHomeSettingsValues();
+        updateBottomNavLabels();
+    }
+
+    private void selectHomeStatsPeriod(String period) {
+        selectedHomeStatsPeriod = ReadingStatsUtils.normalizePeriodKey(period);
+        updateHomeStatsPeriodButtons();
+        refreshHomeStatsIfVisible(false);
+    }
+
+    private void updateHomeStatsPeriodButtons() {
+        styleToggleButton(homeStatsTodayButton, ReadingStatsUtils.PERIOD_TODAY.equals(selectedHomeStatsPeriod));
+        styleToggleButton(homeStatsWeekButton, ReadingStatsUtils.PERIOD_WEEK.equals(selectedHomeStatsPeriod));
+        styleToggleButton(homeStatsYearButton, ReadingStatsUtils.PERIOD_YEAR.equals(selectedHomeStatsPeriod));
+    }
+
+    private void refreshHomeStatsIfVisible(boolean syncFirst) {
+        if (currentHomePage != PAGE_STATS || !settingsStore.isReadingTimeTrackingEnabled()) {
+            return;
+        }
+        updateHomeStatsPeriodButtons();
+        if (homeStatsStatusText != null) {
+            homeStatsStatusText.setText("正在加载本地阅读统计...");
+        }
+        if (homeStatsTotalText != null) {
+            homeStatsTotalText.setText("...");
+        }
+        executor.execute(() -> {
+            ReadingStatsUtils.Range range = ReadingStatsUtils.rangeForPeriod(
+                    selectedHomeStatsPeriod,
+                    java.time.ZoneId.systemDefault()
+            );
+            int totalSeconds = databaseHelper.getReadingDurationSeconds(range.startDateString(), range.endDateString(), null);
+            List<ReadingBookStatRecord> records = databaseHelper.getReadingBookStats(range.startDateString(), range.endDateString());
+            runOnUiThread(() -> renderHomeStats(totalSeconds, records));
         });
-        drawerController.bindMenuButton(R.id.button_open_drawer);
-        drawerController.setCurrentSection(AppDrawerController.SECTION_BOOKSHELF);
+    }
+
+    private void renderHomeStats(int totalSeconds, List<ReadingBookStatRecord> records) {
+        if (homeStatsStatusText != null) {
+            homeStatsStatusText.setText("当前展示的是本地阅读统计");
+        }
+        if (homeStatsTotalText != null) {
+            homeStatsTotalText.setText(ReadingStatsUtils.formatDuration(totalSeconds));
+        }
+        if (homeStatsListLayout == null || homeStatsEmptyText == null) {
+            return;
+        }
+        homeStatsListLayout.removeAllViews();
+        boolean empty = records == null || records.isEmpty();
+        homeStatsEmptyText.setVisibility(empty ? View.VISIBLE : View.GONE);
+        if (empty) {
+            return;
+        }
+        LayoutInflater inflater = LayoutInflater.from(this);
+        for (ReadingBookStatRecord record : records) {
+            View row = inflater.inflate(R.layout.item_reading_book_stat, homeStatsListLayout, false);
+            TextView titleText = row.findViewById(R.id.text_stat_row_title);
+            TextView authorText = row.findViewById(R.id.text_stat_row_author);
+            TextView metaText = row.findViewById(R.id.text_stat_row_meta);
+            TextView durationText = row.findViewById(R.id.text_stat_row_duration);
+            titleText.setText(ReadingStatsUtils.safeBookTitle(record.bookTitle));
+            authorText.setText(ReadingStatsUtils.safeBookAuthor(record.bookAuthor));
+            metaText.setText(record.localBookId > 0L ? "点击查看本书统计详情" : "当前设备没有这本书的本地副本");
+            durationText.setText(ReadingStatsUtils.formatDuration(record.totalDurationSeconds));
+            if (record.localBookId > 0L) {
+                row.setOnClickListener(v -> {
+                    Intent intent = new Intent(this, ReadingStatsActivity.class);
+                    intent.putExtra("book_id", record.localBookId);
+                    startActivity(intent);
+                });
+            } else {
+                row.setEnabled(false);
+                row.setAlpha(0.78f);
+            }
+            homeStatsListLayout.addView(row);
+        }
+    }
+
+    private void refreshBookmarksIfVisible() {
+        if (currentHomePage != PAGE_BOOKMARKS) {
+            return;
+        }
+        executor.execute(() -> {
+            List<BookmarkRecord> bookmarks = databaseHelper.getBookmarks();
+            runOnUiThread(() -> renderHomeBookmarks(bookmarks));
+        });
+    }
+
+    private void renderHomeBookmarks(List<BookmarkRecord> bookmarks) {
+        if (homeBookmarksListLayout == null || homeBookmarksEmptyText == null) {
+            return;
+        }
+        homeBookmarksListLayout.removeAllViews();
+        boolean empty = bookmarks == null || bookmarks.isEmpty();
+        homeBookmarksEmptyText.setVisibility(empty ? View.VISIBLE : View.GONE);
+        if (empty) {
+            return;
+        }
+        for (BookmarkRecord bookmark : bookmarks) {
+            homeBookmarksListLayout.addView(createBookmarkRow(bookmark));
+        }
+    }
+
+    private View createBookmarkRow(BookmarkRecord bookmark) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setBackgroundResource(R.drawable.bg_app_input);
+        row.setPadding(dp(14), dp(12), dp(10), dp(12));
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        rowParams.setMargins(0, dp(8), 0, 0);
+        row.setLayoutParams(rowParams);
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setOnClickListener(v -> openBookmark(bookmark));
+
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        texts.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView title = new TextView(this);
+        title.setText(ReadingStatsUtils.safeBookTitle(bookmark.bookTitle));
+        title.setTextColor(ThemeModeHelper.resolveColor(this, R.color.app_text_primary));
+        title.setTextSize(15f);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setMaxLines(1);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+
+        TextView meta = new TextView(this);
+        meta.setText(String.format(
+                Locale.SIMPLIFIED_CHINESE,
+                "%s · %.1f%%",
+                bookmark.chapterTitle == null || bookmark.chapterTitle.isBlank() ? "未命名章节" : bookmark.chapterTitle,
+                bookmark.progressPercent
+        ));
+        meta.setTextColor(ThemeModeHelper.resolveColor(this, R.color.app_text_secondary));
+        meta.setTextSize(13f);
+        meta.setMaxLines(1);
+        meta.setEllipsize(android.text.TextUtils.TruncateAt.END);
+
+        TextView summary = new TextView(this);
+        summary.setText(bookmark.summary == null || bookmark.summary.isBlank() ? "无摘要" : bookmark.summary);
+        summary.setTextColor(ThemeModeHelper.resolveColor(this, R.color.app_text_secondary));
+        summary.setTextSize(13f);
+        summary.setMaxLines(2);
+        summary.setEllipsize(android.text.TextUtils.TruncateAt.END);
+
+        texts.addView(title);
+        texts.addView(meta);
+        texts.addView(summary);
+
+        Button deleteButton = new Button(this);
+        deleteButton.setText("删除");
+        deleteButton.setTextSize(12f);
+        deleteButton.setAllCaps(false);
+        deleteButton.setMinWidth(0);
+        deleteButton.setMinHeight(0);
+        deleteButton.setPadding(dp(12), dp(8), dp(12), dp(8));
+        deleteButton.setBackgroundResource(R.drawable.bg_app_danger_button);
+        deleteButton.setTextColor(ThemeModeHelper.resolveColor(this, R.color.app_button_danger_text));
+        deleteButton.setOnClickListener(v -> confirmDeleteBookmark(bookmark));
+
+        row.addView(texts);
+        row.addView(deleteButton);
+        return row;
+    }
+
+    private void openBookmark(BookmarkRecord bookmark) {
+        executor.execute(() -> {
+            BookRecord book = bookmark.bookId > 0L ? databaseHelper.getBook(bookmark.bookId) : null;
+            if (book == null) {
+                book = databaseHelper.findBookByReadingStatsKey(bookmark.bookIdentity);
+            }
+            BookRecord finalBook = book;
+            runOnUiThread(() -> {
+                if (finalBook == null) {
+                    showToast("这本书已经不在当前设备的书架中");
+                    return;
+                }
+                Intent intent = new Intent(this, ReaderActivity.class);
+                intent.putExtra("book_id", finalBook.id);
+                intent.putExtra("bookmark_chapter_order_index", bookmark.chapterOrderIndex);
+                intent.putExtra("bookmark_chapter_offset", bookmark.chapterOffset);
+                startActivity(intent);
+            });
+        });
+    }
+
+    private void confirmDeleteBookmark(BookmarkRecord bookmark) {
+        new AlertDialog.Builder(this)
+                .setTitle("删除书签")
+                .setMessage("确定删除这个书签吗？")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("删除", (dialog, which) -> executor.execute(() -> {
+                    databaseHelper.deleteBookmark(bookmark.id);
+                    runOnUiThread(this::refreshBookmarksIfVisible);
+                }))
+                .show();
     }
 
     // ==================== Bookshelf ====================
@@ -303,7 +899,6 @@ public class BookshelfActivity extends ThemedActivity {
     private void setBookshelfMode(String mode) {
         settingsStore.setBookshelfViewMode(mode);
         applyBookshelfMode();
-        updateDrawerStatus();
     }
 
     private void applyBookshelfMode() {
@@ -330,6 +925,14 @@ public class BookshelfActivity extends ThemedActivity {
         ));
     }
 
+    private void styleToggleButton(Button button, boolean selected) {
+        if (button == null) {
+            return;
+        }
+        button.setSelected(selected);
+        styleSelectionButton(button, selected);
+    }
+
     private void refreshBooks() {
         booksLoading = true;
         if (!booksLoaded) {
@@ -344,14 +947,12 @@ public class BookshelfActivity extends ThemedActivity {
                     allBooks.clear();
                     allBooks.addAll(books);
                     applyFilter(currentQuery());
-                    updateDrawerStatus();
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
                     booksLoading = false;
                     booksLoaded = true;
                     applyFilter(currentQuery());
-                    updateDrawerStatus();
                     showToast("加载书架失败: " + readableError(error));
                 });
             }
@@ -430,19 +1031,6 @@ public class BookshelfActivity extends ThemedActivity {
             return;
         }
         statsText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "共 %d 本书籍", filtered.size()));
-    }
-
-    private void updateDrawerStatus() {
-        String status = String.format(
-                Locale.SIMPLIFIED_CHINESE,
-                "已导入 %d 本书\n%s · %s",
-                allBooks.size(),
-                isCardMode() ? "网格书架" : "列表书架",
-                ThemeModeHelper.getResolvedAppAppearanceLabel(this)
-        );
-        if (drawerController != null) {
-            drawerController.setStatusText(status);
-        }
     }
 
     // ==================== Book Actions ====================
@@ -626,6 +1214,10 @@ public class BookshelfActivity extends ThemedActivity {
 
     private String normalizeQuery(String query) {
         return query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private int dp(int value) {
+        return Math.round(getResources().getDisplayMetrics().density * value);
     }
 
     private String readableError(Throwable error) {

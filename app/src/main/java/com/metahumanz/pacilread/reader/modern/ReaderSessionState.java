@@ -21,6 +21,8 @@ public final class ReaderSessionState {
     public int restoredChapterIndex = -1;
     public int restoredPageIndex = -1;
     public int restoredProgressOffset = -1;
+    public int requestedChapterOrderIndex = -1;
+    public int requestedChapterOffset = -1;
     public int systemInsetTop = 0;
     public int systemInsetBottom = 0;
     public int systemInsetLeft = 0;

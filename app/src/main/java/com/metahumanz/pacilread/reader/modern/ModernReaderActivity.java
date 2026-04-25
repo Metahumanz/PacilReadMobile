@@ -1,5 +1,6 @@
 package com.metahumanz.pacilread.reader.modern;
 
+import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -7,16 +8,25 @@ import android.content.IntentFilter;
 import android.os.BatteryManager;
 import android.os.Bundle;
 import android.view.GestureDetector;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.SeekBar;
+import android.widget.TextView;
 
 import androidx.core.view.WindowCompat;
 
 import com.metahumanz.pacilread.R;
 import com.metahumanz.pacilread.ReadingStatsActivity;
+import com.metahumanz.pacilread.model.BookmarkRecord;
+import com.metahumanz.pacilread.model.ChapterRecord;
+import com.metahumanz.pacilread.stats.ReadingStatsUtils;
 import com.metahumanz.pacilread.reader.modern.content.ReaderContentController;
 import com.metahumanz.pacilread.reader.modern.dialog.ReaderDialogSupport;
 import com.metahumanz.pacilread.reader.modern.dialog.ReaderLibraryDialogs;
@@ -30,6 +40,10 @@ import com.metahumanz.pacilread.reader.modern.tts.ReaderTtsController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderStyleController;
 import com.metahumanz.pacilread.theme.ThemedReaderActivity;
+
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
 
 public class ModernReaderActivity extends ThemedReaderActivity {
     private static final int REQUEST_PICK_BACKGROUND = 2001;
@@ -64,6 +78,8 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         readingStatsTracker = new ReaderReadingStatsTracker(runtime, state);
         state.pagingTouchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
         state.bookId = getIntent().getLongExtra("book_id", -1L);
+        state.requestedChapterOrderIndex = getIntent().getIntExtra("bookmark_chapter_order_index", -1);
+        state.requestedChapterOffset = getIntent().getIntExtra("bookmark_chapter_offset", -1);
         if (savedInstanceState != null) {
             state.restoredChapterIndex = savedInstanceState.getInt("restored_chapter_index", -1);
             state.restoredPageIndex = savedInstanceState.getInt("restored_page_index", -1);
@@ -230,6 +246,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         findViewById(R.id.button_next_chapter).setOnClickListener(v -> navigation.openChapterFromStart(state.currentChapterIndex + 1, true, 1));
         findViewById(R.id.button_toc).setOnClickListener(v -> libraryDialogs.showTocDialog());
         findViewById(R.id.button_search).setOnClickListener(v -> libraryDialogs.showSearchDialog());
+        findViewById(R.id.button_bookmark).setOnClickListener(v -> showBookmarkDialog());
         findViewById(R.id.button_rules).setOnClickListener(v -> libraryDialogs.showRulesDialog());
         findViewById(R.id.button_style).setOnClickListener(v -> styleDialogs.showStyleDialog(REQUEST_PICK_BACKGROUND));
         findViewById(R.id.button_reader_options).setOnClickListener(v -> optionsDialogs.showReaderOptionsDialog());
@@ -358,5 +375,215 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         Intent intent = new Intent(this, ReadingStatsActivity.class);
         intent.putExtra("book_id", state.book.id);
         startActivity(intent);
+    }
+
+    private void showBookmarkDialog() {
+        if (state.book == null) {
+            ui.showToast("书籍尚未载入");
+            return;
+        }
+        runtime.executor.execute(() -> {
+            List<BookmarkRecord> bookmarks = runtime.databaseHelper.getBookmarksForBook(
+                    state.book.id,
+                    state.book.readingStatsKey
+            );
+            runOnUiThread(() -> renderBookmarkDialog(bookmarks));
+        });
+    }
+
+    private void renderBookmarkDialog(List<BookmarkRecord> bookmarks) {
+        LinearLayout contentLayout = new LinearLayout(this);
+        contentLayout.setOrientation(LinearLayout.VERTICAL);
+        int padding = ui.dp(16);
+        contentLayout.setPadding(padding, padding, padding, ui.dp(8));
+
+        Button addButton = new Button(this);
+        addButton.setText("添加书签");
+        addButton.setAllCaps(false);
+        addButton.setBackgroundResource(R.drawable.bg_app_primary_button);
+        addButton.setTextColor(ui.themeColor(R.color.app_button_primary_text));
+        contentLayout.addView(addButton, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        ));
+
+        AlertDialog[] dialogRef = new AlertDialog[1];
+        boolean empty = bookmarks == null || bookmarks.isEmpty();
+        if (empty) {
+            TextView emptyText = new TextView(this);
+            emptyText.setText("本书还没有书签");
+            emptyText.setGravity(Gravity.CENTER);
+            emptyText.setTextColor(ui.themeColor(R.color.app_text_secondary));
+            emptyText.setTextSize(14f);
+            LinearLayout.LayoutParams emptyParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+            );
+            emptyParams.setMargins(0, ui.dp(18), 0, ui.dp(8));
+            contentLayout.addView(emptyText, emptyParams);
+        } else {
+            ScrollView scrollView = new ScrollView(this);
+            LinearLayout rows = new LinearLayout(this);
+            rows.setOrientation(LinearLayout.VERTICAL);
+            scrollView.addView(rows, new ScrollView.LayoutParams(
+                    ScrollView.LayoutParams.MATCH_PARENT,
+                    ScrollView.LayoutParams.WRAP_CONTENT
+            ));
+            LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+            );
+            scrollParams.setMargins(0, ui.dp(10), 0, 0);
+            contentLayout.addView(scrollView, scrollParams);
+
+            for (BookmarkRecord bookmark : bookmarks) {
+                rows.addView(createReaderBookmarkRow(bookmark, () -> {
+                    if (dialogRef[0] != null) {
+                        dialogRef[0].dismiss();
+                    }
+                    jumpToBookmark(bookmark);
+                }));
+            }
+        }
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("书签")
+                .setView(contentLayout)
+                .setNegativeButton("关闭", null)
+                .create();
+        dialogRef[0] = dialog;
+        addButton.setOnClickListener(v -> {
+            dialog.dismiss();
+            showAddBookmarkDialog();
+        });
+        dialog.show();
+    }
+
+    private View createReaderBookmarkRow(BookmarkRecord bookmark, Runnable onClick) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.VERTICAL);
+        row.setBackgroundResource(R.drawable.bg_app_input);
+        row.setPadding(ui.dp(14), ui.dp(12), ui.dp(14), ui.dp(12));
+        row.setClickable(true);
+        row.setFocusable(true);
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        rowParams.setMargins(0, ui.dp(8), 0, 0);
+        row.setLayoutParams(rowParams);
+
+        TextView title = new TextView(this);
+        title.setText(bookmark.chapterTitle == null || bookmark.chapterTitle.isBlank()
+                ? "未命名章节"
+                : bookmark.chapterTitle);
+        title.setTextColor(ui.themeColor(R.color.app_text_primary));
+        title.setTextSize(15f);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setMaxLines(1);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+
+        TextView meta = new TextView(this);
+        meta.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%.1f%%", bookmark.progressPercent));
+        meta.setTextColor(ui.themeColor(R.color.app_text_secondary));
+        meta.setTextSize(13f);
+
+        TextView summary = new TextView(this);
+        summary.setText(bookmark.summary == null || bookmark.summary.isBlank() ? "无摘要" : bookmark.summary);
+        summary.setTextColor(ui.themeColor(R.color.app_text_secondary));
+        summary.setTextSize(13f);
+        summary.setMaxLines(2);
+        summary.setEllipsize(android.text.TextUtils.TruncateAt.END);
+
+        row.addView(title);
+        row.addView(meta);
+        row.addView(summary);
+        row.setOnClickListener(v -> {
+            if (onClick != null) {
+                onClick.run();
+            }
+        });
+        return row;
+    }
+
+    private void showAddBookmarkDialog() {
+        if (state.book == null || state.chapters.isEmpty()) {
+            ui.showToast("书籍尚未载入");
+            return;
+        }
+        int chapterIndex = Math.max(0, Math.min(state.currentChapterIndex, state.chapters.size() - 1));
+        int chapterOffset = content.currentCharOffset();
+        String summary = content.buildBookmarkSummary(chapterIndex, chapterOffset, 120);
+
+        EditText editText = new EditText(this);
+        editText.setMinLines(3);
+        editText.setMaxLines(6);
+        editText.setText(summary);
+        editText.setSelection(editText.getText().length());
+        editText.setTextColor(ui.themeColor(R.color.app_text_primary));
+        editText.setHintTextColor(ui.themeColor(R.color.app_text_secondary));
+        editText.setHint("摘要");
+        editText.setBackgroundResource(R.drawable.bg_app_input);
+        editText.setPadding(ui.dp(12), ui.dp(10), ui.dp(12), ui.dp(10));
+
+        LinearLayout wrapper = new LinearLayout(this);
+        wrapper.setPadding(ui.dp(16), ui.dp(12), ui.dp(16), 0);
+        wrapper.addView(editText, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        ));
+
+        new AlertDialog.Builder(this)
+                .setTitle("添加书签")
+                .setView(wrapper)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("保存", (dialog, which) -> saveBookmark(
+                        chapterIndex,
+                        chapterOffset,
+                        editText.getText() == null ? "" : editText.getText().toString()
+                ))
+                .show();
+    }
+
+    private void saveBookmark(int chapterIndex, int chapterOffset, String summary) {
+        if (state.book == null || state.chapters.isEmpty()) {
+            ui.showToast("书籍尚未载入");
+            return;
+        }
+        int safeChapterIndex = Math.max(0, Math.min(chapterIndex, state.chapters.size() - 1));
+        ChapterRecord chapter = state.chapters.get(safeChapterIndex);
+        BookmarkRecord bookmark = new BookmarkRecord();
+        long now = System.currentTimeMillis();
+        bookmark.uuid = UUID.randomUUID().toString();
+        bookmark.bookId = state.book.id;
+        bookmark.bookIdentity = state.book.readingStatsKey;
+        bookmark.bookTitle = ReadingStatsUtils.safeBookTitle(state.book.title);
+        bookmark.bookAuthor = ReadingStatsUtils.safeBookAuthor(state.book.author);
+        bookmark.chapterOrderIndex = chapter.orderIndex;
+        bookmark.chapterTitle = chapter.title == null ? "" : chapter.title;
+        bookmark.chapterOffset = Math.max(chapterOffset, 0);
+        bookmark.progressPercent = content.bookProgressPercentFor(safeChapterIndex, bookmark.chapterOffset);
+        bookmark.summary = summary == null || summary.trim().isEmpty()
+                ? content.buildBookmarkSummary(safeChapterIndex, bookmark.chapterOffset, 120)
+                : summary.trim();
+        bookmark.createdAt = now;
+        bookmark.updatedAt = now;
+        runtime.executor.execute(() -> {
+            runtime.databaseHelper.upsertBookmark(bookmark);
+            runOnUiThread(() -> {
+                ui.showToast("已添加书签");
+                showBookmarkDialog();
+            });
+        });
+    }
+
+    private void jumpToBookmark(BookmarkRecord bookmark) {
+        if (bookmark == null || state.chapters.isEmpty()) {
+            return;
+        }
+        chrome.setControlsVisible(false);
+        int chapterIndex = navigation.chapterIndexFromOrder(bookmark.chapterOrderIndex);
+        int direction = chapterIndex >= state.currentChapterIndex ? 1 : -1;
+        navigation.openChapter(chapterIndex, bookmark.chapterOffset, true, direction);
     }
 }

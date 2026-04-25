@@ -111,6 +111,13 @@ public final class ReaderContentController {
                     0,
                     state.chapters.size() - 1
             );
+            if (state.requestedChapterOrderIndex >= 0 && state.requestedChapterOffset >= 0) {
+                targetChapterIndex = ui.clamp(
+                        navigation.chapterIndexFromOrder(state.requestedChapterOrderIndex),
+                        0,
+                        state.chapters.size() - 1
+                );
+            }
             if (state.restoredChapterIndex >= 0 && state.restoredProgressOffset >= 0) {
                 targetChapterIndex = ui.clamp(state.restoredChapterIndex, 0, state.chapters.size() - 1);
             }
@@ -156,6 +163,13 @@ public final class ReaderContentController {
                             0,
                             state.chapters.size() - 1
                     );
+                    if (state.requestedChapterOrderIndex >= 0 && state.requestedChapterOffset >= 0) {
+                        targetChapterIndex = ui.clamp(
+                                navigation.chapterIndexFromOrder(state.requestedChapterOrderIndex),
+                                0,
+                                state.chapters.size() - 1
+                        );
+                    }
                     if (state.restoredChapterIndex >= 0 && state.restoredProgressOffset >= 0) {
                         targetChapterIndex = ui.clamp(state.restoredChapterIndex, 0, state.chapters.size() - 1);
                     }
@@ -480,6 +494,39 @@ public final class ReaderContentController {
         return pages.get(ui.clamp(state.currentPageIndex, 0, pages.size() - 1)).start;
     }
 
+    public float bookProgressPercentFor(int chapterIndex, int chapterOffset) {
+        if (state.chapters.isEmpty()) {
+            return 0f;
+        }
+        int total = Math.max(getTotalProcessedBookLength(), 1);
+        int safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size() - 1);
+        int completed = 0;
+        for (int i = 0; i < safeChapterIndex; i++) {
+            completed += getProcessedChapterLength(i);
+        }
+        int safeOffset = ui.clamp(chapterOffset, 0, getProcessedChapterLength(safeChapterIndex));
+        return Math.max(0f, Math.min(100f, (completed + safeOffset) * 100f / total));
+    }
+
+    public String buildBookmarkSummary(int chapterIndex, int chapterOffset, int maxChars) {
+        if (state.chapters.isEmpty()) {
+            return "";
+        }
+        int safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size() - 1);
+        String text = getProcessedChapterText(safeChapterIndex);
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+        int safeOffset = ui.clamp(chapterOffset, 0, text.length());
+        int end = Math.min(text.length(), safeOffset + Math.max(maxChars, 24));
+        String summary = text.substring(safeOffset, end).replaceAll("\\s+", " ").trim();
+        if (summary.isEmpty() && safeOffset > 0) {
+            int start = Math.max(0, safeOffset - Math.max(maxChars, 24));
+            summary = text.substring(start, safeOffset).replaceAll("\\s+", " ").trim();
+        }
+        return summary;
+    }
+
     public void clearPageCache() {
         cachedPageSlicesMap.clear();
         cachedLayoutSignature = null;
@@ -608,6 +655,9 @@ public final class ReaderContentController {
         if (state.restoredChapterIndex >= 0 && state.restoredProgressOffset >= 0) {
             return Math.max(state.restoredProgressOffset, 0);
         }
+        if (state.requestedChapterOrderIndex >= 0 && state.requestedChapterOffset >= 0) {
+            return Math.max(state.requestedChapterOffset, 0);
+        }
         return Math.max(defaultOffset, 0);
     }
 
@@ -615,6 +665,8 @@ public final class ReaderContentController {
         state.restoredChapterIndex = -1;
         state.restoredPageIndex = -1;
         state.restoredProgressOffset = -1;
+        state.requestedChapterOrderIndex = -1;
+        state.requestedChapterOffset = -1;
     }
 
     private void performScheduledReflow() {

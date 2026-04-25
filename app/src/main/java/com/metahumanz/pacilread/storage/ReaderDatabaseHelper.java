@@ -6,6 +6,7 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
+import com.metahumanz.pacilread.model.BookmarkRecord;
 import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.model.ChapterRecord;
 import com.metahumanz.pacilread.model.ImportedBook;
@@ -27,7 +28,7 @@ import java.util.Locale;
 
 public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     private static final String DATABASE_NAME = "reader.db";
-    private static final int DATABASE_VERSION = 4;
+    private static final int DATABASE_VERSION = 5;
 
     private static ReaderDatabaseHelper instance;
 
@@ -123,10 +124,13 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 "updated_at INTEGER NOT NULL DEFAULT 0" +
                 ")");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_reading_stats_date ON reading_stats(date)");
+
+        createBookmarkTable(db);
     }
 
     private void ensureSchema(SQLiteDatabase db) {
         createAllTables(db);
+        createBookmarkTable(db);
         repairLegacyBookLocalPathColumn(db);
         ensureColumn(db, "books", "cover_path", "cover_path TEXT");
         ensureColumn(db, "books", "book_type", "book_type TEXT NOT NULL DEFAULT 'text'");
@@ -164,6 +168,26 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         deduplicateReadingStats(db);
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_books_reading_stats_key ON books(reading_stats_key)");
         db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_reading_stats_identity ON reading_stats(source_device_id, date, book_identity)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_bookmarks_book_identity ON bookmarks(book_identity)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_bookmarks_book_id ON bookmarks(book_id)");
+    }
+
+    private void createBookmarkTable(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS bookmarks (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                "uuid TEXT NOT NULL UNIQUE," +
+                "book_id INTEGER NOT NULL DEFAULT -1," +
+                "book_identity TEXT NOT NULL DEFAULT ''," +
+                "book_title TEXT NOT NULL DEFAULT ''," +
+                "book_author TEXT NOT NULL DEFAULT ''," +
+                "chapter_order_index INTEGER NOT NULL DEFAULT 0," +
+                "chapter_title TEXT NOT NULL DEFAULT ''," +
+                "chapter_offset INTEGER NOT NULL DEFAULT 0," +
+                "progress_percent REAL NOT NULL DEFAULT 0," +
+                "summary TEXT NOT NULL DEFAULT ''," +
+                "created_at INTEGER NOT NULL DEFAULT 0," +
+                "updated_at INTEGER NOT NULL DEFAULT 0" +
+                ")");
     }
 
     private void ensureColumn(SQLiteDatabase db, String tableName, String columnName, String definition) {
@@ -371,6 +395,11 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         try {
             db.delete("chapters", "book_id=?", new String[]{String.valueOf(bookId)});
             db.delete("replacement_rules", "book_id=?", new String[]{String.valueOf(bookId)});
+            if (book != null && book.readingStatsKey != null && !book.readingStatsKey.isBlank()) {
+                db.delete("bookmarks", "book_id=? OR book_identity=?", new String[]{String.valueOf(bookId), book.readingStatsKey});
+            } else {
+                db.delete("bookmarks", "book_id=?", new String[]{String.valueOf(bookId)});
+            }
             db.delete("books", "id=?", new String[]{String.valueOf(bookId)});
             db.setTransactionSuccessful();
         } finally {
@@ -688,6 +717,61 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         }
     }
 
+    public synchronized long upsertBookmark(BookmarkRecord bookmark) {
+        if (bookmark == null || bookmark.uuid == null || bookmark.uuid.isBlank()) {
+            throw new IllegalArgumentException("书签缺少唯一标识");
+        }
+        SQLiteDatabase db = getWritableDatabase();
+        return upsertBookmarkRow(db, bookmark);
+    }
+
+    public synchronized List<BookmarkRecord> getBookmarks() {
+        List<BookmarkRecord> bookmarks = new ArrayList<>();
+        try (Cursor cursor = getReadableDatabase().query(
+                "bookmarks",
+                null,
+                null,
+                null,
+                null,
+                null,
+                "updated_at DESC, created_at DESC, id DESC"
+        )) {
+            while (cursor.moveToNext()) {
+                bookmarks.add(readBookmark(cursor));
+            }
+        }
+        return bookmarks;
+    }
+
+    public synchronized List<BookmarkRecord> getBookmarksForBook(long bookId, String bookIdentity) {
+        List<BookmarkRecord> bookmarks = new ArrayList<>();
+        String selection = "book_id=?";
+        List<String> args = new ArrayList<>();
+        args.add(String.valueOf(bookId));
+        if (bookIdentity != null && !bookIdentity.isBlank()) {
+            selection += " OR book_identity=?";
+            args.add(bookIdentity);
+        }
+        try (Cursor cursor = getReadableDatabase().query(
+                "bookmarks",
+                null,
+                selection,
+                args.toArray(new String[0]),
+                null,
+                null,
+                "chapter_order_index ASC, chapter_offset ASC, created_at ASC"
+        )) {
+            while (cursor.moveToNext()) {
+                bookmarks.add(readBookmark(cursor));
+            }
+        }
+        return bookmarks;
+    }
+
+    public synchronized void deleteBookmark(long bookmarkId) {
+        getWritableDatabase().delete("bookmarks", "id=?", new String[]{String.valueOf(bookmarkId)});
+    }
+
     public synchronized File exportDatabase(File destination) throws IOException {
         close();
         copyFile(getDatabaseFile(), destination);
@@ -740,11 +824,27 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                     "char_count INTEGER NOT NULL DEFAULT 0," +
                     "updated_at INTEGER NOT NULL DEFAULT 0" +
                     ")");
+            liteDb.execSQL("CREATE TABLE bookmarks (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                    "uuid TEXT NOT NULL UNIQUE," +
+                    "book_id INTEGER NOT NULL DEFAULT -1," +
+                    "book_identity TEXT NOT NULL DEFAULT ''," +
+                    "book_title TEXT NOT NULL DEFAULT ''," +
+                    "book_author TEXT NOT NULL DEFAULT ''," +
+                    "chapter_order_index INTEGER NOT NULL DEFAULT 0," +
+                    "chapter_title TEXT NOT NULL DEFAULT ''," +
+                    "chapter_offset INTEGER NOT NULL DEFAULT 0," +
+                    "progress_percent REAL NOT NULL DEFAULT 0," +
+                    "summary TEXT NOT NULL DEFAULT ''," +
+                    "created_at INTEGER NOT NULL DEFAULT 0," +
+                    "updated_at INTEGER NOT NULL DEFAULT 0" +
+                    ")");
 
             copyRows(getReadableDatabase(), liteDb, "books");
             copyRows(getReadableDatabase(), liteDb, "replacement_rules");
             copyRows(getReadableDatabase(), liteDb, "custom_themes");
             copyRows(getReadableDatabase(), liteDb, "reading_stats");
+            copyRows(getReadableDatabase(), liteDb, "bookmarks");
         } finally {
             liteDb.close();
         }
@@ -853,6 +953,10 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 }
             }
 
+            if (tableExists(sourceDb, "bookmarks")) {
+                mergeBookmarkRows(sourceDb, target);
+            }
+
             target.setTransactionSuccessful();
         } finally {
             target.endTransaction();
@@ -912,6 +1016,68 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
             }
         }
         return null;
+    }
+
+    private long upsertBookmarkRow(SQLiteDatabase db, BookmarkRecord bookmark) {
+        long now = System.currentTimeMillis();
+        long createdAt = bookmark.createdAt > 0 ? bookmark.createdAt : now;
+        long updatedAt = bookmark.updatedAt > 0 ? bookmark.updatedAt : now;
+        ContentValues values = bookmarkValues(bookmark, createdAt, updatedAt);
+        try (Cursor cursor = db.query(
+                "bookmarks",
+                new String[]{"id", "updated_at"},
+                "uuid=?",
+                new String[]{bookmark.uuid},
+                null,
+                null,
+                null,
+                "1"
+        )) {
+            if (cursor.moveToFirst()) {
+                long existingId = cursor.getLong(0);
+                long existingUpdatedAt = cursor.getLong(1);
+                if (updatedAt >= existingUpdatedAt) {
+                    db.update("bookmarks", values, "id=?", new String[]{String.valueOf(existingId)});
+                }
+                return existingId;
+            }
+        }
+        return db.insertOrThrow("bookmarks", null, values);
+    }
+
+    private ContentValues bookmarkValues(BookmarkRecord bookmark, long createdAt, long updatedAt) {
+        ContentValues values = new ContentValues();
+        values.put("uuid", bookmark.uuid);
+        values.put("book_id", bookmark.bookId);
+        values.put("book_identity", safeBookIdentityForBookmark(bookmark.bookIdentity));
+        values.put("book_title", ReadingStatsUtils.safeBookTitle(bookmark.bookTitle));
+        values.put("book_author", normalizeAuthor(bookmark.bookAuthor));
+        values.put("chapter_order_index", Math.max(bookmark.chapterOrderIndex, 0));
+        values.put("chapter_title", bookmark.chapterTitle == null ? "" : bookmark.chapterTitle.trim());
+        values.put("chapter_offset", Math.max(bookmark.chapterOffset, 0));
+        values.put("progress_percent", clamp(bookmark.progressPercent, 0f, 100f));
+        values.put("summary", bookmark.summary == null ? "" : bookmark.summary.trim());
+        values.put("created_at", createdAt);
+        values.put("updated_at", updatedAt);
+        return values;
+    }
+
+    private BookmarkRecord readBookmark(Cursor cursor) {
+        BookmarkRecord bookmark = new BookmarkRecord();
+        bookmark.id = cursor.getLong(cursor.getColumnIndexOrThrow("id"));
+        bookmark.uuid = cursor.getString(cursor.getColumnIndexOrThrow("uuid"));
+        bookmark.bookId = cursor.getLong(cursor.getColumnIndexOrThrow("book_id"));
+        bookmark.bookIdentity = cursor.getString(cursor.getColumnIndexOrThrow("book_identity"));
+        bookmark.bookTitle = cursor.getString(cursor.getColumnIndexOrThrow("book_title"));
+        bookmark.bookAuthor = cursor.getString(cursor.getColumnIndexOrThrow("book_author"));
+        bookmark.chapterOrderIndex = cursor.getInt(cursor.getColumnIndexOrThrow("chapter_order_index"));
+        bookmark.chapterTitle = cursor.getString(cursor.getColumnIndexOrThrow("chapter_title"));
+        bookmark.chapterOffset = cursor.getInt(cursor.getColumnIndexOrThrow("chapter_offset"));
+        bookmark.progressPercent = cursor.getFloat(cursor.getColumnIndexOrThrow("progress_percent"));
+        bookmark.summary = cursor.getString(cursor.getColumnIndexOrThrow("summary"));
+        bookmark.createdAt = cursor.getLong(cursor.getColumnIndexOrThrow("created_at"));
+        bookmark.updatedAt = cursor.getLong(cursor.getColumnIndexOrThrow("updated_at"));
+        return bookmark;
     }
 
     private String rebasedAssetPath(String folderName, String originalPath) {
@@ -1163,6 +1329,55 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         }
     }
 
+    private void mergeBookmarkRows(SQLiteDatabase sourceDb, SQLiteDatabase targetDb) {
+        try (Cursor cursor = sourceDb.query("bookmarks", null, null, null, null, null, null)) {
+            while (cursor.moveToNext()) {
+                BookmarkRecord bookmark = readBookmark(cursor);
+                bookmark.bookId = resolveBookmarkBookId(targetDb, bookmark);
+                upsertBookmarkRow(targetDb, bookmark);
+            }
+        }
+    }
+
+    private long resolveBookmarkBookId(SQLiteDatabase db, BookmarkRecord bookmark) {
+        if (bookmark == null) {
+            return -1L;
+        }
+        if (bookmark.bookIdentity != null && !bookmark.bookIdentity.isBlank()) {
+            try (Cursor cursor = db.query(
+                    "books",
+                    new String[]{"id"},
+                    "reading_stats_key=?",
+                    new String[]{bookmark.bookIdentity},
+                    null,
+                    null,
+                    null,
+                    "1"
+            )) {
+                if (cursor.moveToFirst()) {
+                    return cursor.getLong(0);
+                }
+            }
+        }
+        String title = bookmark.bookTitle == null ? "" : bookmark.bookTitle.trim();
+        String author = bookmark.bookAuthor == null ? "" : bookmark.bookAuthor.trim();
+        try (Cursor cursor = db.query(
+                "books",
+                new String[]{"id"},
+                "LOWER(TRIM(title))=? AND LOWER(TRIM(COALESCE(author, '')))=?",
+                new String[]{title.toLowerCase(Locale.ROOT), author.toLowerCase(Locale.ROOT)},
+                null,
+                null,
+                null,
+                "1"
+        )) {
+            if (cursor.moveToFirst()) {
+                return cursor.getLong(0);
+            }
+        }
+        return bookmark.bookId;
+    }
+
     private boolean tableExists(SQLiteDatabase db, String tableName) {
         try (Cursor cursor = db.rawQuery(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
@@ -1184,8 +1399,16 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         return value == null || value.isBlank() ? ReadingStatsUtils.LEGACY_BOOK_IDENTITY : value;
     }
 
+    private String safeBookIdentityForBookmark(String value) {
+        return value == null ? "" : value.trim();
+    }
+
     private String normalizeAuthor(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private float clamp(float value, float min, float max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private String normalizedTitleAuthorKey(String title, String author) {

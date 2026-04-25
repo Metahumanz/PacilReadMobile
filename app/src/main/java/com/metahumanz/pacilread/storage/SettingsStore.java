@@ -80,6 +80,7 @@ public class SettingsStore {
     private static final String KEY_READER_AUTO_NIGHT_ENABLED = "reader_auto_night_enabled";
     private static final String KEY_READER_AUTO_NIGHT_CUSTOM_POLICY = "reader_auto_night_custom_policy";
     private static final String KEY_BOOKSHELF_SHOW_ADD_ENTRY = "bookshelf_show_add_entry";
+    private static final String KEY_HOME_BOTTOM_NAV_STYLE = "home_bottom_nav_style";
 
     private final SharedPreferences preferences;
 
@@ -503,6 +504,14 @@ public class SettingsStore {
         preferences.edit().putBoolean(KEY_BOOKSHELF_SHOW_ADD_ENTRY, visible).apply();
     }
 
+    public String getHomeBottomNavStyle() {
+        return normalizeHomeBottomNavStyle(preferences.getString(KEY_HOME_BOTTOM_NAV_STYLE, "icons"));
+    }
+
+    public void setHomeBottomNavStyle(String value) {
+        preferences.edit().putString(KEY_HOME_BOTTOM_NAV_STYLE, normalizeHomeBottomNavStyle(value)).apply();
+    }
+
     public String getReaderSliderMode() {
         String value = preferences.getString(KEY_READER_SLIDER_MODE, "book");
         return "chapter".equals(value) ? "chapter" : "book";
@@ -759,6 +768,10 @@ public class SettingsStore {
             return value;
         }
         return "ask";
+    }
+
+    public static String normalizeHomeBottomNavStyle(String value) {
+        return "text".equals(value) ? "text" : "icons";
     }
 
     private static String normalizeTtsEngine(String value) {
