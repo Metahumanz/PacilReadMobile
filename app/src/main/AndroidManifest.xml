@@ -30,8 +30,7 @@
             android:exported="false" />
         <activity
             android:name="com.metahumanz.pacilread.ReaderActivity"
-            android:exported="false"
-            android:screenOrientation="portrait" />
+            android:exported="false" />
     </application>
 
 </manifest>

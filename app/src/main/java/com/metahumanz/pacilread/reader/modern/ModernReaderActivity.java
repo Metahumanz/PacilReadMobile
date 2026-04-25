@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ActivityInfo;
 import android.os.BatteryManager;
 import android.os.Bundle;
 import android.view.GestureDetector;
@@ -39,6 +40,7 @@ import com.metahumanz.pacilread.reader.modern.stats.ReaderReadingStatsTracker;
 import com.metahumanz.pacilread.reader.modern.tts.ReaderTtsController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderStyleController;
+import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedReaderActivity;
 
 import java.util.List;
@@ -70,6 +72,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        applyReaderOrientationPreference();
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         setContentView(R.layout.activity_reader);
 
@@ -105,6 +108,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        applyReaderOrientationPreference();
         if (readingStatsTracker != null) {
             readingStatsTracker.resume();
         }
@@ -114,6 +118,17 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             chrome.scheduleAutoHide();
         } else {
             chrome.cancelAutoHide();
+        }
+    }
+
+    private void applyReaderOrientationPreference() {
+        String mode = new SettingsStore(this).getReaderOrientationMode();
+        if ("portrait".equals(mode)) {
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        } else if ("landscape".equals(mode)) {
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+        } else {
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
         }
     }
 

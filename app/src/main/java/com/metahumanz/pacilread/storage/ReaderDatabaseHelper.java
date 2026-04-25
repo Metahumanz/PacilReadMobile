@@ -775,6 +775,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     public synchronized File exportDatabase(File destination) throws IOException {
         close();
         copyFile(getDatabaseFile(), destination);
+        stripPlatformSettingsTable(destination);
         getWritableDatabase();
         return destination;
     }
@@ -855,7 +856,20 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         close();
         deleteSidecarFiles();
         copyFile(source, getDatabaseFile());
-        getWritableDatabase();
+        SQLiteDatabase db = getWritableDatabase();
+        dropPlatformSettingsTable(db);
+    }
+
+    public synchronized void stripPlatformSettingsTable(File databaseFile) {
+        if (databaseFile == null || !databaseFile.exists()) {
+            return;
+        }
+        SQLiteDatabase db = SQLiteDatabase.openDatabase(databaseFile.getAbsolutePath(), null, SQLiteDatabase.OPEN_READWRITE);
+        try {
+            dropPlatformSettingsTable(db);
+        } finally {
+            db.close();
+        }
     }
 
     public synchronized void rebaseLocalAssetPaths() {
@@ -971,6 +985,10 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     private void deleteSidecarFiles() {
         deleteFileIfExists(getDatabaseFile().getAbsolutePath() + "-wal");
         deleteFileIfExists(getDatabaseFile().getAbsolutePath() + "-shm");
+    }
+
+    private void dropPlatformSettingsTable(SQLiteDatabase db) {
+        db.execSQL("DROP TABLE IF EXISTS settings");
     }
 
     private void copyRows(SQLiteDatabase from, SQLiteDatabase to, String table) {

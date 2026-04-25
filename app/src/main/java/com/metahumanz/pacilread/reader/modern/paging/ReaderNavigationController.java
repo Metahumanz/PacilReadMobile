@@ -3,6 +3,7 @@ package com.metahumanz.pacilread.reader.modern.paging;
 import android.view.View;
 import android.widget.TextView;
 
+import com.metahumanz.pacilread.reader.JustifiedPageTextView;
 import com.metahumanz.pacilread.reader.PageSlice;
 import com.metahumanz.pacilread.reader.ReaderPaginator;
 import com.metahumanz.pacilread.reader.modern.ModernReaderActivity;
@@ -208,20 +209,22 @@ public final class ReaderNavigationController {
         return Math.max(0, pageCount - pageStep());
     }
 
-    public void bindPage(TextView titleView, TextView bodyView, int chapterIndex, int pageIndex) {
+    public void bindPage(TextView titleView, JustifiedPageTextView bodyView, int chapterIndex, int pageIndex) {
         List<PageSlice> pages = content.getPagesForChapter(chapterIndex);
-        PageSlice slice = pages.get(ui.clamp(pageIndex, 0, pages.size() - 1));
+        int safePageIndex = ui.clamp(pageIndex, 0, pages.size() - 1);
+        PageSlice slice = pages.get(safePageIndex);
         titleView.setVisibility(View.GONE);
         titleView.setText(null);
         paging.updateBodyTopMargin(bodyView, 0);
+        bodyView.setTreatFinalLineAsParagraphEnd(safePageIndex >= pages.size() - 1);
         bodyView.setText(slice.text == null ? "" : slice.text);
     }
 
     private void bindSpread(
             TextView leftTitleView,
-            com.metahumanz.pacilread.reader.JustifiedPageTextView leftBodyView,
+            JustifiedPageTextView leftBodyView,
             TextView rightTitleView,
-            com.metahumanz.pacilread.reader.JustifiedPageTextView rightBodyView,
+            JustifiedPageTextView rightBodyView,
             View rightPane,
             View gutter,
             int chapterIndex,
@@ -250,7 +253,7 @@ public final class ReaderNavigationController {
 
     private void clearRightPane(
             TextView rightTitleView,
-            com.metahumanz.pacilread.reader.JustifiedPageTextView rightBodyView,
+            JustifiedPageTextView rightBodyView,
             View rightPane,
             View gutter
     ) {
@@ -259,6 +262,7 @@ public final class ReaderNavigationController {
             rightTitleView.setVisibility(View.GONE);
         }
         if (rightBodyView != null) {
+            rightBodyView.setTreatFinalLineAsParagraphEnd(true);
             rightBodyView.setText("");
         }
         if (rightPane != null) {

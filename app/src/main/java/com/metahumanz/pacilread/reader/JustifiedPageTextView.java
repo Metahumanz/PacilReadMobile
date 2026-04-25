@@ -14,6 +14,7 @@ import androidx.appcompat.widget.AppCompatTextView;
 
 public class JustifiedPageTextView extends AppCompatTextView {
     private boolean fullJustifyEnabled = true;
+    private boolean treatFinalLineAsParagraphEnd = true;
     private int highlightStart = -1;
     private int highlightEnd = -1;
     private final Paint highlightPaint = new Paint();
@@ -46,6 +47,14 @@ public class JustifiedPageTextView extends AppCompatTextView {
             return;
         }
         fullJustifyEnabled = enabled;
+        invalidate();
+    }
+
+    public void setTreatFinalLineAsParagraphEnd(boolean enabled) {
+        if (treatFinalLineAsParagraphEnd == enabled) {
+            return;
+        }
+        treatFinalLineAsParagraphEnd = enabled;
         invalidate();
     }
 
@@ -89,7 +98,8 @@ public class JustifiedPageTextView extends AppCompatTextView {
                 drawPlatformLine(canvas, layout, lineIndex, availableWidth);
                 continue;
             }
-            boolean paragraphEnd = hasTrailingLineBreak(text, visibleEnd, end);
+            boolean paragraphEnd = hasTrailingLineBreak(text, visibleEnd, end)
+                    || isFinalLineParagraphEnd(text, visibleEnd, lineIndex, lineCount);
             String rawLine = text.subSequence(start, visibleEnd).toString();
             String drawLine = trimLineBreaks(rawLine);
             if (drawLine.isEmpty()) {
@@ -231,5 +241,19 @@ public class JustifiedPageTextView extends AppCompatTextView {
             }
         }
         return false;
+    }
+
+    private boolean isFinalLineParagraphEnd(CharSequence text, int visibleEnd, int lineIndex, int lineCount) {
+        if (!treatFinalLineAsParagraphEnd || lineIndex != lineCount - 1) {
+            return false;
+        }
+        int safeVisibleEnd = Math.max(0, Math.min(visibleEnd, text.length()));
+        for (int i = safeVisibleEnd; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (!Character.isWhitespace(c)) {
+                return false;
+            }
+        }
+        return true;
     }
 }

@@ -51,7 +51,6 @@ public final class ReaderDisplayModeHelper {
 
     public static boolean isAutoNightActive(Context context, SettingsStore settingsStore) {
         return settingsStore != null
-                && settingsStore.isReaderAutoNightEnabled()
                 && isReaderDark(context);
     }
 
@@ -69,16 +68,7 @@ public final class ReaderDisplayModeHelper {
             SettingsStore settingsStore,
             String sessionPolicy
     ) {
-        if (!isAutoNightActive(context, settingsStore)) {
-            return false;
-        }
-        if (!hasCustomReaderVisuals(settingsStore)) {
-            return true;
-        }
-        String policy = sessionPolicy == null || sessionPolicy.isBlank()
-                ? settingsStore.getReaderAutoNightCustomPolicy()
-                : SettingsStore.normalizeReaderAutoNightCustomPolicy(sessionPolicy);
-        return !AUTO_NIGHT_POLICY_PRESERVE.equals(policy);
+        return isAutoNightActive(context, settingsStore);
     }
 
     public static String resolveReaderThemeKey(Context context, SettingsStore settingsStore) {

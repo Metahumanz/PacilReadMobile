@@ -5,6 +5,8 @@ import android.os.Bundle;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.metahumanz.pacilread.ui.EdgeToEdgeHelper;
+
 public abstract class ThemedReaderActivity extends AppCompatActivity {
     private String appliedThemeBucket = ThemeModeHelper.MODE_LIGHT;
     private String appliedStyleVariant = ThemeModeHelper.LIGHT_STYLE_YUNBAI;
@@ -20,6 +22,7 @@ public abstract class ThemedReaderActivity extends AppCompatActivity {
         appliedThemeBucket = ThemeModeHelper.getResolvedReaderBucket(this);
         appliedStyleVariant = ThemeModeHelper.getResolvedReaderStyleVariant(this);
         super.onCreate(savedInstanceState);
+        EdgeToEdgeHelper.configure(this);
     }
 
     @Override

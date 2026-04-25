@@ -61,7 +61,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:background="@drawable/bg_app_input"
-                android:hint="设置子目录（可选，例如 mobile）"
+                android:hint="Android 设置目录（默认 android-settings）"
                 android:minHeight="48dp"
                 android:padding="12dp" />
 
@@ -70,7 +70,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="仅隔离 settings.json。留空时会与电脑共享设置，填写 mobile / android 等可分开同步手机设置。"
+                android:text="根目录用于书架、封面、阅读统计和平台私有设置；Android 设置目录只保存 android-settings.json 与背景图，不会读取电脑端设置。"
                 android:textColor="?attr/themeColorAppTextSecondary" />
 
             <LinearLayout

@@ -48,6 +48,9 @@ final class SettingsScreenController {
     private static final String TTS_TEST_TEXT = "这是一段听书测试，用来确认当前朗读引擎可以正常播放。";
     private static final String[] VOLUME_KEY_ACTION_KEYS = new String[]{"system", "page_up", "page_down"};
     private static final String[] VOLUME_KEY_ACTION_LABELS = new String[]{"系统音量", "上一页", "下一页"};
+    private static final String READER_ORIENTATION_SYSTEM = "system";
+    private static final String READER_ORIENTATION_PORTRAIT = "portrait";
+    private static final String READER_ORIENTATION_LANDSCAPE = "landscape";
 
     private final Activity activity;
     private final Host host;
@@ -83,6 +86,9 @@ final class SettingsScreenController {
     private Button lightStyleYunbaiButton;
     private Button darkStyleYemuButton;
     private Button darkStyleJiyeButton;
+    private Button readerOrientationSystemButton;
+    private Button readerOrientationPortraitButton;
+    private Button readerOrientationLandscapeButton;
     private Spinner ttsEngineSpinner;
     private Spinner volumeKeyUpActionSpinner;
     private Spinner volumeKeyDownActionSpinner;
@@ -107,6 +113,7 @@ final class SettingsScreenController {
     private boolean settingsBusy = false;
     private String selectedLightStyleVariant = ThemeModeHelper.LIGHT_STYLE_YUNBAI;
     private String selectedDarkStyleVariant = ThemeModeHelper.DARK_STYLE_YEMU;
+    private String selectedReaderOrientationMode = READER_ORIENTATION_SYSTEM;
 
     SettingsScreenController(Activity activity, Host host) {
         this.activity = activity;
@@ -122,6 +129,7 @@ final class SettingsScreenController {
         setupSharedControllers();
         setupThemeSpinners();
         setupStyleVariantButtons();
+        setupReaderOrientationButtons();
         bindCurrentValues();
         setupGlassOpacityControl();
         setupAutoSaveListeners();
@@ -146,7 +154,9 @@ final class SettingsScreenController {
         readerUiThemeSpinner.setSelection(indexOf(READER_THEME_KEYS, settingsStore.getReaderUiThemeMode(), 0));
         selectedLightStyleVariant = settingsStore.getAppLightStyleVariant();
         selectedDarkStyleVariant = settingsStore.getAppDarkStyleVariant();
+        selectedReaderOrientationMode = settingsStore.getReaderOrientationMode();
         updateStyleVariantButtons();
+        updateReaderOrientationButtons();
         if (homeNavigationSettingsController != null) {
             homeNavigationSettingsController.bindValues();
         }
@@ -190,6 +200,7 @@ final class SettingsScreenController {
         settingsStore.setReaderUiThemeMode(READER_THEME_KEYS[readerUiThemeSpinner.getSelectedItemPosition()]);
         settingsStore.setAppLightStyleVariant(selectedLightStyleVariant);
         settingsStore.setAppDarkStyleVariant(selectedDarkStyleVariant);
+        settingsStore.setReaderOrientationMode(selectedReaderOrientationMode);
         if (homeNavigationSettingsController != null) {
             homeNavigationSettingsController.saveValues();
         }
@@ -269,6 +280,9 @@ final class SettingsScreenController {
         lightStyleYunbaiButton = activity.findViewById(R.id.button_light_style_yunbai);
         darkStyleYemuButton = activity.findViewById(R.id.button_dark_style_yemu);
         darkStyleJiyeButton = activity.findViewById(R.id.button_dark_style_jiye);
+        readerOrientationSystemButton = activity.findViewById(R.id.button_reader_orientation_system);
+        readerOrientationPortraitButton = activity.findViewById(R.id.button_reader_orientation_portrait);
+        readerOrientationLandscapeButton = activity.findViewById(R.id.button_reader_orientation_landscape);
         ttsEngineSpinner = activity.findViewById(R.id.spinner_tts_engine);
         volumeKeyUpActionSpinner = activity.findViewById(R.id.spinner_volume_key_up_action);
         volumeKeyDownActionSpinner = activity.findViewById(R.id.spinner_volume_key_down_action);
@@ -339,8 +353,8 @@ final class SettingsScreenController {
         }
         fullBackupButton.setOnClickListener(v -> runWebDavAction("正在执行全量备份...", listener -> backupManager.fullBackup(listener)));
         liteBackupButton.setOnClickListener(v -> runWebDavAction("正在执行增量备份...", listener -> backupManager.incrementalBackup(listener)));
-        fullRestoreButton.setOnClickListener(v -> confirmRestore("确定要从云端恢复吗？这将替换您当前的本地书架与设置。", listener -> backupManager.fullRestore(listener)));
-        liteRestoreButton.setOnClickListener(v -> confirmRestore("确定要从云端增量恢复吗？这将覆盖您的书架列表与设置，但不会删除现有的本地缓存章节。", listener -> backupManager.incrementalRestore(listener)));
+        fullRestoreButton.setOnClickListener(v -> confirmRestore("确定要从云端恢复吗？这会恢复公共书架数据和 Android 私有设置；WebDAV 连接信息与阅读统计设备 ID 会保留本机，TTS API Key 会随 Android 设置恢复。", listener -> backupManager.fullRestore(listener)));
+        liteRestoreButton.setOnClickListener(v -> confirmRestore("确定要从云端增量恢复吗？这会合并公共书架数据并恢复 Android 私有设置；WebDAV 连接信息与阅读统计设备 ID 会保留本机，TTS API Key 会随 Android 设置恢复。", listener -> backupManager.incrementalRestore(listener)));
     }
 
     private void refreshBackupLabels() {
@@ -449,6 +463,18 @@ final class SettingsScreenController {
         }
     }
 
+    private void setupReaderOrientationButtons() {
+        if (readerOrientationSystemButton != null) {
+            readerOrientationSystemButton.setOnClickListener(v -> selectReaderOrientationMode(READER_ORIENTATION_SYSTEM));
+        }
+        if (readerOrientationPortraitButton != null) {
+            readerOrientationPortraitButton.setOnClickListener(v -> selectReaderOrientationMode(READER_ORIENTATION_PORTRAIT));
+        }
+        if (readerOrientationLandscapeButton != null) {
+            readerOrientationLandscapeButton.setOnClickListener(v -> selectReaderOrientationMode(READER_ORIENTATION_LANDSCAPE));
+        }
+    }
+
     private void setupAutoSaveListeners() {
         TextWatcher autoSaveTextWatcher = new TextWatcher() {
             @Override
@@ -502,7 +528,7 @@ final class SettingsScreenController {
             return;
         }
         statusText.setText("已启用自动进度同步\n手动备份范围：" + buildWebDavScopeSummary()
-                + "\n设置快照目录：" + buildWebDavSettingsSnapshotSummary()
+                + "\nAndroid 设置快照：" + buildWebDavSettingsSnapshotSummary()
                 + "\n阅读时长累计：" + (settingsStore.isWebDavSyncReadingStatsEnabled() ? "已启用" : "已关闭"));
     }
 
@@ -728,11 +754,27 @@ final class SettingsScreenController {
         handleSettingsChanged();
     }
 
+    private void selectReaderOrientationMode(String mode) {
+        String normalized = SettingsStore.normalizeReaderOrientationMode(mode);
+        if (normalized.equals(selectedReaderOrientationMode)) {
+            return;
+        }
+        selectedReaderOrientationMode = normalized;
+        updateReaderOrientationButtons();
+        handleSettingsChanged();
+    }
+
     private void updateStyleVariantButtons() {
         AppUiUtils.styleToggleButton(activity, lightStyleYaobaiButton, ThemeModeHelper.LIGHT_STYLE_YAOBAI.equals(selectedLightStyleVariant));
         AppUiUtils.styleToggleButton(activity, lightStyleYunbaiButton, ThemeModeHelper.LIGHT_STYLE_YUNBAI.equals(selectedLightStyleVariant));
         AppUiUtils.styleToggleButton(activity, darkStyleYemuButton, ThemeModeHelper.DARK_STYLE_YEMU.equals(selectedDarkStyleVariant));
         AppUiUtils.styleToggleButton(activity, darkStyleJiyeButton, ThemeModeHelper.DARK_STYLE_JIYE.equals(selectedDarkStyleVariant));
+    }
+
+    private void updateReaderOrientationButtons() {
+        AppUiUtils.styleToggleButton(activity, readerOrientationSystemButton, READER_ORIENTATION_SYSTEM.equals(selectedReaderOrientationMode));
+        AppUiUtils.styleToggleButton(activity, readerOrientationPortraitButton, READER_ORIENTATION_PORTRAIT.equals(selectedReaderOrientationMode));
+        AppUiUtils.styleToggleButton(activity, readerOrientationLandscapeButton, READER_ORIENTATION_LANDSCAPE.equals(selectedReaderOrientationMode));
     }
 
     private void updateWebDavSyncOptionsVisibility() {
@@ -770,11 +812,7 @@ final class SettingsScreenController {
     }
 
     private String buildWebDavSettingsSnapshotSummary() {
-        String subdir = settingsStore.getWebDavSettingsSubdir();
-        if (subdir.isBlank()) {
-            return "默认共享 settings.json";
-        }
-        return "settings/" + subdir + "settings.json";
+        return settingsStore.getWebDavDir() + settingsStore.getWebDavSettingsSubdir() + "android-settings.json";
     }
 
     private interface BackgroundAction {

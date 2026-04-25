@@ -66,15 +66,6 @@
             android:paddingBottom="8dp" />
 
         <CheckBox
-            android:id="@+id/style_check_auto_night"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:minHeight="44dp"
-            android:text="深色阅读界面自动使用夜航"
-            android:textColor="?attr/themeColorOnSurface" />
-
-        <CheckBox
             android:id="@+id/style_check_double_page"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

@@ -24,10 +24,12 @@ import com.metahumanz.pacilread.reader.modern.ReaderUiUtils;
 import com.metahumanz.pacilread.reader.modern.config.ReaderOptionCatalog;
 import com.metahumanz.pacilread.reader.modern.content.ReaderContentController;
 import com.metahumanz.pacilread.reader.modern.paging.ReaderNavigationController;
+import com.metahumanz.pacilread.reader.modern.theme.ReaderDisplayModeHelper;
 import com.metahumanz.pacilread.reader.modern.theme.ReaderThemePalette;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderStyleController;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
+import com.metahumanz.pacilread.ui.HsvColorPlaneView;
 import com.metahumanz.pacilread.util.FileAssetHelper;
 
 import java.util.List;
@@ -100,7 +102,6 @@ public final class ReaderStyleDialogController {
         refs.backgroundBlurSeek.setProgress(runtime.settingsStore.getBackgroundBlurPercent());
         refs.keepScreenOn.setChecked(runtime.settingsStore.isKeepScreenOn());
         refs.showTitleCheck.setChecked(runtime.settingsStore.isChapterTitleVisible());
-        refs.autoNightCheck.setChecked(runtime.settingsStore.isReaderAutoNightEnabled());
         refs.doublePageCheck.setChecked(runtime.settingsStore.isReaderDoublePageEnabled());
         refs.doublePageModeSpinner.setSelection(
                 ReaderOptionCatalog.indexOf(
@@ -117,7 +118,12 @@ public final class ReaderStyleDialogController {
                 false
         );
         String[] selectedReaderTheme = new String[]{runtime.settingsStore.getReaderTheme()};
-        chrome.updateReaderThemeButtons(refs.paperThemeButton, refs.forestThemeButton, refs.nightThemeButton, selectedReaderTheme[0]);
+        chrome.updateReaderThemeButtons(
+                refs.paperThemeButton,
+                refs.forestThemeButton,
+                refs.nightThemeButton,
+                effectiveReaderThemeForDialog(selectedReaderTheme[0])
+        );
         String chapterTitleAlignment = runtime.settingsStore.getChapterTitleAlignment();
         chrome.styleThemeButton(refs.titleLeftButton, "left".equals(chapterTitleAlignment));
         chrome.styleThemeButton(refs.titleCenterButton, "center".equals(chapterTitleAlignment));
@@ -131,26 +137,26 @@ public final class ReaderStyleDialogController {
         Runnable refreshTextColorPreview = () -> style.updateTextColorPreview(
                 refs.textColorValue,
                 ReaderOptionCatalog.READER_TEXT_COLOR_KEYS[refs.textColorSpinner.getSelectedItemPosition()],
-                ReaderThemePalette.from(selectedReaderTheme[0])
+                ReaderThemePalette.from(effectiveReaderThemeForDialog(selectedReaderTheme[0]))
         );
         refreshTextColorPreview.run();
         Runnable autoApply = buildAutoApply(refs, selectedReaderTheme, refreshTextColorPreview);
 
         refs.paperThemeButton.setOnClickListener(v -> {
             selectedReaderTheme[0] = "paper";
-            chrome.updateReaderThemeButtons(refs.paperThemeButton, refs.forestThemeButton, refs.nightThemeButton, selectedReaderTheme[0]);
+            chrome.updateReaderThemeButtons(refs.paperThemeButton, refs.forestThemeButton, refs.nightThemeButton, effectiveReaderThemeForDialog(selectedReaderTheme[0]));
             refreshTextColorPreview.run();
             autoApply.run();
         });
         refs.forestThemeButton.setOnClickListener(v -> {
             selectedReaderTheme[0] = "forest";
-            chrome.updateReaderThemeButtons(refs.paperThemeButton, refs.forestThemeButton, refs.nightThemeButton, selectedReaderTheme[0]);
+            chrome.updateReaderThemeButtons(refs.paperThemeButton, refs.forestThemeButton, refs.nightThemeButton, effectiveReaderThemeForDialog(selectedReaderTheme[0]));
             refreshTextColorPreview.run();
             autoApply.run();
         });
         refs.nightThemeButton.setOnClickListener(v -> {
             selectedReaderTheme[0] = "night";
-            chrome.updateReaderThemeButtons(refs.paperThemeButton, refs.forestThemeButton, refs.nightThemeButton, selectedReaderTheme[0]);
+            chrome.updateReaderThemeButtons(refs.paperThemeButton, refs.forestThemeButton, refs.nightThemeButton, effectiveReaderThemeForDialog(selectedReaderTheme[0]));
             refreshTextColorPreview.run();
             autoApply.run();
         });
@@ -216,7 +222,6 @@ public final class ReaderStyleDialogController {
 
         refs.keepScreenOn.setOnCheckedChangeListener((buttonView, isChecked) -> autoApply.run());
         refs.showTitleCheck.setOnCheckedChangeListener((buttonView, isChecked) -> autoApply.run());
-        refs.autoNightCheck.setOnCheckedChangeListener((buttonView, isChecked) -> autoApply.run());
         refs.doublePageCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
             updateDoublePageModeAvailability(refs);
             autoApply.run();
@@ -329,7 +334,6 @@ public final class ReaderStyleDialogController {
             runtime.settingsStore.setBackgroundBlurPercent(refs.backgroundBlurSeek.getProgress());
             runtime.settingsStore.setKeepScreenOn(refs.keepScreenOn.isChecked());
             runtime.settingsStore.setChapterTitleVisible(refs.showTitleCheck.isChecked());
-            runtime.settingsStore.setReaderAutoNightEnabled(refs.autoNightCheck.isChecked());
             runtime.settingsStore.setReaderDoublePageEnabled(refs.doublePageCheck.isChecked());
             runtime.settingsStore.setReaderDoublePageMode(ReaderOptionCatalog.DOUBLE_PAGE_MODE_KEYS[
                     refs.doublePageModeSpinner.getSelectedItemPosition()
@@ -383,7 +387,7 @@ public final class ReaderStyleDialogController {
                     Runnable refreshTextColorPreview = () -> style.updateTextColorPreview(
                             refs.textColorValue,
                             ReaderOptionCatalog.READER_TEXT_COLOR_KEYS[refs.textColorSpinner.getSelectedItemPosition()],
-                            ReaderThemePalette.from(selectedReaderTheme[0])
+                            ReaderThemePalette.from(effectiveReaderThemeForDialog(selectedReaderTheme[0]))
                     );
                     Runnable autoApply = buildAutoApply(refs, selectedReaderTheme, refreshTextColorPreview);
                     applyButton.setOnClickListener(v -> autoApply.run());
@@ -418,14 +422,19 @@ public final class ReaderStyleDialogController {
                 .show();
     }
 
+    private String effectiveReaderThemeForDialog(String selectedReaderTheme) {
+        if (ReaderDisplayModeHelper.isAutoNightActive(activity, runtime.settingsStore)) {
+            return "night";
+        }
+        return selectedReaderTheme == null || selectedReaderTheme.isBlank() ? "paper" : selectedReaderTheme;
+    }
+
     private void showCustomColorPickerDialog(Runnable onApply) {
         View contentView = LayoutInflater.from(activity).inflate(R.layout.dialog_color_picker, null, false);
-        SeekBar redSeek = contentView.findViewById(R.id.color_seek_red);
-        SeekBar greenSeek = contentView.findViewById(R.id.color_seek_green);
-        SeekBar blueSeek = contentView.findViewById(R.id.color_seek_blue);
-        TextView redText = contentView.findViewById(R.id.color_text_red);
-        TextView greenText = contentView.findViewById(R.id.color_text_green);
-        TextView blueText = contentView.findViewById(R.id.color_text_blue);
+        HsvColorPlaneView colorPlane = contentView.findViewById(R.id.color_plane);
+        SeekBar hueSeek = contentView.findViewById(R.id.color_seek_hue);
+        TextView rgbText = contentView.findViewById(R.id.color_text_rgb);
+        TextView hexText = contentView.findViewById(R.id.color_text_hex);
         View colorPreview = contentView.findViewById(R.id.color_preview);
         Button applyButton = contentView.findViewById(R.id.color_button_apply);
 
@@ -438,26 +447,25 @@ public final class ReaderStyleDialogController {
             }
         }
 
-        redSeek.setProgress(android.graphics.Color.red(currentColor));
-        greenSeek.setProgress(android.graphics.Color.green(currentColor));
-        blueSeek.setProgress(android.graphics.Color.blue(currentColor));
+        colorPlane.setColor(currentColor);
+        hueSeek.setProgress(Math.round(colorPlane.getHue()) % 360);
 
         Runnable updatePreview = () -> {
-            int r = redSeek.getProgress();
-            int g = greenSeek.getProgress();
-            int b = blueSeek.getProgress();
-            int color = android.graphics.Color.rgb(r, g, b);
-            redText.setText("R: " + r);
-            greenText.setText("G: " + g);
-            blueText.setText("B: " + b);
+            int color = colorPlane.getSelectedColor();
+            int r = android.graphics.Color.red(color);
+            int g = android.graphics.Color.green(color);
+            int b = android.graphics.Color.blue(color);
+            rgbText.setText("RGB: " + r + ", " + g + ", " + b);
+            hexText.setText(String.format("HEX: #%02X%02X%02X", r, g, b));
             colorPreview.setBackgroundColor(color);
         };
         updatePreview.run();
 
-        SeekBar.OnSeekBarChangeListener colorListener = new SeekBar.OnSeekBarChangeListener() {
+        colorPlane.setOnColorChangeListener(color -> updatePreview.run());
+        hueSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                updatePreview.run();
+                colorPlane.setHue(progress);
             }
 
             @Override
@@ -467,16 +475,14 @@ public final class ReaderStyleDialogController {
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
             }
-        };
-        redSeek.setOnSeekBarChangeListener(colorListener);
-        greenSeek.setOnSeekBarChangeListener(colorListener);
-        blueSeek.setOnSeekBarChangeListener(colorListener);
+        });
 
         AlertDialog dialog = new AlertDialog.Builder(activity).setView(contentView).create();
         applyButton.setOnClickListener(v -> {
-            int r = redSeek.getProgress();
-            int g = greenSeek.getProgress();
-            int b = blueSeek.getProgress();
+            int color = colorPlane.getSelectedColor();
+            int r = android.graphics.Color.red(color);
+            int g = android.graphics.Color.green(color);
+            int b = android.graphics.Color.blue(color);
             String hexColor = String.format("#%02X%02X%02X", r, g, b);
             runtime.settingsStore.setCustomTextColor(hexColor);
             runtime.settingsStore.setReaderTextColor("custom");
@@ -534,7 +540,6 @@ public final class ReaderStyleDialogController {
         final Spinner doublePageModeSpinner;
         final CheckBox keepScreenOn;
         final CheckBox showTitleCheck;
-        final CheckBox autoNightCheck;
         final CheckBox doublePageCheck;
         final TextView backgroundText;
         final LinearLayout customThemeList;
@@ -578,7 +583,6 @@ public final class ReaderStyleDialogController {
             doublePageModeSpinner = root.findViewById(R.id.style_spinner_double_page_mode);
             keepScreenOn = root.findViewById(R.id.style_check_keep_screen_on);
             showTitleCheck = root.findViewById(R.id.style_check_show_title);
-            autoNightCheck = root.findViewById(R.id.style_check_auto_night);
             doublePageCheck = root.findViewById(R.id.style_check_double_page);
             backgroundText = root.findViewById(R.id.style_text_background);
             customThemeList = root.findViewById(R.id.style_custom_theme_list);
