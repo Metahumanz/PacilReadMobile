@@ -7,9 +7,23 @@
     android:theme="@style/AppChromeSurfaceTheme">
 
     <LinearLayout
-        android:id="@+id/content_shell"
+        android:id="@+id/home_root_content"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:id="@+id/home_fixed_sidebar"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/content_shell"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
         android:orientation="vertical">
 
         <FrameLayout
@@ -573,6 +587,23 @@
                 android:textSize="22sp" />
         </LinearLayout>
     </LinearLayout>
+    </LinearLayout>
+
+    <View
+        android:id="@+id/home_sidebar_scrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0"
+        android:background="?attr/themeColorAppScrim"
+        android:visibility="gone" />
+
+    <FrameLayout
+        android:id="@+id/home_slide_sidebar_container"
+        android:layout_width="320dp"
+        android:layout_height="match_parent"
+        android:clickable="true"
+        android:elevation="18dp"
+        android:visibility="invisible" />
 
     <LinearLayout
         android:id="@+id/layout_loading"

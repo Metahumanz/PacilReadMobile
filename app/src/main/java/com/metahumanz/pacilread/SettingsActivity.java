@@ -77,6 +77,21 @@ public class SettingsActivity extends ThemedActivity {
     private Button lightStyleYunbaiButton;
     private Button darkStyleYemuButton;
     private Button darkStyleJiyeButton;
+    private Button homeNavPresetAutoButton;
+    private Button homeNavPresetBottomButton;
+    private Button homeNavPresetSidebarButton;
+    private Button homeNavPresetCustomButton;
+    private View homeNavCustomLayout;
+    private Button homeNavPortraitAutoButton;
+    private Button homeNavPortraitBottomButton;
+    private Button homeNavPortraitSidebarButton;
+    private Button homeNavLandscapeAutoButton;
+    private Button homeNavLandscapeBottomButton;
+    private Button homeNavLandscapeSidebarButton;
+    private Button homeSidebarSlideButton;
+    private Button homeSidebarFixedButton;
+    private Button homeFixedSidebarFullButton;
+    private Button homeFixedSidebarIconsButton;
     private Button homeNavIconsButton;
     private Button homeNavTextButton;
     private Spinner ttsEngineSpinner;
@@ -107,10 +122,15 @@ public class SettingsActivity extends ThemedActivity {
     private TextView readingStatsTotalText;
     private boolean bindingSettingsValues = false;
     private boolean settingsBusy = false;
+    private boolean homeNavCustomExpanded = false;
     private String selectedReadingStatsPeriod = ReadingStatsUtils.PERIOD_TODAY;
     private String selectedLightStyleVariant = ThemeModeHelper.LIGHT_STYLE_YUNBAI;
     private String selectedDarkStyleVariant = ThemeModeHelper.DARK_STYLE_YEMU;
     private String selectedHomeBottomNavStyle = "icons";
+    private String selectedPortraitHomeNavigationMode = "auto";
+    private String selectedLandscapeHomeNavigationMode = "auto";
+    private String selectedHomeSidebarPresentation = "slide";
+    private String selectedHomeFixedSidebarStyle = "full";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -144,6 +164,21 @@ public class SettingsActivity extends ThemedActivity {
         lightStyleYunbaiButton = findViewById(R.id.button_light_style_yunbai);
         darkStyleYemuButton = findViewById(R.id.button_dark_style_yemu);
         darkStyleJiyeButton = findViewById(R.id.button_dark_style_jiye);
+        homeNavPresetAutoButton = findViewById(R.id.button_home_nav_preset_auto);
+        homeNavPresetBottomButton = findViewById(R.id.button_home_nav_preset_bottom);
+        homeNavPresetSidebarButton = findViewById(R.id.button_home_nav_preset_sidebar);
+        homeNavPresetCustomButton = findViewById(R.id.button_home_nav_preset_custom);
+        homeNavCustomLayout = findViewById(R.id.layout_home_nav_custom);
+        homeNavPortraitAutoButton = findViewById(R.id.button_home_nav_portrait_auto);
+        homeNavPortraitBottomButton = findViewById(R.id.button_home_nav_portrait_bottom);
+        homeNavPortraitSidebarButton = findViewById(R.id.button_home_nav_portrait_sidebar);
+        homeNavLandscapeAutoButton = findViewById(R.id.button_home_nav_landscape_auto);
+        homeNavLandscapeBottomButton = findViewById(R.id.button_home_nav_landscape_bottom);
+        homeNavLandscapeSidebarButton = findViewById(R.id.button_home_nav_landscape_sidebar);
+        homeSidebarSlideButton = findViewById(R.id.button_home_sidebar_slide);
+        homeSidebarFixedButton = findViewById(R.id.button_home_sidebar_fixed);
+        homeFixedSidebarFullButton = findViewById(R.id.button_home_fixed_sidebar_full);
+        homeFixedSidebarIconsButton = findViewById(R.id.button_home_fixed_sidebar_icons);
         homeNavIconsButton = findViewById(R.id.button_home_nav_icons);
         homeNavTextButton = findViewById(R.id.button_home_nav_text);
         ttsEngineSpinner = findViewById(R.id.spinner_tts_engine);
@@ -178,6 +213,7 @@ public class SettingsActivity extends ThemedActivity {
 
         setupThemeSpinners();
         setupStyleVariantButtons();
+        setupHomeNavigationModeButtons();
         setupHomeNavStyleButtons();
         bindCurrentValues();
         setupGlassOpacityControl();
@@ -264,7 +300,13 @@ public class SettingsActivity extends ThemedActivity {
         selectedLightStyleVariant = settingsStore.getAppLightStyleVariant();
         selectedDarkStyleVariant = settingsStore.getAppDarkStyleVariant();
         selectedHomeBottomNavStyle = settingsStore.getHomeBottomNavStyle();
+        selectedPortraitHomeNavigationMode = settingsStore.getPortraitHomeNavigationMode();
+        selectedLandscapeHomeNavigationMode = settingsStore.getLandscapeHomeNavigationMode();
+        selectedHomeSidebarPresentation = settingsStore.getHomeSidebarPresentation();
+        selectedHomeFixedSidebarStyle = settingsStore.getHomeFixedSidebarStyle();
+        homeNavCustomExpanded = !selectedPortraitHomeNavigationMode.equals(selectedLandscapeHomeNavigationMode);
         updateStyleVariantButtons();
+        updateHomeNavigationModeButtons();
         updateHomeNavStyleButtons();
         if (ttsEngineSpinner != null) {
             ttsEngineSpinner.setSelection(indexOf(TTS_ENGINE_KEYS, settingsStore.getTtsEngine(), 0));
@@ -312,6 +354,10 @@ public class SettingsActivity extends ThemedActivity {
         settingsStore.setAppLightStyleVariant(selectedLightStyleVariant);
         settingsStore.setAppDarkStyleVariant(selectedDarkStyleVariant);
         settingsStore.setHomeBottomNavStyle(selectedHomeBottomNavStyle);
+        settingsStore.setPortraitHomeNavigationMode(selectedPortraitHomeNavigationMode);
+        settingsStore.setLandscapeHomeNavigationMode(selectedLandscapeHomeNavigationMode);
+        settingsStore.setHomeSidebarPresentation(selectedHomeSidebarPresentation);
+        settingsStore.setHomeFixedSidebarStyle(selectedHomeFixedSidebarStyle);
         if (volumeKeyUpActionSpinner != null) {
             settingsStore.setVolumeKeyUpAction(VOLUME_KEY_ACTION_KEYS[volumeKeyUpActionSpinner.getSelectedItemPosition()]);
         }
@@ -433,6 +479,54 @@ public class SettingsActivity extends ThemedActivity {
         }
         if (darkStyleJiyeButton != null) {
             darkStyleJiyeButton.setOnClickListener(v -> selectDarkStyleVariant(ThemeModeHelper.DARK_STYLE_JIYE));
+        }
+    }
+
+    private void setupHomeNavigationModeButtons() {
+        if (homeNavPresetAutoButton != null) {
+            homeNavPresetAutoButton.setOnClickListener(v -> selectHomeNavPreset("auto"));
+        }
+        if (homeNavPresetBottomButton != null) {
+            homeNavPresetBottomButton.setOnClickListener(v -> selectHomeNavPreset("bottom"));
+        }
+        if (homeNavPresetSidebarButton != null) {
+            homeNavPresetSidebarButton.setOnClickListener(v -> selectHomeNavPreset("sidebar"));
+        }
+        if (homeNavPresetCustomButton != null) {
+            homeNavPresetCustomButton.setOnClickListener(v -> {
+                homeNavCustomExpanded = true;
+                updateHomeNavigationModeButtons();
+            });
+        }
+        if (homeNavPortraitAutoButton != null) {
+            homeNavPortraitAutoButton.setOnClickListener(v -> selectHomeNavigationMode(true, "auto"));
+        }
+        if (homeNavPortraitBottomButton != null) {
+            homeNavPortraitBottomButton.setOnClickListener(v -> selectHomeNavigationMode(true, "bottom"));
+        }
+        if (homeNavPortraitSidebarButton != null) {
+            homeNavPortraitSidebarButton.setOnClickListener(v -> selectHomeNavigationMode(true, "sidebar"));
+        }
+        if (homeNavLandscapeAutoButton != null) {
+            homeNavLandscapeAutoButton.setOnClickListener(v -> selectHomeNavigationMode(false, "auto"));
+        }
+        if (homeNavLandscapeBottomButton != null) {
+            homeNavLandscapeBottomButton.setOnClickListener(v -> selectHomeNavigationMode(false, "bottom"));
+        }
+        if (homeNavLandscapeSidebarButton != null) {
+            homeNavLandscapeSidebarButton.setOnClickListener(v -> selectHomeNavigationMode(false, "sidebar"));
+        }
+        if (homeSidebarSlideButton != null) {
+            homeSidebarSlideButton.setOnClickListener(v -> selectHomeSidebarPresentation("slide"));
+        }
+        if (homeSidebarFixedButton != null) {
+            homeSidebarFixedButton.setOnClickListener(v -> selectHomeSidebarPresentation("fixed_wide"));
+        }
+        if (homeFixedSidebarFullButton != null) {
+            homeFixedSidebarFullButton.setOnClickListener(v -> selectHomeFixedSidebarStyle("full"));
+        }
+        if (homeFixedSidebarIconsButton != null) {
+            homeFixedSidebarIconsButton.setOnClickListener(v -> selectHomeFixedSidebarStyle("icons"));
         }
     }
 
@@ -761,6 +855,47 @@ public class SettingsActivity extends ThemedActivity {
         handleSettingsChanged();
     }
 
+    private void selectHomeNavPreset(String mode) {
+        String normalized = SettingsStore.normalizeHomeNavigationMode(mode);
+        selectedPortraitHomeNavigationMode = normalized;
+        selectedLandscapeHomeNavigationMode = normalized;
+        homeNavCustomExpanded = false;
+        updateHomeNavigationModeButtons();
+        handleSettingsChanged();
+    }
+
+    private void selectHomeNavigationMode(boolean portrait, String mode) {
+        String normalized = SettingsStore.normalizeHomeNavigationMode(mode);
+        if (portrait) {
+            selectedPortraitHomeNavigationMode = normalized;
+        } else {
+            selectedLandscapeHomeNavigationMode = normalized;
+        }
+        homeNavCustomExpanded = true;
+        updateHomeNavigationModeButtons();
+        handleSettingsChanged();
+    }
+
+    private void selectHomeSidebarPresentation(String presentation) {
+        String normalized = SettingsStore.normalizeHomeSidebarPresentation(presentation);
+        if (normalized.equals(selectedHomeSidebarPresentation)) {
+            return;
+        }
+        selectedHomeSidebarPresentation = normalized;
+        updateHomeNavigationModeButtons();
+        handleSettingsChanged();
+    }
+
+    private void selectHomeFixedSidebarStyle(String style) {
+        String normalized = SettingsStore.normalizeHomeFixedSidebarStyle(style);
+        if (normalized.equals(selectedHomeFixedSidebarStyle)) {
+            return;
+        }
+        selectedHomeFixedSidebarStyle = normalized;
+        updateHomeNavigationModeButtons();
+        handleSettingsChanged();
+    }
+
     private void updateStyleVariantButtons() {
         styleToggleButton(lightStyleYaobaiButton, ThemeModeHelper.LIGHT_STYLE_YAOBAI.equals(selectedLightStyleVariant));
         styleToggleButton(lightStyleYunbaiButton, ThemeModeHelper.LIGHT_STYLE_YUNBAI.equals(selectedLightStyleVariant));
@@ -771,6 +906,33 @@ public class SettingsActivity extends ThemedActivity {
     private void updateHomeNavStyleButtons() {
         styleToggleButton(homeNavIconsButton, "icons".equals(selectedHomeBottomNavStyle));
         styleToggleButton(homeNavTextButton, "text".equals(selectedHomeBottomNavStyle));
+    }
+
+    private void updateHomeNavigationModeButtons() {
+        boolean allAuto = "auto".equals(selectedPortraitHomeNavigationMode)
+                && "auto".equals(selectedLandscapeHomeNavigationMode);
+        boolean allBottom = "bottom".equals(selectedPortraitHomeNavigationMode)
+                && "bottom".equals(selectedLandscapeHomeNavigationMode);
+        boolean allSidebar = "sidebar".equals(selectedPortraitHomeNavigationMode)
+                && "sidebar".equals(selectedLandscapeHomeNavigationMode);
+        boolean custom = homeNavCustomExpanded || (!allAuto && !allBottom && !allSidebar);
+        styleToggleButton(homeNavPresetAutoButton, allAuto && !custom);
+        styleToggleButton(homeNavPresetBottomButton, allBottom && !custom);
+        styleToggleButton(homeNavPresetSidebarButton, allSidebar && !custom);
+        styleToggleButton(homeNavPresetCustomButton, custom);
+        if (homeNavCustomLayout != null) {
+            homeNavCustomLayout.setVisibility(custom ? View.VISIBLE : View.GONE);
+        }
+        styleToggleButton(homeNavPortraitAutoButton, "auto".equals(selectedPortraitHomeNavigationMode));
+        styleToggleButton(homeNavPortraitBottomButton, "bottom".equals(selectedPortraitHomeNavigationMode));
+        styleToggleButton(homeNavPortraitSidebarButton, "sidebar".equals(selectedPortraitHomeNavigationMode));
+        styleToggleButton(homeNavLandscapeAutoButton, "auto".equals(selectedLandscapeHomeNavigationMode));
+        styleToggleButton(homeNavLandscapeBottomButton, "bottom".equals(selectedLandscapeHomeNavigationMode));
+        styleToggleButton(homeNavLandscapeSidebarButton, "sidebar".equals(selectedLandscapeHomeNavigationMode));
+        styleToggleButton(homeSidebarSlideButton, "slide".equals(selectedHomeSidebarPresentation));
+        styleToggleButton(homeSidebarFixedButton, "fixed_wide".equals(selectedHomeSidebarPresentation));
+        styleToggleButton(homeFixedSidebarFullButton, "full".equals(selectedHomeFixedSidebarStyle));
+        styleToggleButton(homeFixedSidebarIconsButton, "icons".equals(selectedHomeFixedSidebarStyle));
     }
 
     private void updateWebDavSyncOptionsVisibility() {

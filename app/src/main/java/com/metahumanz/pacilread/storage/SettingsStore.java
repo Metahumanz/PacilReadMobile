@@ -81,6 +81,10 @@ public class SettingsStore {
     private static final String KEY_READER_AUTO_NIGHT_CUSTOM_POLICY = "reader_auto_night_custom_policy";
     private static final String KEY_BOOKSHELF_SHOW_ADD_ENTRY = "bookshelf_show_add_entry";
     private static final String KEY_HOME_BOTTOM_NAV_STYLE = "home_bottom_nav_style";
+    private static final String KEY_HOME_NAV_PORTRAIT_MODE = "home_nav_portrait_mode";
+    private static final String KEY_HOME_NAV_LANDSCAPE_MODE = "home_nav_landscape_mode";
+    private static final String KEY_HOME_SIDEBAR_PRESENTATION = "home_sidebar_presentation";
+    private static final String KEY_HOME_FIXED_SIDEBAR_STYLE = "home_fixed_sidebar_style";
 
     private final SharedPreferences preferences;
 
@@ -512,6 +516,38 @@ public class SettingsStore {
         preferences.edit().putString(KEY_HOME_BOTTOM_NAV_STYLE, normalizeHomeBottomNavStyle(value)).apply();
     }
 
+    public String getPortraitHomeNavigationMode() {
+        return normalizeHomeNavigationMode(preferences.getString(KEY_HOME_NAV_PORTRAIT_MODE, "auto"));
+    }
+
+    public void setPortraitHomeNavigationMode(String value) {
+        preferences.edit().putString(KEY_HOME_NAV_PORTRAIT_MODE, normalizeHomeNavigationMode(value)).apply();
+    }
+
+    public String getLandscapeHomeNavigationMode() {
+        return normalizeHomeNavigationMode(preferences.getString(KEY_HOME_NAV_LANDSCAPE_MODE, "auto"));
+    }
+
+    public void setLandscapeHomeNavigationMode(String value) {
+        preferences.edit().putString(KEY_HOME_NAV_LANDSCAPE_MODE, normalizeHomeNavigationMode(value)).apply();
+    }
+
+    public String getHomeSidebarPresentation() {
+        return normalizeHomeSidebarPresentation(preferences.getString(KEY_HOME_SIDEBAR_PRESENTATION, "slide"));
+    }
+
+    public void setHomeSidebarPresentation(String value) {
+        preferences.edit().putString(KEY_HOME_SIDEBAR_PRESENTATION, normalizeHomeSidebarPresentation(value)).apply();
+    }
+
+    public String getHomeFixedSidebarStyle() {
+        return normalizeHomeFixedSidebarStyle(preferences.getString(KEY_HOME_FIXED_SIDEBAR_STYLE, "full"));
+    }
+
+    public void setHomeFixedSidebarStyle(String value) {
+        preferences.edit().putString(KEY_HOME_FIXED_SIDEBAR_STYLE, normalizeHomeFixedSidebarStyle(value)).apply();
+    }
+
     public String getReaderSliderMode() {
         String value = preferences.getString(KEY_READER_SLIDER_MODE, "book");
         return "chapter".equals(value) ? "chapter" : "book";
@@ -772,6 +808,21 @@ public class SettingsStore {
 
     public static String normalizeHomeBottomNavStyle(String value) {
         return "text".equals(value) ? "text" : "icons";
+    }
+
+    public static String normalizeHomeNavigationMode(String value) {
+        if ("bottom".equals(value) || "sidebar".equals(value)) {
+            return value;
+        }
+        return "auto";
+    }
+
+    public static String normalizeHomeSidebarPresentation(String value) {
+        return "fixed_wide".equals(value) ? "fixed_wide" : "slide";
+    }
+
+    public static String normalizeHomeFixedSidebarStyle(String value) {
+        return "icons".equals(value) ? "icons" : "full";
     }
 
     private static String normalizeTtsEngine(String value) {
