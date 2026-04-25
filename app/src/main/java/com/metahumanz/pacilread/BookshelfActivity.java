@@ -641,6 +641,10 @@ public class BookshelfActivity extends ThemedActivity {
     // ==================== UI Helpers ====================
 
     private void showBookshelfLoadingState() {
+        if (booksLoaded) {
+            statsText.setText("正在刷新书架...");
+            return;
+        }
         emptyLayout.setVisibility(View.GONE);
         gridBooks.setVisibility(View.GONE);
         listBooks.setVisibility(View.GONE);

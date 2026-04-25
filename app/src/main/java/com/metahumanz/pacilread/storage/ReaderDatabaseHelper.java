@@ -291,18 +291,24 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     public synchronized List<BookRecord> getBooks() {
         List<BookRecord> books = new ArrayList<>();
         SQLiteDatabase db = getReadableDatabase();
-        try (Cursor cursor = db.query(
-                "books",
-                null,
-                null,
-                null,
-                null,
-                null,
-                "pinned DESC, last_read_at DESC, title COLLATE NOCASE ASC"
-        )) {
+        String query = "WITH chapter_summary AS (" +
+                "SELECT book_id, COUNT(*) AS chapter_count FROM chapters GROUP BY book_id" +
+                ") SELECT books.*, " +
+                "COALESCE(chapter_summary.chapter_count, 0) AS bookshelf_chapter_count, " +
+                "current_chapter.title AS bookshelf_current_chapter_title " +
+                "FROM books " +
+                "LEFT JOIN chapter_summary ON chapter_summary.book_id = books.id " +
+                "LEFT JOIN chapters current_chapter ON current_chapter.book_id = books.id " +
+                "AND current_chapter.order_index = CASE " +
+                "WHEN COALESCE(chapter_summary.chapter_count, 0) <= 0 THEN 0 " +
+                "WHEN books.progress_index < 0 THEN 0 " +
+                "WHEN books.progress_index >= chapter_summary.chapter_count THEN chapter_summary.chapter_count - 1 " +
+                "ELSE books.progress_index END " +
+                "ORDER BY books.pinned DESC, books.last_read_at DESC, books.title COLLATE NOCASE ASC";
+        try (Cursor cursor = db.rawQuery(query, null)) {
             while (cursor.moveToNext()) {
                 BookRecord book = readBook(cursor);
-                populateBookshelfSummary(db, book);
+                populateBookshelfSummary(cursor, book);
                 books.add(book);
             }
         }
@@ -1157,6 +1163,24 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 book.currentChapterTitle = "";
             }
         }
+    }
+
+    private void populateBookshelfSummary(Cursor cursor, BookRecord book) {
+        if (cursor == null || book == null) {
+            return;
+        }
+        int chapterCountIndex = cursor.getColumnIndex("bookshelf_chapter_count");
+        book.chapterCount = chapterCountIndex >= 0 ? Math.max(0, cursor.getInt(chapterCountIndex)) : 0;
+        if (book.chapterCount <= 0) {
+            book.progressIndex = 0;
+            book.currentChapterTitle = "";
+            return;
+        }
+        book.progressIndex = Math.max(0, Math.min(book.progressIndex, book.chapterCount - 1));
+        int currentTitleIndex = cursor.getColumnIndex("bookshelf_current_chapter_title");
+        book.currentChapterTitle = currentTitleIndex >= 0 && !cursor.isNull(currentTitleIndex)
+                ? cursor.getString(currentTitleIndex)
+                : "";
     }
 
     private String getOptionalString(Cursor cursor, String columnName, String fallbackColumnName) {

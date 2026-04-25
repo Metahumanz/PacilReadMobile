@@ -55,6 +55,8 @@ public final class ReaderSessionState {
     public int interactiveDirection = 0;
     public int interactiveTargetChapterIndex = -1;
     public int interactiveTargetPageIndex = -1;
+    public int animationTargetChapterIndex = -1;
+    public int animationTargetPageIndex = -1;
     public ValueAnimator interactiveAnimator;
     public int totalProcessedBookLength = -1;
     public int currentReaderPageColor = 0xFFF7F0E1;

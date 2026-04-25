@@ -129,10 +129,7 @@ public final class ReaderNavigationController {
             return false;
         }
         if (state.isAnimating || state.interactivePaging) {
-            paging.cancelInteractiveAnimator();
-            state.isAnimating = false;
-            state.interactivePaging = false;
-            state.pendingTapPagingDelta = 0;
+            paging.settleInterruptedPagingAnimation();
         }
         return direction > 0 ? pageDown() : pageUp();
     }
