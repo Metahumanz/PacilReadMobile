@@ -5,9 +5,11 @@ public final class ReaderOptionCatalog {
     public static final String[] READER_FONT_FAMILY_LABELS = new String[]{"系统默认", "无衬线", "等宽体"};
     public static final int[] READER_FONT_WEIGHT_VALUES = new int[]{250, 400, 700};
     public static final String[] READER_FONT_WEIGHT_LABELS = new String[]{"细体", "标准", "粗体"};
-    public static final String[] READER_TEXT_COLOR_KEYS = new String[]{"theme_default", "ink_brown", "graphite", "warm_gray", "jade_ink", "forest_ink", "moon_white"};
-    public static final String[] READER_TEXT_COLOR_LABELS = new String[]{"跟随主题", "墨棕", "石墨", "暖灰", "青墨", "墨绿", "月白"};
+    public static final String[] READER_TEXT_COLOR_KEYS = new String[]{"theme_default", "ink_brown", "graphite", "warm_gray", "jade_ink", "forest_ink", "moon_white", "custom"};
+    public static final String[] READER_TEXT_COLOR_LABELS = new String[]{"跟随主题", "墨棕", "石墨", "暖灰", "青墨", "墨绿", "月白", "自定义"};
     public static final String[] UI_THEME_KEYS = new String[]{"follow_app", "system", "light", "dark"};
+    public static final String[] DOUBLE_PAGE_MODE_KEYS = new String[]{"landscape", "always", "landscape_or_tablet"};
+    public static final String[] DOUBLE_PAGE_MODE_LABELS = new String[]{"仅横屏生效", "始终生效", "横屏或平板设备生效"};
     public static final String[] HUD_KEYS = new String[]{"none", "title", "chapter", "title_chapter", "time", "battery", "chapter_page", "book_progress", "page_and_progress", "time_and_battery"};
     public static final String[] FLIP_KEYS = new String[]{"cover", "slide", "simulation", "scroll", "none"};
 

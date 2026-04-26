@@ -112,6 +112,9 @@ public class ReaderDatabaseMigrationTest {
         try {
             assertTrue(hasColumn(upgradedDb, "books", "reading_stats_key"));
             assertTrue(hasIndex(upgradedDb, "idx_books_reading_stats_key"));
+            assertTrue(hasTable(upgradedDb, "bookmarks"));
+            assertTrue(hasIndex(upgradedDb, "idx_bookmarks_book_identity"));
+            assertTrue(hasIndex(upgradedDb, "idx_bookmarks_book_id"));
         } finally {
             upgradedDb.close();
         }
@@ -152,6 +155,9 @@ public class ReaderDatabaseMigrationTest {
         SQLiteDatabase upgradedDb = SQLiteDatabase.openDatabase(dbFile.getAbsolutePath(), null, SQLiteDatabase.OPEN_READONLY);
         try {
             assertTrue(hasColumn(upgradedDb, "books", "local_path"));
+            assertTrue(hasTable(upgradedDb, "bookmarks"));
+            assertTrue(hasIndex(upgradedDb, "idx_bookmarks_book_identity"));
+            assertTrue(hasIndex(upgradedDb, "idx_bookmarks_book_id"));
             try (Cursor cursor = upgradedDb.query("books", new String[]{"local_path"}, null, null, null, null, null)) {
                 assertTrue(cursor.moveToFirst());
                 String rebasedPath = cursor.getString(0);
@@ -228,6 +234,15 @@ public class ReaderDatabaseMigrationTest {
         try (Cursor cursor = db.rawQuery(
                 "SELECT name FROM sqlite_master WHERE type='index' AND name=?",
                 new String[]{indexName}
+        )) {
+            return cursor.moveToFirst();
+        }
+    }
+
+    private boolean hasTable(SQLiteDatabase db, String tableName) {
+        try (Cursor cursor = db.rawQuery(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                new String[]{tableName}
         )) {
             return cursor.moveToFirst();
         }

@@ -14,6 +14,7 @@ import android.text.style.LineHeightSpan;
 import android.util.Log;
 import android.util.LruCache;
 import android.view.View;
+import android.view.ViewTreeObserver;
 
 import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.model.ChapterRecord;
@@ -30,6 +31,7 @@ import com.metahumanz.pacilread.reader.modern.ReaderUiUtils;
 import com.metahumanz.pacilread.reader.modern.ReaderViewRefs;
 import com.metahumanz.pacilread.reader.modern.paging.ReaderNavigationController;
 import com.metahumanz.pacilread.reader.modern.paging.ReaderPagingAnimator;
+import com.metahumanz.pacilread.reader.modern.theme.ReaderDisplayModeHelper;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderStyleController;
 
@@ -41,6 +43,8 @@ import java.util.Map;
 public final class ReaderContentController {
     private static final String TAG = "PacilReadReader";
     private static final long REFLOW_DEBOUNCE_MS = 32L;
+    private static final long LAYOUT_WAIT_FALLBACK_MS = 180L;
+    private static final int MAX_LAYOUT_WAIT_PASSES = 2;
 
     private static long lastCachedBookId = -1L;
     private static BookRecord cachedBook;
@@ -66,6 +70,7 @@ public final class ReaderContentController {
     private int pendingReflowChapterIndex = -1;
     private int pendingReflowAnchorOffset = 0;
     private int reflowGeneration = 0;
+    private Boolean lastAppliedDoublePageActive = null;
 
     public ReaderContentController(
             ModernReaderActivity activity,
@@ -106,6 +111,13 @@ public final class ReaderContentController {
                     0,
                     state.chapters.size() - 1
             );
+            if (state.requestedChapterOrderIndex >= 0 && state.requestedChapterOffset >= 0) {
+                targetChapterIndex = ui.clamp(
+                        navigation.chapterIndexFromOrder(state.requestedChapterOrderIndex),
+                        0,
+                        state.chapters.size() - 1
+                );
+            }
             if (state.restoredChapterIndex >= 0 && state.restoredProgressOffset >= 0) {
                 targetChapterIndex = ui.clamp(state.restoredChapterIndex, 0, state.chapters.size() - 1);
             }
@@ -151,6 +163,13 @@ public final class ReaderContentController {
                             0,
                             state.chapters.size() - 1
                     );
+                    if (state.requestedChapterOrderIndex >= 0 && state.requestedChapterOffset >= 0) {
+                        targetChapterIndex = ui.clamp(
+                                navigation.chapterIndexFromOrder(state.requestedChapterOrderIndex),
+                                0,
+                                state.chapters.size() - 1
+                        );
+                    }
                     if (state.restoredChapterIndex >= 0 && state.restoredProgressOffset >= 0) {
                         targetChapterIndex = ui.clamp(state.restoredChapterIndex, 0, state.chapters.size() - 1);
                     }
@@ -276,9 +295,16 @@ public final class ReaderContentController {
                     ? views.pageCurrent.getWidth()
                     : views.pageCurrent.getMeasuredWidth();
             if (width > 0) {
-                return Math.max(0, width
+                int contentWidth = Math.max(0, width
                         - views.pageCurrent.getPaddingLeft()
                         - views.pageCurrent.getPaddingRight());
+                if (isDoublePageActive()) {
+                    int gutterWidth = views.pageCurrentGutter == null
+                            ? ui.dp(22)
+                            : Math.max(views.pageCurrentGutter.getWidth(), ui.dp(22));
+                    return Math.max(0, (contentWidth - gutterWidth) / 2);
+                }
+                return contentWidth;
             }
         }
         return 0;
@@ -303,6 +329,19 @@ public final class ReaderContentController {
             return ui.dp(16);
         }
         return Math.max(ui.dp(16), Math.round(views.pageTitleCurrent.getTextSize() * 1.5f));
+    }
+
+    public boolean isDoublePageActive() {
+        return ReaderDisplayModeHelper.isDoublePageActive(
+                activity,
+                runtime.settingsStore,
+                views.pageStage == null ? 0 : views.pageStage.getWidth(),
+                views.pageStage == null ? 0 : views.pageStage.getHeight()
+        );
+    }
+
+    public int pagesPerScreen() {
+        return isDoublePageActive() ? 2 : 1;
     }
 
     public String getProcessedChapterText(int chapterIndex) {
@@ -455,8 +494,42 @@ public final class ReaderContentController {
         return pages.get(ui.clamp(state.currentPageIndex, 0, pages.size() - 1)).start;
     }
 
+    public float bookProgressPercentFor(int chapterIndex, int chapterOffset) {
+        if (state.chapters.isEmpty()) {
+            return 0f;
+        }
+        int total = Math.max(getTotalProcessedBookLength(), 1);
+        int safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size() - 1);
+        int completed = 0;
+        for (int i = 0; i < safeChapterIndex; i++) {
+            completed += getProcessedChapterLength(i);
+        }
+        int safeOffset = ui.clamp(chapterOffset, 0, getProcessedChapterLength(safeChapterIndex));
+        return Math.max(0f, Math.min(100f, (completed + safeOffset) * 100f / total));
+    }
+
+    public String buildBookmarkSummary(int chapterIndex, int chapterOffset, int maxChars) {
+        if (state.chapters.isEmpty()) {
+            return "";
+        }
+        int safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size() - 1);
+        String text = getProcessedChapterText(safeChapterIndex);
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+        int safeOffset = ui.clamp(chapterOffset, 0, text.length());
+        int end = Math.min(text.length(), safeOffset + Math.max(maxChars, 24));
+        String summary = text.substring(safeOffset, end).replaceAll("\\s+", " ").trim();
+        if (summary.isEmpty() && safeOffset > 0) {
+            int start = Math.max(0, safeOffset - Math.max(maxChars, 24));
+            summary = text.substring(start, safeOffset).replaceAll("\\s+", " ").trim();
+        }
+        return summary;
+    }
+
     public void clearPageCache() {
         cachedPageSlicesMap.clear();
+        cachedLayoutSignature = null;
     }
 
     public void clearAllReaderCaches() {
@@ -530,7 +603,8 @@ public final class ReaderContentController {
                 runtime.settingsStore.getTopPaddingDp(),
                 runtime.settingsStore.getBottomPaddingDp(),
                 state.systemInsetTop,
-                state.systemInsetBottom
+                state.systemInsetBottom,
+                isDoublePageActive()
         );
     }
 
@@ -581,6 +655,9 @@ public final class ReaderContentController {
         if (state.restoredChapterIndex >= 0 && state.restoredProgressOffset >= 0) {
             return Math.max(state.restoredProgressOffset, 0);
         }
+        if (state.requestedChapterOrderIndex >= 0 && state.requestedChapterOffset >= 0) {
+            return Math.max(state.requestedChapterOffset, 0);
+        }
         return Math.max(defaultOffset, 0);
     }
 
@@ -588,6 +665,8 @@ public final class ReaderContentController {
         state.restoredChapterIndex = -1;
         state.restoredPageIndex = -1;
         state.restoredProgressOffset = -1;
+        state.requestedChapterOrderIndex = -1;
+        state.requestedChapterOffset = -1;
     }
 
     private void performScheduledReflow() {
@@ -597,59 +676,141 @@ public final class ReaderContentController {
         final int generation = reflowGeneration;
         final int chapterIndex = ui.clamp(pendingReflowChapterIndex, 0, state.chapters.size() - 1);
         final int anchorOffset = Math.max(pendingReflowAnchorOffset, 0);
+        final Boolean previousDoublePageActive = lastAppliedDoublePageActive;
         style.applyReaderSettings();
+        final boolean nextDoublePageActive = isDoublePageActive();
+        final boolean doublePageStateChanged = previousDoublePageActive == null
+                || previousDoublePageActive != nextDoublePageActive;
         runAfterNextPageLayout(generation, () -> {
             if (generation != reflowGeneration) {
                 return;
             }
+            if (doublePageStateChanged) {
+                clearPageCache();
+                paging.invalidatePreparedPagingSnapshots();
+            }
             ensurePaginationCacheMatchesLayout();
             navigation.openChapter(chapterIndex, anchorOffset, false, 0);
+            lastAppliedDoublePageActive = isDoublePageActive();
         });
     }
 
     private void runAfterNextPageLayout(int generation, Runnable action) {
-        if (views.pageBodyCurrent == null) {
+        View target = views.pageCurrent == null ? views.pageBodyCurrent : views.pageCurrent;
+        if (target == null) {
+            action.run();
+            return;
+        }
+        waitForNextPagePreDraw(generation, target, 0, action);
+    }
+
+    private void waitForNextPagePreDraw(int generation, View target, int pass, Runnable action) {
+        if (generation != reflowGeneration) {
+            return;
+        }
+        if (pass > 0 && isPaginationLayoutReady()) {
             action.run();
             return;
         }
         final boolean[] completed = new boolean[]{false};
-        View.OnLayoutChangeListener listener = new View.OnLayoutChangeListener() {
-            @Override
-            public void onLayoutChange(
-                    View view,
-                    int left,
-                    int top,
-                    int right,
-                    int bottom,
-                    int oldLeft,
-                    int oldTop,
-                    int oldRight,
-                    int oldBottom
-            ) {
-                if (completed[0]) {
-                    return;
-                }
-                completed[0] = true;
-                view.removeOnLayoutChangeListener(this);
-                if (generation == reflowGeneration) {
-                    action.run();
-                }
-            }
-        };
-        views.pageBodyCurrent.addOnLayoutChangeListener(listener);
-        views.pageCurrent.requestLayout();
-        views.pageIncoming.requestLayout();
-        views.pageBodyCurrent.requestLayout();
-        views.pageBodyCurrent.post(() -> {
+        final ViewTreeObserver.OnPreDrawListener[] listenerRef = new ViewTreeObserver.OnPreDrawListener[1];
+        Runnable complete = () -> {
             if (completed[0]) {
                 return;
             }
             completed[0] = true;
-            views.pageBodyCurrent.removeOnLayoutChangeListener(listener);
-            if (generation == reflowGeneration) {
-                action.run();
+            removePreDrawListener(target, listenerRef[0]);
+            if (generation != reflowGeneration) {
+                return;
             }
-        });
+            if (isPaginationLayoutReady() || pass >= MAX_LAYOUT_WAIT_PASSES) {
+                action.run();
+                return;
+            }
+            requestPageLayerLayout();
+            waitForNextPagePreDraw(generation, target, pass + 1, action);
+        };
+        listenerRef[0] = new ViewTreeObserver.OnPreDrawListener() {
+            @Override
+            public boolean onPreDraw() {
+                target.post(complete);
+                return true;
+            }
+        };
+        target.getViewTreeObserver().addOnPreDrawListener(listenerRef[0]);
+        requestPageLayerLayout();
+        target.postDelayed(complete, LAYOUT_WAIT_FALLBACK_MS);
+    }
+
+    private void requestPageLayerLayout() {
+        requestLayout(views.pageCurrent);
+        requestLayout(views.pageIncoming);
+        requestLayout(views.pageCurrentLeftPane);
+        requestLayout(views.pageCurrentRightPane);
+        requestLayout(views.pageCurrentGutter);
+        requestLayout(views.pageIncomingLeftPane);
+        requestLayout(views.pageIncomingRightPane);
+        requestLayout(views.pageIncomingGutter);
+        requestLayout(views.pageBodyCurrent);
+        requestLayout(views.pageBodyCurrentRight);
+        requestLayout(views.pageBodyIncoming);
+        requestLayout(views.pageBodyIncomingRight);
+    }
+
+    private void requestLayout(View view) {
+        if (view != null) {
+            view.requestLayout();
+        }
+    }
+
+    private void removePreDrawListener(View target, ViewTreeObserver.OnPreDrawListener listener) {
+        if (target == null || listener == null) {
+            return;
+        }
+        ViewTreeObserver observer = target.getViewTreeObserver();
+        if (observer != null && observer.isAlive()) {
+            observer.removeOnPreDrawListener(listener);
+        }
+    }
+
+    private boolean isPaginationLayoutReady() {
+        if (views.pageCurrent == null || views.pageBodyCurrent == null) {
+            return true;
+        }
+        if (views.pageCurrent.isLayoutRequested() || views.pageBodyCurrent.isLayoutRequested()) {
+            return false;
+        }
+        int pageWidth = views.pageCurrent.getWidth();
+        int bodyWidth = views.pageBodyCurrent.getWidth();
+        int bodyHeight = views.pageBodyCurrent.getHeight();
+        if (pageWidth <= 0 || bodyWidth <= 0 || bodyHeight <= 0) {
+            return false;
+        }
+        int contentWidth = Math.max(0, pageWidth
+                - views.pageCurrent.getPaddingLeft()
+                - views.pageCurrent.getPaddingRight());
+        if (contentWidth <= 0) {
+            return false;
+        }
+        boolean doublePageActive = isDoublePageActive();
+        int expectedVisibility = doublePageActive ? View.VISIBLE : View.GONE;
+        if (!hasVisibility(views.pageCurrentRightPane, expectedVisibility)
+                || !hasVisibility(views.pageCurrentGutter, expectedVisibility)) {
+            return false;
+        }
+        int tolerance = ui.dp(4);
+        if (!doublePageActive) {
+            return bodyWidth >= contentWidth - tolerance;
+        }
+        int gutterWidth = views.pageCurrentGutter == null
+                ? ui.dp(22)
+                : Math.max(views.pageCurrentGutter.getWidth(), ui.dp(22));
+        int expectedPaneWidth = Math.max(0, (contentWidth - gutterWidth) / 2);
+        return Math.abs(bodyWidth - expectedPaneWidth) <= tolerance;
+    }
+
+    private boolean hasVisibility(View view, int visibility) {
+        return view == null || view.getVisibility() == visibility;
     }
 
     private List<PageSlice> sanitizePageSlices(List<PageSlice> pages) {

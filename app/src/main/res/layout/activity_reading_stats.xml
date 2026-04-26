@@ -66,8 +66,9 @@
 
                     <Button
                         android:id="@+id/button_period_today"
+                        style="@style/AppChromeCompactToggleButton"
                         android:layout_width="0dp"
-                        android:layout_height="40dp"
+                        android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:background="@drawable/bg_app_primary_button"
                         android:text="本日"
@@ -76,8 +77,9 @@
 
                     <Button
                         android:id="@+id/button_period_week"
+                        style="@style/AppChromeCompactToggleButton"
                         android:layout_width="0dp"
-                        android:layout_height="40dp"
+                        android:layout_height="wrap_content"
                         android:layout_marginStart="8dp"
                         android:layout_weight="1"
                         android:background="@drawable/bg_app_outline_button"
@@ -87,8 +89,9 @@
 
                     <Button
                         android:id="@+id/button_period_year"
+                        style="@style/AppChromeCompactToggleButton"
                         android:layout_width="0dp"
-                        android:layout_height="40dp"
+                        android:layout_height="wrap_content"
                         android:layout_marginStart="8dp"
                         android:layout_weight="1"
                         android:background="@drawable/bg_app_outline_button"
@@ -144,9 +147,11 @@
                         <FrameLayout
                             android:layout_width="72dp"
                             android:layout_height="104dp"
-                            android:background="@drawable/bg_book_cover">
+                            android:background="@drawable/bg_book_cover"
+                            android:clipToOutline="true"
+                            android:outlineProvider="background">
 
-                            <ImageView
+                            <com.metahumanz.pacilread.ui.BookCoverImageView
                                 android:id="@+id/image_cover"
                                 android:layout_width="match_parent"
                                 android:layout_height="match_parent"

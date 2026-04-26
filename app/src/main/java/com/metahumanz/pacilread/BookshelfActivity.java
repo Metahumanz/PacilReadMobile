@@ -15,14 +15,12 @@ import android.widget.GridView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.metahumanz.pacilread.importer.BookImportService;
 import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedActivity;
-import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.util.FileAssetHelper;
 
 import java.io.File;
@@ -44,12 +42,15 @@ public class BookshelfActivity extends ThemedActivity {
     private ReaderDatabaseHelper databaseHelper;
     private SettingsStore settingsStore;
     private BookImportService importService;
-    private AppDrawerController drawerController;
     private BookListAdapter listAdapter;
     private BookGridAdapter gridAdapter;
+    private HomeNavigationController homeNavigationController;
+    private HomeStatsPanelController homeStatsPanelController;
+    private HomeBookmarksPanelController homeBookmarksPanelController;
+    private SettingsScreenController homeSettingsController;
+    private View listFooterView;
 
     // Views
-    private View mainRoot;
     private LinearLayout emptyLayout;
     private LinearLayout loadingLayout;
     private EditText searchInput;
@@ -82,7 +83,7 @@ public class BookshelfActivity extends ThemedActivity {
         bindViews();
         setupAdapters();
         setupInteractions();
-        configureDrawer();
+        setupHomeControllers();
         showBookshelfLoadingState();
 
         if (savedInstanceState == null && settingsStore.isAutoOpenLastBook()) {
@@ -93,19 +94,34 @@ public class BookshelfActivity extends ThemedActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        updateAddEntryVisibility();
+        if (homeNavigationController != null) {
+            homeNavigationController.refreshFromSettings();
+        }
         refreshBooks();
-        updateDrawerStatus();
+        refreshCurrentHomePage(true);
+    }
+
+    @Override
+    protected void onPause() {
+        if (homeSettingsController != null) {
+            homeSettingsController.onPause();
+        }
+        super.onPause();
     }
 
     @Override
     protected void onDestroy() {
+        if (homeSettingsController != null) {
+            homeSettingsController.onDestroy();
+        }
         super.onDestroy();
         executor.shutdownNow();
     }
 
     @Override
     public void onBackPressed() {
-        if (drawerController != null && drawerController.onBackPressed()) {
+        if (homeNavigationController != null && homeNavigationController.onBackPressed()) {
             return;
         }
         super.onBackPressed();
@@ -113,8 +129,8 @@ public class BookshelfActivity extends ThemedActivity {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
-        if (drawerController != null && drawerController.handleTouchEvent(event)) {
-            if (drawerController.consumePendingChildTouchCancel()) {
+        if (homeNavigationController != null && homeNavigationController.handleTouchEvent(event)) {
+            if (homeNavigationController.consumePendingChildTouchCancel()) {
                 MotionEvent cancelEvent = MotionEvent.obtain(event);
                 cancelEvent.setAction(MotionEvent.ACTION_CANCEL);
                 super.dispatchTouchEvent(cancelEvent);
@@ -129,6 +145,12 @@ public class BookshelfActivity extends ThemedActivity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode != RESULT_OK || data == null) {
+            return;
+        }
+        if (requestCode == SettingsScreenController.REQUEST_PICK_BOOK) {
+            if (homeSettingsController != null && data.getData() != null) {
+                homeSettingsController.onBookPicked(data.getData());
+            }
             return;
         }
         if (requestCode == REQUEST_PICK_BOOK) {
@@ -152,7 +174,6 @@ public class BookshelfActivity extends ThemedActivity {
     // ==================== View Binding ====================
 
     private void bindViews() {
-        mainRoot = findViewById(R.id.main_root);
         sectionTitle = findViewById(R.id.text_section_title);
         emptyLayout = findViewById(R.id.layout_empty);
         loadingLayout = findViewById(R.id.layout_loading);
@@ -174,13 +195,14 @@ public class BookshelfActivity extends ThemedActivity {
     // ==================== Adapters ====================
 
     private void setupAdapters() {
-        View footerView = getLayoutInflater().inflate(R.layout.item_book_footer, listBooks, false);
-        footerView.findViewById(R.id.button_footer_add_book).setOnClickListener(v -> openPicker());
-        listBooks.addFooterView(footerView, null, true);
+        listFooterView = getLayoutInflater().inflate(R.layout.item_book_footer, listBooks, false);
+        listFooterView.findViewById(R.id.button_footer_add_book).setOnClickListener(v -> openPicker());
+        listBooks.addFooterView(listFooterView, null, true);
         listAdapter = new BookListAdapter(this);
         gridAdapter = new BookGridAdapter(this);
         listBooks.setAdapter(listAdapter);
         gridBooks.setAdapter(gridAdapter);
+        updateAddEntryVisibility();
     }
 
     // ==================== Interactions ====================
@@ -270,29 +292,79 @@ public class BookshelfActivity extends ThemedActivity {
             }
             return false;
         });
+
     }
 
-    // ==================== Drawer ====================
+    // ==================== Home Controllers ====================
 
-    private void configureDrawer() {
-        drawerController = new AppDrawerController(this, mainRoot, destination -> {
-            if (destination == AppDrawerController.SECTION_PREVIEW) {
-                Intent intent = new Intent(this, PreviewActivity.class);
-                startActivity(intent);
-                drawerController.closeDrawer();
-                return;
+    private void setupHomeControllers() {
+        homeStatsPanelController = new HomeStatsPanelController(this, databaseHelper, settingsStore, executor);
+        homeBookmarksPanelController = new HomeBookmarksPanelController(this, databaseHelper, executor);
+        homeSettingsController = new SettingsScreenController(this, new SettingsScreenController.Host() {
+            @Override
+            public void openBookPicker(Intent intent, int requestCode) {
+                startActivityForResult(intent, requestCode);
             }
-            if (destination == AppDrawerController.SECTION_SETTINGS) {
-                Intent intent = new Intent(this, SettingsActivity.class);
+
+            @Override
+            public void openReader(long bookId) {
+                refreshBooks();
+                Intent intent = new Intent(BookshelfActivity.this, ReaderActivity.class);
+                intent.putExtra("book_id", bookId);
                 startActivity(intent);
-                drawerController.closeDrawer();
-                return;
             }
-            // SECTION_BOOKSHELF - already here, just close drawer
-            drawerController.closeDrawer();
+
+            @Override
+            public void onSettingsSaved() {
+                handleEmbeddedSettingsSaved();
+            }
+
+            @Override
+            public void onThemeChanged() {
+                recreate();
+            }
         });
-        drawerController.bindMenuButton(R.id.button_open_drawer);
-        drawerController.setCurrentSection(AppDrawerController.SECTION_BOOKSHELF);
+        homeNavigationController = new HomeNavigationController(this, settingsStore, new HomeNavigationController.Callback() {
+            @Override
+            public boolean isReadingTimeTrackingEnabled() {
+                return settingsStore.isReadingTimeTrackingEnabled();
+            }
+
+            @Override
+            public void onHomePageSelected(int page, boolean syncFirst) {
+                refreshCurrentHomePage(syncFirst);
+            }
+        });
+    }
+
+    private void handleEmbeddedSettingsSaved() {
+        updateAddEntryVisibility();
+        if (homeNavigationController != null) {
+            homeNavigationController.refreshFromSettings();
+        }
+        if (homeNavigationController == null
+                || homeNavigationController.getCurrentPage() != HomeNavigationController.PAGE_SETTINGS) {
+            refreshCurrentHomePage(false);
+        }
+    }
+
+    private void refreshCurrentHomePage(boolean syncFirst) {
+        if (homeNavigationController == null) {
+            return;
+        }
+        int currentPage = homeNavigationController.getCurrentPage();
+        if (homeStatsPanelController != null) {
+            homeStatsPanelController.refreshIfVisible(currentPage, syncFirst);
+        }
+        if (homeBookmarksPanelController != null) {
+            homeBookmarksPanelController.refreshIfVisible(currentPage);
+        }
+        if (currentPage == HomeNavigationController.PAGE_SETTINGS) {
+            if (homeSettingsController != null) {
+                homeSettingsController.bindCurrentValues();
+                homeSettingsController.refreshReadingStatsSummary(syncFirst);
+            }
+        }
     }
 
     // ==================== Bookshelf ====================
@@ -300,13 +372,12 @@ public class BookshelfActivity extends ThemedActivity {
     private void setBookshelfMode(String mode) {
         settingsStore.setBookshelfViewMode(mode);
         applyBookshelfMode();
-        updateDrawerStatus();
     }
 
     private void applyBookshelfMode() {
         boolean usingCardMode = isCardMode();
-        styleSelectionButton(buttonModeCard, usingCardMode);
-        styleSelectionButton(buttonModeList, !usingCardMode);
+        AppUiUtils.styleSelectionButton(this, buttonModeCard, usingCardMode);
+        AppUiUtils.styleSelectionButton(this, buttonModeList, !usingCardMode);
         if (!booksLoaded) {
             gridBooks.setVisibility(View.GONE);
             listBooks.setVisibility(View.GONE);
@@ -317,14 +388,6 @@ public class BookshelfActivity extends ThemedActivity {
         }
         gridBooks.setVisibility(usingCardMode ? View.VISIBLE : View.GONE);
         listBooks.setVisibility(usingCardMode ? View.GONE : View.VISIBLE);
-    }
-
-    private void styleSelectionButton(Button button, boolean selected) {
-        button.setBackgroundResource(selected ? R.drawable.bg_app_primary_button : R.drawable.bg_app_outline_button);
-        button.setTextColor(ThemeModeHelper.resolveColor(
-                this,
-                selected ? R.color.app_button_primary_text : R.color.app_button_outline_text
-        ));
     }
 
     private void refreshBooks() {
@@ -341,14 +404,12 @@ public class BookshelfActivity extends ThemedActivity {
                     allBooks.clear();
                     allBooks.addAll(books);
                     applyFilter(currentQuery());
-                    updateDrawerStatus();
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
                     booksLoading = false;
                     booksLoaded = true;
                     applyFilter(currentQuery());
-                    updateDrawerStatus();
                     showToast("加载书架失败: " + readableError(error));
                 });
             }
@@ -371,8 +432,23 @@ public class BookshelfActivity extends ThemedActivity {
         }
         listAdapter.setItems(filtered);
         gridAdapter.setItems(filtered);
+        updateAddEntryVisibility();
         updateStats(filtered);
         updateEmptyState(query);
+    }
+
+    private void updateAddEntryVisibility() {
+        if (settingsStore == null) {
+            return;
+        }
+        boolean visible = settingsStore.isBookshelfAddEntryVisible();
+        if (gridAdapter != null) {
+            gridAdapter.setShowAddEntry(visible);
+        }
+        if (listFooterView != null) {
+            listFooterView.setVisibility(visible ? View.VISIBLE : View.GONE);
+            listFooterView.setEnabled(visible);
+        }
     }
 
     private void updateEmptyState(String query) {
@@ -412,19 +488,6 @@ public class BookshelfActivity extends ThemedActivity {
             return;
         }
         statsText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "共 %d 本书籍", filtered.size()));
-    }
-
-    private void updateDrawerStatus() {
-        String status = String.format(
-                Locale.SIMPLIFIED_CHINESE,
-                "已导入 %d 本书\n%s · %s",
-                allBooks.size(),
-                isCardMode() ? "网格书架" : "列表书架",
-                ThemeModeHelper.getResolvedAppAppearanceLabel(this)
-        );
-        if (drawerController != null) {
-            drawerController.setStatusText(status);
-        }
     }
 
     // ==================== Book Actions ====================
@@ -595,7 +658,7 @@ public class BookshelfActivity extends ThemedActivity {
     }
 
     private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        AppUiUtils.showToast(this, message);
     }
 
     private boolean isCardMode() {

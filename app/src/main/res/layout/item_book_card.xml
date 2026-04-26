@@ -19,7 +19,7 @@
             android:clipToOutline="true"
             android:outlineProvider="background">
 
-            <ImageView
+            <com.metahumanz.pacilread.ui.BookCoverImageView
                 android:id="@+id/image_cover"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
@@ -72,8 +72,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
             android:ellipsize="end"
-            android:maxLines="2"
-            android:minLines="2"
+            android:maxLines="1"
             android:textSize="15sp" />
 
         <TextView
@@ -82,6 +81,15 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:maxLines="1" />
+
+        <TextView
+            android:id="@+id/text_current_chapter"
+            style="@style/AppChromeCaption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="7dp"
             android:ellipsize="end"
             android:maxLines="1" />
 

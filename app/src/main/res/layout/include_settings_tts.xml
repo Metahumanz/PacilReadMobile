@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <TextView
+        style="@style/AppChromeSectionLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginBottom="10dp"
+        android:text="听书设置" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="20dp"
+        android:background="@drawable/bg_app_card"
+        android:elevation="2dp"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <TextView
+            style="@style/AppChromeBody"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="朗读引擎" />
+
+        <Spinner
+            android:id="@+id/spinner_tts_engine"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_app_input"
+            android:popupBackground="@drawable/bg_app_dialog" />
+
+        <LinearLayout
+            android:id="@+id/layout_tts_mimo_key"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:orientation="vertical">
+
+            <TextView
+                style="@style/AppChromeBody"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="MiMo TTS API 密钥" />
+
+            <EditText
+                android:id="@+id/input_mimo_api_key"
+                style="@style/AppChromeInputText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_app_input"
+                android:hint="输入 API Key 以启用在线语音"
+                android:inputType="textPassword"
+                android:minHeight="48dp"
+                android:padding="12dp" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/button_test_tts"
+            style="@style/AppChromeCompactToggleButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:minHeight="46dp"
+            android:background="@drawable/bg_app_outline_button"
+            android:text="测试朗读"
+            android:textAllCaps="false"
+            android:textColor="?attr/themeColorAppButtonOutlineText" />
+    </LinearLayout>
+</merge>

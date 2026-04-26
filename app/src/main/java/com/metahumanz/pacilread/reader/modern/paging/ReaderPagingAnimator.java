@@ -175,7 +175,7 @@ public final class ReaderPagingAnimator {
         } else {
             resetInteractiveTouchState();
         }
-        navigation.bindPage(views.pageTitleIncoming, views.pageBodyIncoming, targetChapterIndex, targetPageIndex);
+        navigation.bindIncomingSpread(targetChapterIndex, targetPageIndex);
         preparePagingSnapshots(targetChapterIndex, targetPageIndex);
         arrangePagingLayers(mode);
         applyPagingVisuals(mode, direction, 0f, "simulation".equals(mode) ? state.interactiveTouchY : height * 0.5f);
@@ -376,7 +376,7 @@ public final class ReaderPagingAnimator {
         state.interactiveTargetPageIndex = target.pageIndex;
         state.interactiveProgress = 0f;
         captureInteractiveStartPoint(startX, startY);
-        navigation.bindPage(views.pageTitleIncoming, views.pageBodyIncoming, target.chapterIndex, target.pageIndex);
+        navigation.bindIncomingSpread(target.chapterIndex, target.pageIndex);
         views.pageIncoming.setVisibility(View.VISIBLE);
         resetAnimatedPage(views.pageCurrent);
         resetAnimatedPage(views.pageIncoming);
@@ -390,8 +390,9 @@ public final class ReaderPagingAnimator {
     private PageTarget resolveInteractiveTarget(int direction) {
         if (direction > 0) {
             List<PageSlice> pages = content.getPagesForChapter(state.currentChapterIndex);
-            if (state.currentPageIndex < pages.size() - 1) {
-                return new PageTarget(state.currentChapterIndex, state.currentPageIndex + 1);
+            int nextPageIndex = state.currentPageIndex + navigation.pageStep();
+            if (nextPageIndex < pages.size()) {
+                return new PageTarget(state.currentChapterIndex, nextPageIndex);
             }
             if (state.currentChapterIndex < state.chapters.size() - 1) {
                 return new PageTarget(state.currentChapterIndex + 1, 0);
@@ -399,11 +400,11 @@ public final class ReaderPagingAnimator {
             return null;
         }
         if (state.currentPageIndex > 0) {
-            return new PageTarget(state.currentChapterIndex, state.currentPageIndex - 1);
+            return new PageTarget(state.currentChapterIndex, Math.max(0, state.currentPageIndex - navigation.pageStep()));
         }
         if (state.currentChapterIndex > 0) {
             List<PageSlice> previousPages = content.getPagesForChapter(state.currentChapterIndex - 1);
-            return new PageTarget(state.currentChapterIndex - 1, previousPages.size() - 1);
+            return new PageTarget(state.currentChapterIndex - 1, navigation.lastSpreadStart(previousPages));
         }
         return null;
     }
@@ -539,7 +540,7 @@ public final class ReaderPagingAnimator {
         state.currentChapterIndex = targetChapterIndex;
         state.currentPageIndex = targetPageIndex;
         promoteIncomingSnapshotToCurrent(targetChapterIndex, targetPageIndex);
-        navigation.bindPage(views.pageTitleCurrent, views.pageBodyCurrent, targetChapterIndex, targetPageIndex);
+        navigation.bindCurrentSpread(targetChapterIndex, targetPageIndex);
         boolean keepIncomingCover = views.pageIncoming != null && views.pageIncoming.getVisibility() == View.VISIBLE;
         restoreLivePageLayers(keepIncomingCover);
         resetAnimatedPage(views.pageCurrent);
@@ -588,7 +589,7 @@ public final class ReaderPagingAnimator {
         }
         clearSimulationPagingLayer();
         if (!hasPreparedCurrentSnapshot(state.currentChapterIndex, state.currentPageIndex)) {
-            navigation.bindPage(views.pageTitleCurrent, views.pageBodyCurrent, state.currentChapterIndex, state.currentPageIndex);
+            navigation.bindCurrentSpread(state.currentChapterIndex, state.currentPageIndex);
             layoutPageLayerForSnapshot(views.pageCurrent);
             state.currentPageSnapshotBitmap = screenshotPageLayer(views.pageCurrent, state.currentPageSnapshotBitmap);
             if (state.currentPageSnapshotBitmap != null) {
@@ -681,7 +682,7 @@ public final class ReaderPagingAnimator {
         }
         int previousVisibility = views.pageIncoming.getVisibility();
         float previousAlpha = views.pageIncoming.getAlpha();
-        navigation.bindPage(views.pageTitleIncoming, views.pageBodyIncoming, chapterIndex, pageIndex);
+        navigation.bindIncomingSpread(chapterIndex, pageIndex);
         resetAnimatedPage(views.pageIncoming);
         if (views.pageCurrent != null) {
             views.pageCurrent.bringToFront();

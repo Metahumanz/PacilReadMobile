@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <TextView
+        style="@style/AppChromeSectionLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginBottom="10dp"
+        android:text="个性化与显示" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="20dp"
+        android:background="@drawable/bg_app_card"
+        android:elevation="2dp"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <TextView
+            style="@style/AppChromeBody"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="应用主题模式" />
+
+        <Spinner
+            android:id="@+id/spinner_app_theme_mode"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_app_input"
+            android:popupBackground="@drawable/bg_app_dialog" />
+
+        <TextView
+            style="@style/AppChromeBody"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="阅读界面主题" />
+
+        <Spinner
+            android:id="@+id/spinner_reader_ui_theme_mode"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_app_input"
+            android:popupBackground="@drawable/bg_app_dialog" />
+
+        <TextView
+            style="@style/AppChromeBody"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="浅色风格" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/button_light_style_yaobai"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_app_outline_button"
+                android:text="曜白"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonOutlineText" />
+
+            <Button
+                android:id="@+id/button_light_style_yunbai"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_app_outline_button"
+                android:text="云白"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonOutlineText" />
+        </LinearLayout>
+
+        <TextView
+            style="@style/AppChromeBody"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="深色风格" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/button_dark_style_yemu"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_app_outline_button"
+                android:text="夜幕"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonOutlineText" />
+
+            <Button
+                android:id="@+id/button_dark_style_jiye"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_app_outline_button"
+                android:text="极夜"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonOutlineText" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/text_glass_opacity"
+            style="@style/AppChromeBody"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="毛玻璃不透明度" />
+
+        <SeekBar
+            android:id="@+id/seek_glass_opacity"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:max="80"
+            android:paddingStart="0dp"
+            android:paddingEnd="0dp" />
+    </LinearLayout>
+</merge>

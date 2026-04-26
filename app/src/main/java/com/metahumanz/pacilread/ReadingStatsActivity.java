@@ -1,7 +1,5 @@
 package com.metahumanz.pacilread;
 
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -21,8 +19,8 @@ import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
 import com.metahumanz.pacilread.sync.WebDavClient;
 import com.metahumanz.pacilread.theme.ThemedActivity;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
+import com.metahumanz.pacilread.ui.BookCoverViewHelper;
 
-import java.io.File;
 import java.text.DateFormat;
 import java.util.Date;
 import java.util.List;
@@ -208,9 +206,7 @@ public class ReadingStatsActivity extends ThemedActivity {
             bookAuthorText.setText("这本书已经不在当前设备的书架中");
             bookProgressText.setText("无法展示详细信息");
             bookLastReadText.setText("");
-            coverImage.setImageDrawable(null);
-            coverFallbackText.setText("PR");
-            coverFallbackText.setVisibility(View.VISIBLE);
+            BookCoverViewHelper.bindCover(coverImage, coverFallbackText, null, null);
             return;
         }
         bookTitleText.setText(ReadingStatsUtils.safeBookTitle(book.title));
@@ -260,37 +256,7 @@ public class ReadingStatsActivity extends ThemedActivity {
     }
 
     private void bindCover(String path, String title) {
-        Bitmap bitmap = decodeCover(path);
-        if (bitmap != null) {
-            coverImage.setImageBitmap(bitmap);
-            coverFallbackText.setVisibility(View.GONE);
-            return;
-        }
-        coverImage.setImageDrawable(null);
-        coverFallbackText.setText(initialsFor(title));
-        coverFallbackText.setVisibility(View.VISIBLE);
-    }
-
-    private Bitmap decodeCover(String path) {
-        if (path == null || path.isBlank()) {
-            return null;
-        }
-        File file = new File(path);
-        if (!file.exists()) {
-            return null;
-        }
-        return BitmapFactory.decodeFile(file.getAbsolutePath());
-    }
-
-    private String initialsFor(String title) {
-        if (title == null || title.isBlank()) {
-            return "PR";
-        }
-        String trimmed = title.trim();
-        if (trimmed.length() == 1) {
-            return trimmed.toUpperCase(Locale.ROOT);
-        }
-        return trimmed.substring(0, Math.min(2, trimmed.length())).toUpperCase(Locale.ROOT);
+        BookCoverViewHelper.bindCover(coverImage, coverFallbackText, path, title);
     }
 
     private String periodLabelPrefix() {

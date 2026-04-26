@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/section_reading_stats"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipToPadding="false"
+    android:overScrollMode="never"
+    android:padding="18dp"
+    android:visibility="gone">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingBottom="28dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/button_home_sidebar_stats"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_nav_item_idle"
+                android:contentDescription="打开侧栏"
+                android:padding="9dp"
+                android:scaleType="center"
+                android:src="@drawable/ic_home_menu"
+                android:tint="?attr/themeColorAppNavTextIdle"
+                android:visibility="gone" />
+
+            <TextView
+                style="@style/AppChromeBarTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="阅读时长" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/text_home_stats_status"
+            style="@style/AppChromeCaption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="正在加载阅读统计..." />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/button_home_stats_today"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_app_primary_button"
+                android:text="本日"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonPrimaryText" />
+
+            <Button
+                android:id="@+id/button_home_stats_week"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_app_outline_button"
+                android:text="本周"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonOutlineText" />
+
+            <Button
+                android:id="@+id/button_home_stats_year"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_app_outline_button"
+                android:text="本年"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonOutlineText" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_app_card"
+            android:elevation="2dp"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <TextView
+                style="@style/AppChromeBodyMuted"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="当前范围阅读总时长" />
+
+            <TextView
+                android:id="@+id/text_home_stats_total"
+                style="@style/AppChromeMetricValue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="0 秒"
+                android:textSize="30sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_app_card"
+            android:elevation="2dp"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <TextView
+                style="@style/AppChromeCardTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="按书统计"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/text_home_stats_empty"
+                style="@style/AppChromeBodyMuted"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="当前范围还没有阅读记录"
+                android:textSize="14sp" />
+
+            <LinearLayout
+                android:id="@+id/layout_home_stats_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="vertical" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

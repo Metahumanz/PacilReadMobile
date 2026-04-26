@@ -75,6 +75,16 @@ public class SettingsStore {
     private static final String KEY_READER_MENU_AUTO_HIDE = "reader_menu_auto_hide";
     private static final String KEY_READING_TIME_TRACKING_ENABLED = "reading_time_tracking_enabled";
     private static final String KEY_READING_STATS_DEVICE_ID = "reading_stats_device_id";
+    private static final String KEY_READER_DOUBLE_PAGE_ENABLED = "reader_double_page_enabled";
+    private static final String KEY_READER_DOUBLE_PAGE_MODE = "reader_double_page_mode";
+    private static final String KEY_READER_AUTO_NIGHT_ENABLED = "reader_auto_night_enabled";
+    private static final String KEY_READER_AUTO_NIGHT_CUSTOM_POLICY = "reader_auto_night_custom_policy";
+    private static final String KEY_BOOKSHELF_SHOW_ADD_ENTRY = "bookshelf_show_add_entry";
+    private static final String KEY_HOME_BOTTOM_NAV_STYLE = "home_bottom_nav_style";
+    private static final String KEY_HOME_NAV_PORTRAIT_MODE = "home_nav_portrait_mode";
+    private static final String KEY_HOME_NAV_LANDSCAPE_MODE = "home_nav_landscape_mode";
+    private static final String KEY_HOME_SIDEBAR_PRESENTATION = "home_sidebar_presentation";
+    private static final String KEY_HOME_FIXED_SIDEBAR_STYLE = "home_fixed_sidebar_style";
 
     private final SharedPreferences preferences;
 
@@ -453,6 +463,91 @@ public class SettingsStore {
         preferences.edit().putBoolean(KEY_READER_MENU_AUTO_HIDE, enabled).apply();
     }
 
+    public boolean isReaderDoublePageEnabled() {
+        return preferences.getBoolean(KEY_READER_DOUBLE_PAGE_ENABLED, false);
+    }
+
+    public void setReaderDoublePageEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_READER_DOUBLE_PAGE_ENABLED, enabled).apply();
+    }
+
+    public String getReaderDoublePageMode() {
+        return normalizeReaderDoublePageMode(preferences.getString(KEY_READER_DOUBLE_PAGE_MODE, "landscape"));
+    }
+
+    public void setReaderDoublePageMode(String value) {
+        preferences.edit().putString(KEY_READER_DOUBLE_PAGE_MODE, normalizeReaderDoublePageMode(value)).apply();
+    }
+
+    public boolean isReaderAutoNightEnabled() {
+        return preferences.getBoolean(KEY_READER_AUTO_NIGHT_ENABLED, true);
+    }
+
+    public void setReaderAutoNightEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_READER_AUTO_NIGHT_ENABLED, enabled).apply();
+    }
+
+    public String getReaderAutoNightCustomPolicy() {
+        return normalizeReaderAutoNightCustomPolicy(
+                preferences.getString(KEY_READER_AUTO_NIGHT_CUSTOM_POLICY, "ask")
+        );
+    }
+
+    public void setReaderAutoNightCustomPolicy(String value) {
+        preferences.edit().putString(
+                KEY_READER_AUTO_NIGHT_CUSTOM_POLICY,
+                normalizeReaderAutoNightCustomPolicy(value)
+        ).apply();
+    }
+
+    public boolean isBookshelfAddEntryVisible() {
+        return preferences.getBoolean(KEY_BOOKSHELF_SHOW_ADD_ENTRY, true);
+    }
+
+    public void setBookshelfAddEntryVisible(boolean visible) {
+        preferences.edit().putBoolean(KEY_BOOKSHELF_SHOW_ADD_ENTRY, visible).apply();
+    }
+
+    public String getHomeBottomNavStyle() {
+        return normalizeHomeBottomNavStyle(preferences.getString(KEY_HOME_BOTTOM_NAV_STYLE, "icons"));
+    }
+
+    public void setHomeBottomNavStyle(String value) {
+        preferences.edit().putString(KEY_HOME_BOTTOM_NAV_STYLE, normalizeHomeBottomNavStyle(value)).apply();
+    }
+
+    public String getPortraitHomeNavigationMode() {
+        return normalizeHomeNavigationMode(preferences.getString(KEY_HOME_NAV_PORTRAIT_MODE, "auto"));
+    }
+
+    public void setPortraitHomeNavigationMode(String value) {
+        preferences.edit().putString(KEY_HOME_NAV_PORTRAIT_MODE, normalizeHomeNavigationMode(value)).apply();
+    }
+
+    public String getLandscapeHomeNavigationMode() {
+        return normalizeHomeNavigationMode(preferences.getString(KEY_HOME_NAV_LANDSCAPE_MODE, "auto"));
+    }
+
+    public void setLandscapeHomeNavigationMode(String value) {
+        preferences.edit().putString(KEY_HOME_NAV_LANDSCAPE_MODE, normalizeHomeNavigationMode(value)).apply();
+    }
+
+    public String getHomeSidebarPresentation() {
+        return normalizeHomeSidebarPresentation(preferences.getString(KEY_HOME_SIDEBAR_PRESENTATION, "slide"));
+    }
+
+    public void setHomeSidebarPresentation(String value) {
+        preferences.edit().putString(KEY_HOME_SIDEBAR_PRESENTATION, normalizeHomeSidebarPresentation(value)).apply();
+    }
+
+    public String getHomeFixedSidebarStyle() {
+        return normalizeHomeFixedSidebarStyle(preferences.getString(KEY_HOME_FIXED_SIDEBAR_STYLE, "full"));
+    }
+
+    public void setHomeFixedSidebarStyle(String value) {
+        preferences.edit().putString(KEY_HOME_FIXED_SIDEBAR_STYLE, normalizeHomeFixedSidebarStyle(value)).apply();
+    }
+
     public String getReaderSliderMode() {
         String value = preferences.getString(KEY_READER_SLIDER_MODE, "book");
         return "chapter".equals(value) ? "chapter" : "book";
@@ -697,6 +792,39 @@ public class SettingsStore {
         return "jiye".equals(value) ? "jiye" : "yemu";
     }
 
+    public static String normalizeReaderDoublePageMode(String value) {
+        if ("always".equals(value) || "landscape_or_tablet".equals(value)) {
+            return value;
+        }
+        return "landscape";
+    }
+
+    public static String normalizeReaderAutoNightCustomPolicy(String value) {
+        if ("override".equals(value) || "preserve".equals(value)) {
+            return value;
+        }
+        return "ask";
+    }
+
+    public static String normalizeHomeBottomNavStyle(String value) {
+        return "text".equals(value) ? "text" : "icons";
+    }
+
+    public static String normalizeHomeNavigationMode(String value) {
+        if ("bottom".equals(value) || "sidebar".equals(value)) {
+            return value;
+        }
+        return "auto";
+    }
+
+    public static String normalizeHomeSidebarPresentation(String value) {
+        return "fixed_wide".equals(value) ? "fixed_wide" : "slide";
+    }
+
+    public static String normalizeHomeFixedSidebarStyle(String value) {
+        return "icons".equals(value) ? "icons" : "full";
+    }
+
     private static String normalizeTtsEngine(String value) {
         return "mimo".equals(value) ? "mimo" : "system";
     }
@@ -737,6 +865,7 @@ public class SettingsStore {
                 || "jade_ink".equals(value)
                 || "forest_ink".equals(value)
                 || "moon_white".equals(value)
+                || "custom".equals(value)
                 || "theme_default".equals(value)) {
             return value;
         }

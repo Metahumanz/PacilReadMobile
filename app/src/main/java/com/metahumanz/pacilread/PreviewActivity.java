@@ -25,6 +25,8 @@ import android.widget.Toast;
 import com.metahumanz.pacilread.model.ReaderThemeRecord;
 import com.metahumanz.pacilread.reader.JustifiedPageTextView;
 import com.metahumanz.pacilread.reader.ReaderThemeConfig;
+import com.metahumanz.pacilread.reader.modern.config.ReaderOptionCatalog;
+import com.metahumanz.pacilread.reader.modern.theme.ReaderDisplayModeHelper;
 import com.metahumanz.pacilread.reader.modern.theme.ReaderThemePalette;
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
@@ -58,12 +60,18 @@ public class PreviewActivity extends ThemedActivity {
     private View mainRoot;
 
     private TextView previewTheme;
+    private View previewReaderStage;
     private ImageView previewReaderBackground;
     private View previewReaderScrim;
     private View previewReaderPage;
+    private View previewReaderRightPage;
+    private View previewReaderGutter;
     private TextView previewReaderHeading;
+    private TextView previewReaderHeadingRight;
     private JustifiedPageTextView previewReaderBody;
+    private JustifiedPageTextView previewReaderBodyRight;
     private Spinner previewStyleUiThemeSpinner;
+    private Spinner previewStyleDoublePageModeSpinner;
     private Spinner previewStyleFontFamilySpinner;
     private SeekBar previewStyleFontSeekBar;
     private SeekBar previewStyleFontWeightSeekBar;
@@ -81,6 +89,7 @@ public class PreviewActivity extends ThemedActivity {
     private TextView previewStyleBottomText;
     private CheckBox previewStyleKeepScreenOnCheck;
     private CheckBox previewStyleShowTitleCheck;
+    private CheckBox previewStyleDoublePageCheck;
     private TextView previewStyleBackgroundText;
     private Button previewThemePaperButton;
     private Button previewThemeForestButton;
@@ -151,12 +160,18 @@ public class PreviewActivity extends ThemedActivity {
 
     private void bindViews() {
         previewTheme = findViewById(R.id.text_preview_theme);
+        previewReaderStage = findViewById(R.id.layout_preview_reader_stage);
         previewReaderBackground = findViewById(R.id.image_preview_reader_background);
         previewReaderScrim = findViewById(R.id.view_preview_reader_scrim);
         previewReaderPage = findViewById(R.id.layout_preview_reader_page);
+        previewReaderRightPage = findViewById(R.id.layout_preview_reader_right_page);
+        previewReaderGutter = findViewById(R.id.view_preview_reader_gutter);
         previewReaderHeading = findViewById(R.id.text_preview_reader_heading);
+        previewReaderHeadingRight = findViewById(R.id.text_preview_reader_heading_right);
         previewReaderBody = findViewById(R.id.text_preview_reader_body);
+        previewReaderBodyRight = findViewById(R.id.text_preview_reader_body_right);
         previewStyleUiThemeSpinner = findViewById(R.id.preview_style_spinner_ui_theme_mode);
+        previewStyleDoublePageModeSpinner = findViewById(R.id.preview_style_spinner_double_page_mode);
         previewStyleFontFamilySpinner = findViewById(R.id.preview_style_spinner_font_family);
         previewStyleFontSeekBar = findViewById(R.id.preview_style_seek_font);
         previewStyleFontWeightSeekBar = findViewById(R.id.preview_style_seek_font_weight);
@@ -174,11 +189,19 @@ public class PreviewActivity extends ThemedActivity {
         previewStyleBottomText = findViewById(R.id.preview_style_text_bottom_padding);
         previewStyleKeepScreenOnCheck = findViewById(R.id.preview_style_check_keep_screen_on);
         previewStyleShowTitleCheck = findViewById(R.id.preview_style_check_show_title);
+        previewStyleDoublePageCheck = findViewById(R.id.preview_style_check_double_page);
         previewStyleBackgroundText = findViewById(R.id.preview_style_text_background);
         previewThemePaperButton = findViewById(R.id.preview_style_button_theme_paper);
         previewThemeForestButton = findViewById(R.id.preview_style_button_theme_forest);
         previewThemeNightButton = findViewById(R.id.preview_style_button_theme_night);
         previewStyleCustomThemeList = findViewById(R.id.preview_style_custom_theme_list);
+        if (previewReaderStage != null) {
+            previewReaderStage.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+                if (right - left != oldRight - oldLeft || bottom - top != oldBottom - oldTop) {
+                    updatePreviewReader();
+                }
+            });
+        }
     }
 
     private void configureDrawer() {
@@ -203,6 +226,7 @@ public class PreviewActivity extends ThemedActivity {
         if (previewStyleUiThemeSpinner == null) return;
         bindingPreviewStyleValues = true;
         previewStyleUiThemeSpinner.setAdapter(buildSpinnerAdapter(new String[]{"跟随应用", "跟随系统", "浅色", "深色"}));
+        previewStyleDoublePageModeSpinner.setAdapter(buildSpinnerAdapter(ReaderOptionCatalog.DOUBLE_PAGE_MODE_LABELS));
         previewStyleFontFamilySpinner.setAdapter(buildSpinnerAdapter(READER_FONT_FAMILY_LABELS));
 
         android.widget.AdapterView.OnItemSelectedListener spinnerListener = new android.widget.AdapterView.OnItemSelectedListener() {
@@ -210,6 +234,7 @@ public class PreviewActivity extends ThemedActivity {
             @Override public void onNothingSelected(android.widget.AdapterView<?> p) {}
         };
         previewStyleUiThemeSpinner.setOnItemSelectedListener(spinnerListener);
+        previewStyleDoublePageModeSpinner.setOnItemSelectedListener(spinnerListener);
         previewStyleFontFamilySpinner.setOnItemSelectedListener(spinnerListener);
 
         SeekBar.OnSeekBarChangeListener seekListener = new SeekBar.OnSeekBarChangeListener() {
@@ -230,6 +255,10 @@ public class PreviewActivity extends ThemedActivity {
 
         previewStyleKeepScreenOnCheck.setOnCheckedChangeListener((b, c) -> applyPreviewStyleControls());
         previewStyleShowTitleCheck.setOnCheckedChangeListener((b, c) -> applyPreviewStyleControls());
+        previewStyleDoublePageCheck.setOnCheckedChangeListener((b, c) -> {
+            updatePreviewDoublePageModeAvailability();
+            applyPreviewStyleControls();
+        });
 
         previewThemePaperButton.setOnClickListener(v -> { previewSelectedReaderTheme = "paper"; updatePreviewThemeButtons(); applyPreviewStyleControls(); });
         previewThemeForestButton.setOnClickListener(v -> { previewSelectedReaderTheme = "forest"; updatePreviewThemeButtons(); applyPreviewStyleControls(); });
@@ -251,7 +280,8 @@ public class PreviewActivity extends ThemedActivity {
     private void updatePreviewPanels() {
         previewTheme.setText(
                 "界面: " + ThemeModeHelper.getResolvedReaderAppearanceLabel(this)
-                        + " · 阅读预设: " + labelForReaderPreset(settingsStore.getReaderTheme())
+                        + " · 阅读预设: " + labelForReaderPreset(ReaderDisplayModeHelper.resolveReaderThemeKey(this, settingsStore))
+                        + " · 双页: " + (settingsStore.isReaderDoublePageEnabled() ? labelForDoublePageMode(settingsStore.getReaderDoublePageMode()) : "关闭")
                         + " · 字体 " + labelForReaderFontFamily(settingsStore.getReaderFontFamily())
                         + " · 字重 " + labelForReaderFontWeight(settingsStore.getReaderFontWeight())
                         + " · 字号 " + Math.round(settingsStore.getFontSizeSp()) + "sp"
@@ -265,6 +295,10 @@ public class PreviewActivity extends ThemedActivity {
         bindingPreviewStyleValues = true;
         previewSelectedReaderTheme = settingsStore.getReaderTheme();
         previewStyleUiThemeSpinner.setSelection(indexOf(READER_THEME_KEYS, settingsStore.getReaderUiThemeMode(), 0), false);
+        previewStyleDoublePageModeSpinner.setSelection(
+                indexOf(ReaderOptionCatalog.DOUBLE_PAGE_MODE_KEYS, settingsStore.getReaderDoublePageMode(), 0),
+                false
+        );
         previewStyleFontFamilySpinner.setSelection(indexOf(READER_FONT_FAMILY_KEYS, settingsStore.getReaderFontFamily(), 0), false);
         previewStyleFontSeekBar.setProgress(Math.round(settingsStore.getFontSizeSp()) - 12);
         previewStyleFontWeightSeekBar.setProgress(fontWeightProgress(settingsStore.getReaderFontWeight()));
@@ -275,7 +309,9 @@ public class PreviewActivity extends ThemedActivity {
         previewStyleBottomSeekBar.setProgress(settingsStore.getBottomPaddingDp());
         previewStyleKeepScreenOnCheck.setChecked(settingsStore.isKeepScreenOn());
         previewStyleShowTitleCheck.setChecked(settingsStore.isChapterTitleVisible());
+        previewStyleDoublePageCheck.setChecked(settingsStore.isReaderDoublePageEnabled());
         previewStyleBackgroundText.setText(currentPreviewBackgroundLabel());
+        updatePreviewDoublePageModeAvailability();
         updatePreviewThemeButtons();
         updatePreviewStyleLabels();
         bindingPreviewStyleValues = false;
@@ -284,6 +320,10 @@ public class PreviewActivity extends ThemedActivity {
     private void applyPreviewStyleControls() {
         if (bindingPreviewStyleValues) return;
         settingsStore.setReaderUiThemeMode(READER_THEME_KEYS[previewStyleUiThemeSpinner.getSelectedItemPosition()]);
+        settingsStore.setReaderDoublePageEnabled(previewStyleDoublePageCheck.isChecked());
+        settingsStore.setReaderDoublePageMode(ReaderOptionCatalog.DOUBLE_PAGE_MODE_KEYS[
+                previewStyleDoublePageModeSpinner.getSelectedItemPosition()
+        ]);
         settingsStore.setReaderFontFamily(READER_FONT_FAMILY_KEYS[previewStyleFontFamilySpinner.getSelectedItemPosition()]);
         settingsStore.setFontSizeSp(previewStyleFontSeekBar.getProgress() + 12f);
         settingsStore.setReaderFontWeight(fontWeightValueForProgress(previewStyleFontWeightSeekBar.getProgress()));
@@ -299,23 +339,35 @@ public class PreviewActivity extends ThemedActivity {
     }
 
     private void updatePreviewReader() {
-        ReaderThemePalette palette = ReaderThemePalette.from(settingsStore.getReaderTheme());
+        ReaderThemePalette palette = ReaderDisplayModeHelper.resolvePalette(this, settingsStore);
         Typeface bodyTypeface = buildReaderTypeface(settingsStore.getReaderFontFamily(), settingsStore.getReaderFontWeight());
         Typeface titleTypeface = buildReaderTypeface(settingsStore.getReaderFontFamily(),
                 Math.max(600, Math.min(900, settingsStore.getReaderFontWeight() + 200)));
+        boolean doublePageActive = ReaderDisplayModeHelper.isDoublePageActive(
+                this,
+                settingsStore,
+                previewReaderStage == null ? 0 : previewReaderStage.getWidth(),
+                previewReaderStage == null ? 0 : previewReaderStage.getHeight()
+        );
+        previewReaderRightPage.setVisibility(doublePageActive ? View.VISIBLE : View.GONE);
+        previewReaderGutter.setVisibility(doublePageActive ? View.VISIBLE : View.GONE);
         previewReaderHeading.setVisibility(settingsStore.isChapterTitleVisible() ? View.VISIBLE : View.GONE);
+        previewReaderHeadingRight.setVisibility(View.GONE);
         previewReaderHeading.setText("第一章 雨落书页时");
         previewReaderHeading.setIncludeFontPadding(false);
+        previewReaderHeadingRight.setIncludeFontPadding(false);
         previewReaderHeading.setTypeface(titleTypeface);
+        previewReaderHeadingRight.setTypeface(titleTypeface);
         previewReaderHeading.setTextSize(TypedValue.COMPLEX_UNIT_SP, settingsStore.getFontSizeSp() * 1.4f);
+        previewReaderHeadingRight.setTextSize(TypedValue.COMPLEX_UNIT_SP, settingsStore.getFontSizeSp() * 1.4f);
         previewReaderHeading.setTextColor(palette.textColor);
-        previewReaderBody.setText("雨点敲在窗沿上时，旧书的纸页也跟着轻轻起伏。字距、行距、边距与字重会共同决定这页文字是松弛、沉稳，还是压迫。\n\n如果一段文字像现在这样安静地铺开，说明当前排版已经接近真实阅读状态。");
-        previewReaderBody.setTypeface(bodyTypeface);
-        previewReaderBody.setTextSize(TypedValue.COMPLEX_UNIT_SP, settingsStore.getFontSizeSp());
-        previewReaderBody.setTextColor(palette.textColor);
-        previewReaderBody.setLineSpacing(settingsStore.getLineSpacingExtraSp(), 1f);
-        previewReaderBody.setLetterSpacing(settingsStore.getLetterSpacing());
-        previewReaderBody.setFullJustifyEnabled(settingsStore.isBodyTextJustified());
+        previewReaderHeadingRight.setTextColor(palette.textColor);
+        previewReaderBody.setText(doublePageActive
+                ? "雨点敲在窗沿上时，旧书的纸页也跟着轻轻起伏。字距、行距、边距与字重会共同决定这页文字是松弛、沉稳，还是压迫。"
+                : "雨点敲在窗沿上时，旧书的纸页也跟着轻轻起伏。字距、行距、边距与字重会共同决定这页文字是松弛、沉稳，还是压迫。\n\n如果一段文字像现在这样安静地铺开，说明当前排版已经接近真实阅读状态。");
+        previewReaderBodyRight.setText("如果一段文字像现在这样安静地铺开，说明当前排版已经接近真实阅读状态。双页模式下，下一页会并排放在右侧。");
+        stylePreviewBody(previewReaderBody, bodyTypeface, palette.textColor);
+        stylePreviewBody(previewReaderBodyRight, bodyTypeface, palette.textColor);
         previewReaderPage.setBackgroundColor(palette.pageColor);
         previewReaderScrim.setBackgroundColor(palette.overlayColor);
         int leftPadding = dp(settingsStore.getLeftPaddingDp());
@@ -328,9 +380,14 @@ public class PreviewActivity extends ThemedActivity {
                 ? Math.max(dp(16), Math.round(previewReaderHeading.getTextSize() * 1.5f))
                 : 0;
         previewReaderBody.setLayoutParams(bodyParams);
+        LinearLayout.LayoutParams rightBodyParams = (LinearLayout.LayoutParams) previewReaderBodyRight.getLayoutParams();
+        rightBodyParams.topMargin = 0;
+        previewReaderBodyRight.setLayoutParams(rightBodyParams);
         String backgroundPath = settingsStore.getReaderBackgroundPath();
         boolean applied = false;
-        if (backgroundPath != null && !backgroundPath.isBlank()) {
+        if (backgroundPath != null
+                && !backgroundPath.isBlank()
+                && !ReaderDisplayModeHelper.shouldOverrideCustomVisuals(this, settingsStore, null)) {
             File f = new File(backgroundPath);
             if (f.exists()) {
                 Bitmap bm = BitmapFactory.decodeFile(f.getAbsolutePath());
@@ -338,6 +395,24 @@ public class PreviewActivity extends ThemedActivity {
             }
         }
         if (!applied) previewReaderBackground.setImageResource(palette.backgroundDrawableRes);
+    }
+
+    private void stylePreviewBody(JustifiedPageTextView body, Typeface typeface, int textColor) {
+        body.setTypeface(typeface);
+        body.setTextSize(TypedValue.COMPLEX_UNIT_SP, settingsStore.getFontSizeSp());
+        body.setTextColor(textColor);
+        body.setLineSpacing(settingsStore.getLineSpacingExtraSp(), 1f);
+        body.setLetterSpacing(settingsStore.getLetterSpacing());
+        body.setFullJustifyEnabled(settingsStore.isBodyTextJustified());
+    }
+
+    private void updatePreviewDoublePageModeAvailability() {
+        if (previewStyleDoublePageModeSpinner == null || previewStyleDoublePageCheck == null) {
+            return;
+        }
+        boolean enabled = previewStyleDoublePageCheck.isChecked();
+        previewStyleDoublePageModeSpinner.setEnabled(enabled);
+        previewStyleDoublePageModeSpinner.setAlpha(enabled ? 1f : 0.45f);
     }
 
     private void updatePreviewThemeButtons() {
@@ -390,7 +465,12 @@ public class PreviewActivity extends ThemedActivity {
 
     private String currentPreviewBackgroundLabel() {
         String path = settingsStore.getReaderBackgroundPath();
-        if (path == null || path.isBlank()) return "当前背景：使用" + labelForReaderPreset(settingsStore.getReaderTheme()) + "内置壁纸";
+        if (path == null
+                || path.isBlank()
+                || ReaderDisplayModeHelper.shouldOverrideCustomVisuals(this, settingsStore, null)) {
+            String suffix = ReaderDisplayModeHelper.isAutoNightActive(this, settingsStore) ? "（自动夜航）" : "";
+            return "当前背景：使用" + labelForReaderPreset(ReaderDisplayModeHelper.resolveReaderThemeKey(this, settingsStore)) + "内置壁纸" + suffix;
+        }
         return "当前背景：" + new File(path).getName();
     }
 
@@ -526,6 +606,11 @@ public class PreviewActivity extends ThemedActivity {
         if ("forest".equals(v)) return "护眼";
         if ("night".equals(v)) return "夜航";
         return "纸控";
+    }
+
+    private String labelForDoublePageMode(String v) {
+        int index = indexOf(ReaderOptionCatalog.DOUBLE_PAGE_MODE_KEYS, v, 0);
+        return ReaderOptionCatalog.DOUBLE_PAGE_MODE_LABELS[index];
     }
 
     private String labelForReaderFontFamily(String v) {
