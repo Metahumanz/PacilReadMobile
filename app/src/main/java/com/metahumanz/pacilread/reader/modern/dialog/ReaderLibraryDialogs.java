@@ -161,6 +161,10 @@ public final class ReaderLibraryDialogs {
     }
 
     public void showSearchDialog() {
+        showSearchDialog("", false);
+    }
+
+    public void showSearchDialog(String initialQuery, boolean autoRun) {
         View contentView = LayoutInflater.from(activity).inflate(R.layout.dialog_search, null, false);
         EditText queryInput = contentView.findViewById(R.id.search_query_input);
         Button searchButton = contentView.findViewById(R.id.search_button_go);
@@ -180,7 +184,7 @@ public final class ReaderLibraryDialogs {
                     result.chapterIndex >= state.currentChapterIndex ? 1 : -1
             );
         });
-        searchButton.setOnClickListener(v -> {
+        Runnable runSearch = () -> {
             String query = queryInput.getText().toString().trim().toLowerCase(Locale.ROOT);
             if (query.isEmpty()) {
                 resultCount.setText("请输入关键词");
@@ -212,11 +216,24 @@ public final class ReaderLibraryDialogs {
                     resultCount.setText(results.isEmpty() ? "没有找到匹配内容" : "找到 " + results.size() + " 条结果");
                 });
             });
-        });
+        };
+        searchButton.setOnClickListener(v -> runSearch.run());
+        String safeInitialQuery = initialQuery == null ? "" : initialQuery.trim();
+        if (!safeInitialQuery.isEmpty()) {
+            queryInput.setText(safeInitialQuery);
+            queryInput.setSelection(queryInput.getText().length());
+        }
         dialogSupport.showStyledDialog(dialog);
+        if (autoRun && !safeInitialQuery.isEmpty()) {
+            resultCount.post(runSearch);
+        }
     }
 
     public void showRulesDialog() {
+        showRulesDialog("");
+    }
+
+    public void showRulesDialog(String initialPattern) {
         View contentView = LayoutInflater.from(activity).inflate(R.layout.dialog_rules, null, false);
         EditText patternInput = contentView.findViewById(R.id.rules_input_pattern);
         EditText replacementInput = contentView.findViewById(R.id.rules_input_replacement);
@@ -228,6 +245,12 @@ public final class ReaderLibraryDialogs {
         ArrayAdapter<String> adapter = dialogSupport.buildDialogListAdapter(new ArrayList<>());
         listView.setAdapter(adapter);
         hintText.setText("点击列表切换启用状态，长按删除。");
+        String safeInitialPattern = initialPattern == null ? "" : initialPattern;
+        if (!safeInitialPattern.isEmpty()) {
+            patternInput.setText(safeInitialPattern);
+            patternInput.setSelection(patternInput.getText().length());
+            replacementInput.requestFocus();
+        }
         refreshRuleLabels(adapter);
         AlertDialog dialog = new AlertDialog.Builder(activity).setView(contentView).create();
         addButton.setOnClickListener(v -> {

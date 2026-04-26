@@ -111,6 +111,7 @@ public final class ReaderStyleDialogController {
                 ),
                 false
         );
+        applyDoublePageTurnStepButtons(refs, runtime.settingsStore.getReaderDoublePageTurnStep());
         updateDoublePageModeAvailability(refs);
         refs.backgroundText.setText(style.currentBackgroundLabel());
         refs.uiThemeSpinner.setSelection(
@@ -267,6 +268,14 @@ public final class ReaderStyleDialogController {
             public void onNothingSelected(android.widget.AdapterView<?> parent) {
             }
         });
+        refs.doublePageTurnOneButton.setOnClickListener(v -> {
+            applyDoublePageTurnStepButtons(refs, "one");
+            autoApply.run();
+        });
+        refs.doublePageTurnTwoButton.setOnClickListener(v -> {
+            applyDoublePageTurnStepButtons(refs, "two");
+            autoApply.run();
+        });
 
         refs.titleLeftButton.setOnClickListener(v -> {
             runtime.settingsStore.setChapterTitleAlignment("left");
@@ -338,6 +347,7 @@ public final class ReaderStyleDialogController {
             runtime.settingsStore.setReaderDoublePageMode(ReaderOptionCatalog.DOUBLE_PAGE_MODE_KEYS[
                     refs.doublePageModeSpinner.getSelectedItemPosition()
             ]);
+            runtime.settingsStore.setReaderDoublePageTurnStep(refs.doublePageTurnOneButton.isSelected() ? "one" : "two");
             runtime.settingsStore.setReaderTheme(selectedReaderTheme[0]);
             runtime.settingsStore.setReaderUiThemeMode(ReaderOptionCatalog.UI_THEME_KEYS[refs.uiThemeSpinner.getSelectedItemPosition()]);
             refreshTextColorPreview.run();
@@ -357,6 +367,25 @@ public final class ReaderStyleDialogController {
         boolean enabled = refs.doublePageCheck != null && refs.doublePageCheck.isChecked();
         refs.doublePageModeSpinner.setEnabled(enabled);
         refs.doublePageModeSpinner.setAlpha(enabled ? 1f : 0.45f);
+        setEnabledWithAlpha(refs.doublePageTurnStepLayout, enabled);
+        setEnabledWithAlpha(refs.doublePageTurnOneButton, enabled);
+        setEnabledWithAlpha(refs.doublePageTurnTwoButton, enabled);
+    }
+
+    private void applyDoublePageTurnStepButtons(StyleDialogViews refs, String step) {
+        boolean onePage = "one".equals(step);
+        refs.doublePageTurnOneButton.setSelected(onePage);
+        refs.doublePageTurnTwoButton.setSelected(!onePage);
+        chrome.styleThemeButton(refs.doublePageTurnOneButton, onePage);
+        chrome.styleThemeButton(refs.doublePageTurnTwoButton, !onePage);
+    }
+
+    private void setEnabledWithAlpha(View view, boolean enabled) {
+        if (view == null) {
+            return;
+        }
+        view.setEnabled(enabled);
+        view.setAlpha(enabled ? 1f : 0.45f);
     }
 
     private void renderThemeRows(LinearLayout container, AlertDialog dialog, StyleDialogViews refs, String[] selectedReaderTheme) {
@@ -538,6 +567,7 @@ public final class ReaderStyleDialogController {
         final TextView backgroundBlurValue;
         final Spinner uiThemeSpinner;
         final Spinner doublePageModeSpinner;
+        final LinearLayout doublePageTurnStepLayout;
         final CheckBox keepScreenOn;
         final CheckBox showTitleCheck;
         final CheckBox doublePageCheck;
@@ -551,6 +581,8 @@ public final class ReaderStyleDialogController {
         final Button bodyJustifyButton;
         final Button bodyLeftButton;
         final Button customColorButton;
+        final Button doublePageTurnOneButton;
+        final Button doublePageTurnTwoButton;
 
         private StyleDialogViews(View root) {
             contentContainer = root.findViewById(R.id.style_content);
@@ -581,6 +613,7 @@ public final class ReaderStyleDialogController {
             backgroundBlurValue = root.findViewById(R.id.style_text_background_blur);
             uiThemeSpinner = root.findViewById(R.id.style_spinner_ui_theme_mode);
             doublePageModeSpinner = root.findViewById(R.id.style_spinner_double_page_mode);
+            doublePageTurnStepLayout = root.findViewById(R.id.style_layout_double_page_turn_step);
             keepScreenOn = root.findViewById(R.id.style_check_keep_screen_on);
             showTitleCheck = root.findViewById(R.id.style_check_show_title);
             doublePageCheck = root.findViewById(R.id.style_check_double_page);
@@ -594,6 +627,8 @@ public final class ReaderStyleDialogController {
             bodyJustifyButton = root.findViewById(R.id.style_button_body_justify);
             bodyLeftButton = root.findViewById(R.id.style_button_body_left);
             customColorButton = root.findViewById(R.id.style_button_custom_color);
+            doublePageTurnOneButton = root.findViewById(R.id.style_button_double_page_turn_one);
+            doublePageTurnTwoButton = root.findViewById(R.id.style_button_double_page_turn_two);
         }
 
         static StyleDialogViews bind(View root) {

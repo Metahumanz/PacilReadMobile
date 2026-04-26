@@ -82,6 +82,7 @@ public final class ReaderNavigationController {
         if (!paging.ensurePageAreaReady(() -> showPage(chapterIndex, pageIndex, animate, direction))) {
             return;
         }
+        activity.clearTextSelection();
         int safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size() - 1);
         List<PageSlice> pages = content.getPagesForChapter(safeChapterIndex);
         int safePageIndex = ui.clamp(pageIndex, 0, pages.size() - 1);
@@ -198,7 +199,10 @@ public final class ReaderNavigationController {
     }
 
     public int pageStep() {
-        return content != null && content.isDoublePageActive() ? 2 : 1;
+        if (content == null || !content.isDoublePageActive()) {
+            return 1;
+        }
+        return "one".equals(runtime.settingsStore.getReaderDoublePageTurnStep()) ? 1 : 2;
     }
 
     public int lastSpreadStart(List<PageSlice> pages) {
@@ -230,13 +234,13 @@ public final class ReaderNavigationController {
         bindPage(leftTitleView, leftBodyView, chapterIndex, pageIndex);
         boolean showRight = content.isDoublePageActive();
         if (!showRight) {
-            clearRightPane(rightTitleView, rightBodyView, rightPane, gutter);
+            clearRightPane(rightTitleView, rightBodyView, rightPane, gutter, false);
             return;
         }
         List<PageSlice> pages = content.getPagesForChapter(chapterIndex);
         int rightPageIndex = pageIndex + 1;
         if (rightPageIndex >= pages.size()) {
-            clearRightPane(rightTitleView, rightBodyView, rightPane, gutter);
+            clearRightPane(rightTitleView, rightBodyView, rightPane, gutter, true);
             return;
         }
         if (rightPane != null) {
@@ -252,7 +256,8 @@ public final class ReaderNavigationController {
             TextView rightTitleView,
             JustifiedPageTextView rightBodyView,
             View rightPane,
-            View gutter
+            View gutter,
+            boolean reserveSpace
     ) {
         if (rightTitleView != null) {
             rightTitleView.setText(null);
@@ -263,10 +268,10 @@ public final class ReaderNavigationController {
             rightBodyView.setText("");
         }
         if (rightPane != null) {
-            rightPane.setVisibility(View.GONE);
+            rightPane.setVisibility(reserveSpace ? View.VISIBLE : View.GONE);
         }
         if (gutter != null) {
-            gutter.setVisibility(View.GONE);
+            gutter.setVisibility(reserveSpace ? View.VISIBLE : View.GONE);
         }
     }
 

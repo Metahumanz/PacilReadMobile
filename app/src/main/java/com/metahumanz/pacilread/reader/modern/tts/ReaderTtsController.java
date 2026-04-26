@@ -103,6 +103,23 @@ public final class ReaderTtsController {
         advanceToNextTtsChapter();
     }
 
+    public void startTtsFrom(int chapterIndex, int charOffset) {
+        if ("mimo".equals(runtime.settingsStore.getTtsEngine()) && runtime.settingsStore.getTtsMimoApiKey().isBlank()) {
+            ui.showToast("请先在设置页填写 MiMo API Key");
+            return;
+        }
+        stopTts();
+        boolean hasUnits = rebuildTtsUnitsForChapter(chapterIndex, Math.max(charOffset, 0));
+        if (!hasUnits) {
+            ui.showToast("当前位置没有可朗读的文本");
+            return;
+        }
+        state.ttsActive = true;
+        state.ttsSessionId++;
+        chrome.styleReaderMenuButton(views.ttsButton, true);
+        playCurrentTtsUnit();
+    }
+
     public void stopTts() {
         state.ttsActive = false;
         state.ttsSessionId++;
@@ -111,6 +128,7 @@ public final class ReaderTtsController {
         state.currentTtsUnitIndex = -1;
         runtime.systemTtsClient.cancel();
         runtime.mimoTtsClient.cancel();
+        state.ttsHighlightPageIndex = -1;
         state.ttsHighlightStart = -1;
         state.ttsHighlightEnd = -1;
         updateTtsHighlight();
@@ -118,12 +136,24 @@ public final class ReaderTtsController {
     }
 
     public void updateTtsHighlight() {
-        if (state.ttsHighlightStart >= 0 && state.ttsHighlightEnd > state.ttsHighlightStart) {
-            views.pageBodyCurrent.setHighlightRange(state.ttsHighlightStart, state.ttsHighlightEnd);
-        } else {
+        if (views.pageBodyCurrent != null) {
             views.pageBodyCurrent.clearHighlight();
         }
-        views.pageBodyCurrent.invalidate();
+        if (views.pageBodyCurrentRight != null) {
+            views.pageBodyCurrentRight.clearHighlight();
+        }
+        if (state.ttsHighlightStart < 0 || state.ttsHighlightEnd <= state.ttsHighlightStart) {
+            return;
+        }
+        if (state.ttsHighlightPageIndex == state.currentPageIndex + 1
+                && views.pageBodyCurrentRight != null
+                && views.pageBodyCurrentRight.getVisibility() == View.VISIBLE) {
+            views.pageBodyCurrentRight.setHighlightRange(state.ttsHighlightStart, state.ttsHighlightEnd);
+            return;
+        }
+        if (views.pageBodyCurrent != null) {
+            views.pageBodyCurrent.setHighlightRange(state.ttsHighlightStart, state.ttsHighlightEnd);
+        }
     }
 
     public void showTtsDialog() {
@@ -214,8 +244,8 @@ public final class ReaderTtsController {
             advanceToNextTtsChapter();
             return;
         }
-        PageSlice currentSlice = pages.get(ui.clamp(state.currentPageIndex, 0, pages.size() - 1));
-        while (state.currentTtsUnitIndex < ttsUnits.size() && ttsUnits.get(state.currentTtsUnitIndex).end <= currentSlice.start) {
+        PageSlice firstVisibleSlice = pages.get(ui.clamp(state.currentPageIndex, 0, pages.size() - 1));
+        while (state.currentTtsUnitIndex < ttsUnits.size() && ttsUnits.get(state.currentTtsUnitIndex).end <= firstVisibleSlice.start) {
             state.currentTtsUnitIndex++;
         }
         if (state.currentTtsUnitIndex >= ttsUnits.size()) {
@@ -223,7 +253,29 @@ public final class ReaderTtsController {
             return;
         }
         SpeechUnit unit = ttsUnits.get(state.currentTtsUnitIndex);
-        if (unit.start >= currentSlice.end) {
+        VisiblePage visiblePage = findVisiblePageForUnit(pages, unit);
+        if (visiblePage == null) {
+            PageSlice lastVisibleSlice = pages.get(ui.clamp(
+                    state.currentPageIndex + content.pagesPerScreen() - 1,
+                    0,
+                    pages.size() - 1
+            ));
+            if (unit.start >= lastVisibleSlice.end) {
+                if (navigation.pageDown()) {
+                    scheduleTtsPlayback(paging.readerFlipDurationMs() + 60L);
+                } else {
+                    advanceToNextTtsChapter();
+                }
+                return;
+            }
+            navigation.openChapter(state.ttsChapterIndex, unit.start, true, -1);
+            scheduleTtsPlayback(paging.readerFlipDurationMs() + 60L);
+            return;
+        }
+        PageSlice highlightSlice = visiblePage.slice;
+        int highlightStartOffset = Math.max(unit.start, highlightSlice.start);
+        int highlightEndOffset = Math.min(unit.end, highlightSlice.end);
+        if (highlightEndOffset <= highlightStartOffset) {
             if (navigation.pageDown()) {
                 scheduleTtsPlayback(paging.readerFlipDurationMs() + 60L);
             } else {
@@ -231,10 +283,10 @@ public final class ReaderTtsController {
             }
             return;
         }
-        PageSlice highlightSlice = pages.get(ui.clamp(state.currentPageIndex, 0, pages.size() - 1));
         int bodyOffsetInSlice = Math.max(highlightSlice.bodyStartInSlice, 0);
-        state.ttsHighlightStart = bodyOffsetInSlice + (unit.start - highlightSlice.start);
-        state.ttsHighlightEnd = bodyOffsetInSlice + (unit.end - highlightSlice.start);
+        state.ttsHighlightPageIndex = visiblePage.pageIndex;
+        state.ttsHighlightStart = bodyOffsetInSlice + (highlightStartOffset - highlightSlice.start);
+        state.ttsHighlightEnd = bodyOffsetInSlice + (highlightEndOffset - highlightSlice.start);
         updateTtsHighlight();
         activity.markReadingActivity();
         speakCurrentTtsGroup();
@@ -269,6 +321,21 @@ public final class ReaderTtsController {
         }
         state.currentTtsUnitIndex += Math.max(consumedUnits, 0);
         playCurrentTtsUnit();
+    }
+
+    private VisiblePage findVisiblePageForUnit(List<PageSlice> pages, SpeechUnit unit) {
+        if (pages == null || pages.isEmpty() || unit == null) {
+            return null;
+        }
+        int firstPageIndex = ui.clamp(state.currentPageIndex, 0, pages.size() - 1);
+        int lastPageIndex = ui.clamp(firstPageIndex + content.pagesPerScreen() - 1, firstPageIndex, pages.size() - 1);
+        for (int pageIndex = firstPageIndex; pageIndex <= lastPageIndex; pageIndex++) {
+            PageSlice slice = pages.get(pageIndex);
+            if (unit.start < slice.end && unit.end > slice.start) {
+                return new VisiblePage(pageIndex, slice);
+            }
+        }
+        return null;
     }
 
     private void scheduleTtsPlayback(long delayMillis) {
@@ -404,6 +471,16 @@ public final class ReaderTtsController {
             this.start = start;
             this.end = end;
             this.text = text;
+        }
+    }
+
+    private static final class VisiblePage {
+        final int pageIndex;
+        final PageSlice slice;
+
+        private VisiblePage(int pageIndex, PageSlice slice) {
+            this.pageIndex = pageIndex;
+            this.slice = slice;
         }
     }
 }

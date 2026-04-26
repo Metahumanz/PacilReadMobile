@@ -426,20 +426,12 @@
                 android:textSize="11sp" />
         </LinearLayout>
 
-        <HorizontalScrollView
+        <com.metahumanz.pacilread.reader.modern.ui.ReaderMenuButtonFlowLayout
+            android:id="@+id/menu_top_actions"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
-            android:clipToPadding="false"
-            android:fadeScrollbars="false"
-            android:overScrollMode="never"
-            android:scrollbars="none">
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
+            android:clipToPadding="false">
 
                 <Button
                     android:id="@+id/button_search"
@@ -566,8 +558,7 @@
                     android:textColor="?attr/themeColorReaderMenuButtonText"
                     android:textSize="12sp"
                     android:visibility="gone" />
-            </LinearLayout>
-        </HorizontalScrollView>
+        </com.metahumanz.pacilread.reader.modern.ui.ReaderMenuButtonFlowLayout>
 
     </LinearLayout>
 

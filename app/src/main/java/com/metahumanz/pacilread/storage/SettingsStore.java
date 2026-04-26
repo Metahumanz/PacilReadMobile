@@ -88,6 +88,7 @@ public class SettingsStore {
     private static final String KEY_READING_STATS_DEVICE_ID = "reading_stats_device_id";
     private static final String KEY_READER_DOUBLE_PAGE_ENABLED = "reader_double_page_enabled";
     private static final String KEY_READER_DOUBLE_PAGE_MODE = "reader_double_page_mode";
+    private static final String KEY_READER_DOUBLE_PAGE_TURN_STEP = "reader_double_page_turn_step";
     private static final String KEY_READER_AUTO_NIGHT_ENABLED = "reader_auto_night_enabled";
     private static final String KEY_READER_AUTO_NIGHT_CUSTOM_POLICY = "reader_auto_night_custom_policy";
     private static final String KEY_BOOKSHELF_SHOW_ADD_ENTRY = "bookshelf_show_add_entry";
@@ -148,6 +149,7 @@ public class SettingsStore {
             KEY_READING_TIME_TRACKING_ENABLED,
             KEY_READER_DOUBLE_PAGE_ENABLED,
             KEY_READER_DOUBLE_PAGE_MODE,
+            KEY_READER_DOUBLE_PAGE_TURN_STEP,
             KEY_READER_AUTO_NIGHT_ENABLED,
             KEY_READER_AUTO_NIGHT_CUSTOM_POLICY,
             KEY_BOOKSHELF_SHOW_ADD_ENTRY,
@@ -563,6 +565,14 @@ public class SettingsStore {
 
     public void setReaderDoublePageMode(String value) {
         preferences.edit().putString(KEY_READER_DOUBLE_PAGE_MODE, normalizeReaderDoublePageMode(value)).apply();
+    }
+
+    public String getReaderDoublePageTurnStep() {
+        return normalizeReaderDoublePageTurnStep(preferences.getString(KEY_READER_DOUBLE_PAGE_TURN_STEP, "two"));
+    }
+
+    public void setReaderDoublePageTurnStep(String value) {
+        preferences.edit().putString(KEY_READER_DOUBLE_PAGE_TURN_STEP, normalizeReaderDoublePageTurnStep(value)).apply();
     }
 
     public boolean isReaderAutoNightEnabled() {
@@ -995,6 +1005,10 @@ public class SettingsStore {
             return value;
         }
         return "landscape";
+    }
+
+    public static String normalizeReaderDoublePageTurnStep(String value) {
+        return "one".equals(value) ? "one" : "two";
     }
 
     public static String normalizeReaderAutoNightCustomPolicy(String value) {

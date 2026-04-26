@@ -36,6 +36,7 @@ import com.metahumanz.pacilread.reader.modern.dialog.ReaderStyleDialogController
 import com.metahumanz.pacilread.reader.modern.paging.ReaderNavigationController;
 import com.metahumanz.pacilread.reader.modern.paging.ReaderPagingAnimator;
 import com.metahumanz.pacilread.reader.modern.playback.ReaderAutoPageController;
+import com.metahumanz.pacilread.reader.modern.selection.ReaderTextSelectionController;
 import com.metahumanz.pacilread.reader.modern.stats.ReaderReadingStatsTracker;
 import com.metahumanz.pacilread.reader.modern.tts.ReaderTtsController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
@@ -62,6 +63,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private ReaderStyleController style;
     private ReaderAutoPageController autoPage;
     private ReaderTtsController tts;
+    private ReaderTextSelectionController selection;
     private ReaderLibraryDialogs libraryDialogs;
     private ReaderStyleDialogController styleDialogs;
     private ReaderOptionsDialogController optionsDialogs;
@@ -174,6 +176,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
 
     @Override
     public void onBackPressed() {
+        if (selection != null && selection.hasSelection()) {
+            selection.clearSelection();
+            return;
+        }
         if (state.controlsVisible) {
             chrome.setControlsVisible(false);
             return;
@@ -186,6 +192,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     public boolean dispatchTouchEvent(MotionEvent event) {
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
             markReadingActivity();
+        }
+        if (selection != null && selection.handleTouchEvent(event)) {
+            return true;
         }
         if (paging.handleReaderPagingTouchEvent(event)) {
             return true;
@@ -227,12 +236,14 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         libraryDialogs = new ReaderLibraryDialogs(this, runtime, state, ui, dialogSupport, content, navigation);
         styleDialogs = new ReaderStyleDialogController(this, runtime, state, ui, dialogSupport, content, navigation, style, chrome);
         optionsDialogs = new ReaderOptionsDialogController(this, runtime, state, ui, dialogSupport, content, navigation, style, chrome);
+        selection = new ReaderTextSelectionController(this, runtime, views, state, ui, content);
 
         content.attachControllers(navigation, style, paging, chrome);
         navigation.attachControllers(content, paging, chrome);
         paging.attachControllers(navigation, content, chrome);
         autoPage.attachControllers(navigation, chrome);
         tts.attachControllers(navigation, content, paging, chrome);
+        selection.attachControllers(libraryDialogs, tts);
         chrome.attachControllers(content, paging, autoPage, tts);
         style.attachControllers(chrome, paging, content, tts);
     }
@@ -390,6 +401,12 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         Intent intent = new Intent(this, ReadingStatsActivity.class);
         intent.putExtra("book_id", state.book.id);
         startActivity(intent);
+    }
+
+    public void clearTextSelection() {
+        if (selection != null) {
+            selection.clearSelection();
+        }
     }
 
     private void showBookmarkDialog() {

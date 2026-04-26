@@ -17,7 +17,10 @@ public class JustifiedPageTextView extends AppCompatTextView {
     private boolean treatFinalLineAsParagraphEnd = true;
     private int highlightStart = -1;
     private int highlightEnd = -1;
+    private int selectionHighlightStart = -1;
+    private int selectionHighlightEnd = -1;
     private final Paint highlightPaint = new Paint();
+    private final Paint selectionHighlightPaint = new Paint();
 
     public JustifiedPageTextView(Context context) {
         super(context);
@@ -40,6 +43,8 @@ public class JustifiedPageTextView extends AppCompatTextView {
         setIncludeFontPadding(false);
         highlightPaint.setColor(0x40FFC107);
         highlightPaint.setStyle(Paint.Style.FILL);
+        selectionHighlightPaint.setColor(0x663B82F6);
+        selectionHighlightPaint.setStyle(Paint.Style.FILL);
     }
 
     public void setFullJustifyEnabled(boolean enabled) {
@@ -68,6 +73,57 @@ public class JustifiedPageTextView extends AppCompatTextView {
         this.highlightStart = -1;
         this.highlightEnd = -1;
         invalidate();
+    }
+
+    public void setSelectionHighlightRange(int start, int end) {
+        this.selectionHighlightStart = start;
+        this.selectionHighlightEnd = end;
+        invalidate();
+    }
+
+    public void clearSelectionHighlight() {
+        this.selectionHighlightStart = -1;
+        this.selectionHighlightEnd = -1;
+        invalidate();
+    }
+
+    public int offsetForTouch(float x, float y) {
+        Layout layout = getLayout();
+        CharSequence text = getText();
+        if (layout == null || text == null || text.length() == 0) {
+            return 0;
+        }
+        float contentX = x - getTotalPaddingLeft();
+        float contentY = y - getExtendedPaddingTop();
+        int lineIndex = Math.max(0, Math.min(layout.getLineForVertical(Math.round(contentY)), layout.getLineCount() - 1));
+        int start = layout.getLineStart(lineIndex);
+        int end = layout.getLineEnd(lineIndex);
+        int visibleEnd = layout.getLineVisibleEnd(lineIndex);
+        if (start >= visibleEnd) {
+            return Math.max(0, Math.min(start, text.length()));
+        }
+        if (!fullJustifyEnabled || shouldUsePlatformLine(text, start, end)) {
+            return Math.max(start, Math.min(layout.getOffsetForHorizontal(lineIndex, contentX), visibleEnd));
+        }
+        boolean paragraphEnd = hasTrailingLineBreak(text, visibleEnd, end)
+                || isFinalLineParagraphEnd(text, visibleEnd, lineIndex, layout.getLineCount());
+        String rawLine = text.subSequence(start, visibleEnd).toString();
+        String drawLine = trimLineBreaks(rawLine);
+        if (drawLine.isEmpty()) {
+            return start;
+        }
+        TextPaint paint = getPaint();
+        int availableWidth = getWidth() - getTotalPaddingLeft() - getTotalPaddingRight();
+        float lineLeft = lineContentLeft(layout, lineIndex);
+        float lineAvailableWidth = lineContentWidth(layout, lineIndex, availableWidth);
+        ReaderLineJustifier.LineLayout lineLayout = ReaderLineJustifier.layout(
+                drawLine,
+                lineLeft,
+                lineAvailableWidth,
+                paint,
+                shouldJustify(drawLine, paragraphEnd, lineAvailableWidth, paint)
+        );
+        return Math.max(start, Math.min(start + lineLayout.offsetForX(contentX, paint), visibleEnd));
     }
 
     @Override
@@ -154,7 +210,7 @@ public class JustifiedPageTextView extends AppCompatTextView {
     }
 
     private void drawHighlight(Canvas canvas, Layout layout) {
-        if (highlightStart < 0 || highlightEnd <= highlightStart || layout == null) {
+        if (layout == null || !hasAnyHighlight()) {
             return;
         }
         TextPaint paint = getPaint();
@@ -176,17 +232,33 @@ public class JustifiedPageTextView extends AppCompatTextView {
     }
 
     private void drawLineHighlight(Canvas canvas, float lineLeft, float baseline, Paint paint, CharSequence text, int lineStart, int lineEnd) {
-        if (highlightStart < 0 || highlightEnd <= highlightStart) {
+        drawLineHighlightRange(canvas, lineLeft, baseline, paint, text, lineStart, lineEnd, highlightStart, highlightEnd, highlightPaint);
+        drawLineHighlightRange(canvas, lineLeft, baseline, paint, text, lineStart, lineEnd, selectionHighlightStart, selectionHighlightEnd, selectionHighlightPaint);
+    }
+
+    private void drawLineHighlightRange(
+            Canvas canvas,
+            float lineLeft,
+            float baseline,
+            Paint paint,
+            CharSequence text,
+            int lineStart,
+            int lineEnd,
+            int rangeStart,
+            int rangeEnd,
+            Paint rangePaint
+    ) {
+        if (rangeStart < 0 || rangeEnd <= rangeStart) {
             return;
         }
-        int lineHighlightStart = Math.max(highlightStart, lineStart);
-        int lineHighlightEnd = Math.min(highlightEnd, lineEnd);
+        int lineHighlightStart = Math.max(rangeStart, lineStart);
+        int lineHighlightEnd = Math.min(rangeEnd, lineEnd);
         if (lineHighlightStart < lineHighlightEnd) {
             float startX = lineLeft + paint.measureText(text, lineStart, lineHighlightStart);
             float endX = startX + paint.measureText(text, lineHighlightStart, lineHighlightEnd);
             float top = baseline - paint.ascent() - 4;
             float bottom = baseline - paint.descent() + 4;
-            canvas.drawRect(startX, top, endX, bottom, highlightPaint);
+            canvas.drawRect(startX, top, endX, bottom, rangePaint);
         }
     }
 
@@ -201,21 +273,42 @@ public class JustifiedPageTextView extends AppCompatTextView {
     private void drawLineLayoutWithHighlight(Canvas canvas, ReaderLineJustifier.LineLayout lineLayout, float baseline, TextPaint paint, int lineStart) {
         float highlightTop = baseline - paint.ascent() - 4;
         float highlightBottom = baseline - paint.descent() + 4;
-        if (highlightStart >= 0 && highlightEnd > highlightStart) {
-            int lineHighlightStart = Math.max(highlightStart - lineStart, 0);
-            int lineHighlightEnd = Math.min(highlightEnd - lineStart, lineLayout.text().length());
-            if (lineHighlightStart < lineHighlightEnd) {
-                float startX = lineLayout.xForOffset(lineHighlightStart, paint);
-                float endX = lineLayout.xForOffset(lineHighlightEnd, paint);
-                canvas.drawRect(startX, highlightTop, endX, highlightBottom, highlightPaint);
-            }
-        }
+        drawLineLayoutHighlightRange(canvas, lineLayout, highlightTop, highlightBottom, paint, lineStart, highlightStart, highlightEnd, highlightPaint);
+        drawLineLayoutHighlightRange(canvas, lineLayout, highlightTop, highlightBottom, paint, lineStart, selectionHighlightStart, selectionHighlightEnd, selectionHighlightPaint);
 
         String text = lineLayout.text();
         for (int i = 0; i < lineLayout.unitCount(); i++) {
             ReaderLineJustifier.TextUnit unit = lineLayout.unitAt(i);
             canvas.drawText(text, unit.start, unit.end, lineLayout.unitX(i), baseline, paint);
         }
+    }
+
+    private void drawLineLayoutHighlightRange(
+            Canvas canvas,
+            ReaderLineJustifier.LineLayout lineLayout,
+            float top,
+            float bottom,
+            TextPaint paint,
+            int lineStart,
+            int rangeStart,
+            int rangeEnd,
+            Paint rangePaint
+    ) {
+        if (rangeStart < 0 || rangeEnd <= rangeStart) {
+            return;
+        }
+        int lineHighlightStart = Math.max(rangeStart - lineStart, 0);
+        int lineHighlightEnd = Math.min(rangeEnd - lineStart, lineLayout.text().length());
+        if (lineHighlightStart < lineHighlightEnd) {
+            float startX = lineLayout.xForOffset(lineHighlightStart, paint);
+            float endX = lineLayout.xForOffset(lineHighlightEnd, paint);
+            canvas.drawRect(startX, top, endX, bottom, rangePaint);
+        }
+    }
+
+    private boolean hasAnyHighlight() {
+        return (highlightStart >= 0 && highlightEnd > highlightStart)
+                || (selectionHighlightStart >= 0 && selectionHighlightEnd > selectionHighlightStart);
     }
 
     private String trimLineBreaks(String line) {
