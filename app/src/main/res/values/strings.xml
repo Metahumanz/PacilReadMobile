@@ -8,4 +8,10 @@
     <string name="reader_search">搜索</string>
     <string name="reader_style">排版</string>
     <string name="reader_tts">朗读</string>
+    <string name="tts_init_failed">系统 TTS 初始化失败</string>
+    <string name="tts_audio_focus_lost">未获取到音频焦点</string>
+    <string name="tts_pause">暂停听书</string>
+    <string name="tts_resume">继续听书</string>
+    <string name="tts_stop">停止听书</string>
+    <string name="tts_start">开始听书</string>
 </resources>
