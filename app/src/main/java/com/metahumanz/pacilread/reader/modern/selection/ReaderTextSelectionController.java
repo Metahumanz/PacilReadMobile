@@ -3,6 +3,7 @@ package com.metahumanz.pacilread.reader.modern.selection;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.graphics.RectF;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.view.Gravity;
@@ -33,6 +34,9 @@ import java.util.Locale;
 
 public final class ReaderTextSelectionController {
     private static final long LONG_PRESS_TIMEOUT_MS = 600L;
+    private static final int HANDLE_NONE = 0;
+    private static final int HANDLE_START = 1;
+    private static final int HANDLE_END = 2;
 
     private final ModernReaderActivity activity;
     private final ReaderRuntime runtime;
@@ -58,6 +62,7 @@ public final class ReaderTextSelectionController {
     private int anchorEnd;
     private int selectionStart;
     private int selectionEnd;
+    private int draggingHandle = HANDLE_NONE;
 
     public ReaderTextSelectionController(
             ModernReaderActivity activity,
@@ -115,6 +120,7 @@ public final class ReaderTextSelectionController {
 
     public void clearSelection() {
         cancelPendingLongPress();
+        draggingHandle = HANDLE_NONE;
         if (activeTarget != null && activeTarget.textView != null) {
             activeTarget.textView.clearSelectionHighlight();
         }
@@ -133,7 +139,25 @@ public final class ReaderTextSelectionController {
             lastRawX = event.getRawX();
             lastRawY = event.getRawY();
             state.pagingGestureCandidate = false;
-            dismissPopup();
+
+            int handle = hitTestHandle(event);
+            if (handle != HANDLE_NONE) {
+                draggingHandle = handle;
+                dismissPopup();
+                return true;
+            }
+
+            if (isInsideActiveText(event)) {
+                int tapOffset = bodyOffsetForTouch(activeTarget, event.getRawX(), event.getRawY(), false);
+                if (tapOffset >= selectionStart && tapOffset < selectionEnd) {
+                    dismissPopup();
+                } else {
+                    clearSelection();
+                }
+                return true;
+            }
+
+            clearSelection();
             return true;
         }
         Target target = findTextTarget(event);
@@ -165,6 +189,10 @@ public final class ReaderTextSelectionController {
             return false;
         }
         state.pagingGestureCandidate = false;
+        if (draggingHandle != HANDLE_NONE) {
+            updateHandleDrag(event.getRawX(), event.getRawY());
+            return true;
+        }
         updateSelectionFromTouch(event.getRawX(), event.getRawY());
         return true;
     }
@@ -173,6 +201,11 @@ public final class ReaderTextSelectionController {
         if (longPressPending) {
             cancelPendingLongPress();
             return false;
+        }
+        if (draggingHandle != HANDLE_NONE) {
+            draggingHandle = HANDLE_NONE;
+            showOrUpdatePopup();
+            return true;
         }
         if (!selectionActive) {
             return false;
@@ -235,6 +268,40 @@ public final class ReaderTextSelectionController {
         }
         applySelectionRange(start, end);
         showOrUpdatePopup();
+    }
+
+    private int hitTestHandle(MotionEvent event) {
+        if (activeTarget == null || activeTarget.textView == null) {
+            return HANDLE_NONE;
+        }
+        RectF startBounds = activeTarget.textView.getSelectionHandleScreenBounds(selectionStart);
+        if (startBounds != null && startBounds.contains(event.getRawX(), event.getRawY())) {
+            return HANDLE_START;
+        }
+        RectF endBounds = activeTarget.textView.getSelectionHandleScreenBounds(selectionEnd);
+        if (endBounds != null && endBounds.contains(event.getRawX(), event.getRawY())) {
+            return HANDLE_END;
+        }
+        return HANDLE_NONE;
+    }
+
+    private void updateHandleDrag(float rawX, float rawY) {
+        if (activeTarget == null) return;
+        int focus = bodyOffsetForTouch(activeTarget, rawX, rawY, true);
+        if (focus < 0) return;
+        int bodyStart = Math.max(activeTarget.slice.bodyStartInSlice, 0);
+        int bodyEnd = Math.max(bodyStart, activeTarget.slice.bodyEndInSlice);
+        if (draggingHandle == HANDLE_START) {
+            int newStart = ui.clamp(focus, bodyStart, selectionEnd - 1);
+            applySelectionRange(newStart, selectionEnd);
+            anchorStart = newStart;
+            anchorEnd = selectionEnd;
+        } else {
+            int newEnd = ui.clamp(focus, selectionStart + 1, bodyEnd);
+            applySelectionRange(selectionStart, newEnd);
+            anchorStart = selectionStart;
+            anchorEnd = newEnd;
+        }
     }
 
     private void applySelectionRange(int start, int end) {
@@ -393,17 +460,34 @@ public final class ReaderTextSelectionController {
         if (popupWindow != null) {
             return;
         }
-        LinearLayout row = new LinearLayout(activity);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER);
-        row.setPadding(ui.dp(8), ui.dp(7), ui.dp(8), ui.dp(7));
-        row.setBackgroundResource(R.drawable.bg_reader_menu_panel_solid);
-        row.addView(createActionButton("复制", this::copySelection));
-        row.addView(createActionButton("替换", this::replaceSelection));
-        row.addView(createActionButton("搜索", this::searchSelection));
-        row.addView(createActionButton("朗读", this::speakSelection));
+        LinearLayout container = new LinearLayout(activity);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setPadding(ui.dp(8), ui.dp(7), ui.dp(8), ui.dp(7));
+        container.setBackgroundResource(R.drawable.bg_reader_menu_panel_solid);
+
+        // Row 1: 复制 | 替换
+        LinearLayout row1 = new LinearLayout(activity);
+        row1.setOrientation(LinearLayout.HORIZONTAL);
+        row1.setGravity(Gravity.CENTER);
+        row1.addView(createActionButton("复制", this::copySelection, true));
+        row1.addView(createActionButton("替换", this::replaceSelection, false));
+        container.addView(row1);
+
+        // Row 2: 搜索 | 朗读
+        LinearLayout row2 = new LinearLayout(activity);
+        row2.setOrientation(LinearLayout.HORIZONTAL);
+        row2.setGravity(Gravity.CENTER);
+        row2.addView(createActionButton("搜索", this::searchSelection, true));
+        row2.addView(createActionButton("朗读", this::speakSelection, false));
+        LinearLayout.LayoutParams row2Params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        row2Params.topMargin = ui.dp(4);
+        container.addView(row2, row2Params);
+
         popupWindow = new PopupWindow(
-                row,
+                container,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 false
@@ -416,7 +500,7 @@ public final class ReaderTextSelectionController {
         }
     }
 
-    private Button createActionButton(String text, Runnable action) {
+    private Button createActionButton(String text, Runnable action, boolean marginEnd) {
         Button button = new Button(activity);
         button.setText(text);
         button.setAllCaps(false);
@@ -427,10 +511,13 @@ public final class ReaderTextSelectionController {
         button.setBackgroundResource(R.drawable.bg_reader_menu_button_solid);
         button.setTextColor(ui.themeColor(R.color.on_surface));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                0,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+                1f
         );
-        params.setMargins(0, 0, ui.dp(6), 0);
+        if (marginEnd) {
+            params.setMargins(0, 0, ui.dp(6), 0);
+        }
         button.setLayoutParams(params);
         button.setOnClickListener(v -> {
             dismissPopup();

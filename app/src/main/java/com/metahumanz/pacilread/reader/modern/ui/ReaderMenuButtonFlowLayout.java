@@ -6,6 +6,9 @@ import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public final class ReaderMenuButtonFlowLayout extends ViewGroup {
     private final int rowGapPx;
 
@@ -32,11 +35,11 @@ public final class ReaderMenuButtonFlowLayout extends ViewGroup {
                 ? Integer.MAX_VALUE
                 : Math.max(0, widthSize - getPaddingLeft() - getPaddingRight());
         int maxRows = maxRowsForOrientation();
-        int rowCount = 1;
         int rowWidth = 0;
         int rowHeight = 0;
         int measuredWidth = 0;
         int measuredHeight = getPaddingTop() + getPaddingBottom();
+        int rowCount = 0;
 
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
@@ -53,7 +56,7 @@ public final class ReaderMenuButtonFlowLayout extends ViewGroup {
             MarginLayoutParams lp = (MarginLayoutParams) child.getLayoutParams();
             int childWidth = child.getMeasuredWidth() + lp.getMarginStart() + lp.getMarginEnd();
             int childHeight = child.getMeasuredHeight() + lp.topMargin + lp.bottomMargin;
-            if (rowWidth > 0 && rowWidth + childWidth > availableWidth && rowCount < maxRows) {
+            if (rowWidth > 0 && rowWidth + childWidth > availableWidth && rowCount + 1 < maxRows) {
                 measuredWidth = Math.max(measuredWidth, rowWidth);
                 measuredHeight += rowHeight + rowGapPx;
                 rowWidth = 0;
@@ -79,11 +82,12 @@ public final class ReaderMenuButtonFlowLayout extends ViewGroup {
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         int availableWidth = Math.max(0, right - left - getPaddingLeft() - getPaddingRight());
         int maxRows = maxRowsForOrientation();
-        int rowCount = 1;
-        int rowLeft = getPaddingLeft();
-        int rowTop = getPaddingTop();
-        int rowHeight = 0;
-        int x = rowLeft;
+
+        // First pass: group visible children into rows
+        List<List<View>> rows = new ArrayList<>();
+        List<Integer> rowContentWidths = new ArrayList<>();
+        List<View> currentRow = new ArrayList<>();
+        int currentRowWidth = 0;
 
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
@@ -92,23 +96,41 @@ public final class ReaderMenuButtonFlowLayout extends ViewGroup {
             }
             MarginLayoutParams lp = (MarginLayoutParams) child.getLayoutParams();
             int childWidth = child.getMeasuredWidth() + lp.getMarginStart() + lp.getMarginEnd();
-            int childHeight = child.getMeasuredHeight() + lp.topMargin + lp.bottomMargin;
-            if (x > rowLeft && x - rowLeft + childWidth > availableWidth && rowCount < maxRows) {
-                x = rowLeft;
-                rowTop += rowHeight + rowGapPx;
-                rowHeight = 0;
-                rowCount++;
+            if (!currentRow.isEmpty() && currentRowWidth + childWidth > availableWidth && rows.size() + 1 < maxRows) {
+                rows.add(currentRow);
+                rowContentWidths.add(currentRowWidth);
+                currentRow = new ArrayList<>();
+                currentRowWidth = 0;
             }
-            int childLeft = x + lp.getMarginStart();
-            int childTop = rowTop + lp.topMargin;
-            child.layout(
-                    childLeft,
-                    childTop,
-                    childLeft + child.getMeasuredWidth(),
-                    childTop + child.getMeasuredHeight()
-            );
-            x += childWidth;
-            rowHeight = Math.max(rowHeight, childHeight);
+            currentRow.add(child);
+            currentRowWidth += childWidth;
+        }
+        if (!currentRow.isEmpty()) {
+            rows.add(currentRow);
+            rowContentWidths.add(currentRowWidth);
+        }
+
+        // Second pass: layout with extra space distributed evenly per row
+        int rowTop = getPaddingTop();
+        for (int rowIdx = 0; rowIdx < rows.size(); rowIdx++) {
+            List<View> rowChildren = rows.get(rowIdx);
+            int rowContentWidth = rowContentWidths.get(rowIdx);
+            int extraPerChild = rowChildren.size() > 1 && availableWidth > rowContentWidth
+                    ? (availableWidth - rowContentWidth) / rowChildren.size()
+                    : 0;
+
+            int x = getPaddingLeft();
+            int rowHeight = 0;
+            for (View child : rowChildren) {
+                MarginLayoutParams lp = (MarginLayoutParams) child.getLayoutParams();
+                int expandedWidth = child.getMeasuredWidth() + extraPerChild;
+                int childLeft = x + lp.getMarginStart();
+                int childTop = rowTop + lp.topMargin;
+                child.layout(childLeft, childTop, childLeft + expandedWidth, childTop + child.getMeasuredHeight());
+                x += expandedWidth + lp.getMarginStart() + lp.getMarginEnd();
+                rowHeight = Math.max(rowHeight, child.getMeasuredHeight() + lp.topMargin + lp.bottomMargin);
+            }
+            rowTop += rowHeight + rowGapPx;
         }
     }
 
