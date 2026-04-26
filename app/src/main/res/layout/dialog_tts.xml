@@ -75,6 +75,31 @@
             android:paddingEnd="10dp" />
     </LinearLayout>
 
+    <LinearLayout
+        android:id="@+id/tts_layout_system_engine"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="系统引擎"
+            android:textColor="?attr/themeColorOnSurface"
+            android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/tts_spinner_system_engine"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp" />
+    </LinearLayout>
+
     <TextView
         android:id="@+id/tts_text_note"
         android:layout_width="match_parent"
@@ -92,4 +117,14 @@
         android:background="@drawable/bg_primary_button"
         android:text="开始听书"
         android:textColor="@android:color/white" />
+
+    <Button
+        android:id="@+id/tts_button_stop"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_input"
+        android:text="停止听书"
+        android:textColor="?attr/themeColorOnSurface"
+        android:visibility="gone" />
 </LinearLayout>

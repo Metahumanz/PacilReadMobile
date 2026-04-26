@@ -606,31 +606,55 @@ final class SettingsScreenController {
         if (ttsTestButton != null) {
             ttsTestButton.setText("正在测试朗读...");
         }
-        executor.execute(() -> {
-            try {
-                if ("mimo".equals(engine)) {
+        if ("mimo".equals(engine)) {
+            executor.execute(() -> {
+                try {
                     testMimoTtsClient.speak(
                             TTS_TEST_TEXT,
                             settingsStore.getTtsMimoApiKey(),
                             settingsStore.getTtsMimoVoice(),
                             settingsStore.getTtsRate()
                     );
-                } else {
-                    getTestSystemTtsClient().speak(TTS_TEST_TEXT, settingsStore.getTtsRate());
+                    activity.runOnUiThread(() -> {
+                        setBusy(false);
+                        restoreTtsTestButton();
+                        showToast(engineLabel + " 测试朗读完成");
+                    });
+                } catch (Exception error) {
+                    activity.runOnUiThread(() -> {
+                        setBusy(false);
+                        restoreTtsTestButton();
+                        showToast(engineLabel + " 测试朗读失败: " + error.getMessage());
+                    });
                 }
-                activity.runOnUiThread(() -> {
-                    setBusy(false);
-                    restoreTtsTestButton();
-                    showToast(engineLabel + " 测试朗读完成");
-                });
-            } catch (Exception error) {
-                activity.runOnUiThread(() -> {
-                    setBusy(false);
-                    restoreTtsTestButton();
-                    showToast(engineLabel + " 测试朗读失败: " + error.getMessage());
-                });
-            }
-        });
+            });
+        } else {
+            SystemTtsClient testClient = getTestSystemTtsClient();
+            float rate = settingsStore.getTtsRate();
+            testClient.speak(TTS_TEST_TEXT, rate, new SystemTtsClient.SpeakCallback() {
+                @Override
+                public void onStart() {
+                }
+
+                @Override
+                public void onDone() {
+                    activity.runOnUiThread(() -> {
+                        setBusy(false);
+                        restoreTtsTestButton();
+                        showToast(engineLabel + " 测试朗读完成");
+                    });
+                }
+
+                @Override
+                public void onError(String message) {
+                    activity.runOnUiThread(() -> {
+                        setBusy(false);
+                        restoreTtsTestButton();
+                        showToast(engineLabel + " 测试朗读失败: " + message);
+                    });
+                }
+            });
+        }
     }
 
     private void confirmRestore(String message, BackgroundAction action) {

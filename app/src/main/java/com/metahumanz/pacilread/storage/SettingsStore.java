@@ -59,6 +59,7 @@ public class SettingsStore {
     private static final String KEY_TTS_RATE = "tts_rate";
     private static final String KEY_TTS_MIMO_API_KEY = "tts_mimo_api_key";
     private static final String KEY_TTS_MIMO_VOICE = "tts_mimo_voice";
+    private static final String KEY_TTS_SYSTEM_ENGINE = "tts_system_engine";
     private static final String KEY_FLIP_MODE = "flip_mode";
     private static final String KEY_READER_SLIDER_MODE = "reader_slider_mode";
     private static final String KEY_VOLUME_KEY_UP_ACTION = "volume_key_up_action";
@@ -121,6 +122,7 @@ public class SettingsStore {
             KEY_TTS_RATE,
             KEY_TTS_MIMO_API_KEY,
             KEY_TTS_MIMO_VOICE,
+            KEY_TTS_SYSTEM_ENGINE,
             KEY_FLIP_MODE,
             KEY_READER_SLIDER_MODE,
             KEY_VOLUME_KEY_UP_ACTION,
@@ -492,6 +494,14 @@ public class SettingsStore {
         preferences.edit().putString(KEY_TTS_MIMO_VOICE, normalizeTtsMimoVoice(value)).apply();
     }
 
+    public String getTtsSystemEnginePackage() {
+        return preferences.getString(KEY_TTS_SYSTEM_ENGINE, "");
+    }
+
+    public void setTtsSystemEnginePackage(String packageName) {
+        preferences.edit().putString(KEY_TTS_SYSTEM_ENGINE, packageName == null ? "" : packageName.trim()).apply();
+    }
+
     public String getFlipMode() {
         return normalizeFlipMode(preferences.getString(KEY_FLIP_MODE, "slide"));
     }
@@ -544,7 +554,7 @@ public class SettingsStore {
     }
 
     public boolean isReaderMenuAutoHideEnabled() {
-        return preferences.getBoolean(KEY_READER_MENU_AUTO_HIDE, true);
+        return preferences.getBoolean(KEY_READER_MENU_AUTO_HIDE, false);
     }
 
     public void setReaderMenuAutoHideEnabled(boolean enabled) {

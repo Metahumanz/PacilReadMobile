@@ -10,6 +10,7 @@ import android.os.BatteryManager;
 import android.os.Bundle;
 import android.view.GestureDetector;
 import android.view.Gravity;
+import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -27,6 +28,7 @@ import com.metahumanz.pacilread.R;
 import com.metahumanz.pacilread.ReadingStatsActivity;
 import com.metahumanz.pacilread.model.BookmarkRecord;
 import com.metahumanz.pacilread.model.ChapterRecord;
+import com.metahumanz.pacilread.reader.PageSlice;
 import com.metahumanz.pacilread.stats.ReadingStatsUtils;
 import com.metahumanz.pacilread.reader.modern.content.ReaderContentController;
 import com.metahumanz.pacilread.reader.modern.dialog.ReaderDialogSupport;
@@ -70,6 +72,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private ReaderReadingStatsTracker readingStatsTracker;
     private GestureDetector gestureDetector;
     private BroadcastReceiver sysMetricsReceiver;
+    private long lastScrollPageTurnTime;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -214,6 +217,28 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     }
 
     @Override
+    public boolean onGenericMotionEvent(MotionEvent event) {
+        if ((event.getSource() & InputDevice.SOURCE_CLASS_POINTER) != 0
+                && event.getActionMasked() == MotionEvent.ACTION_SCROLL
+                && !state.controlsVisible) {
+            float vScroll = event.getAxisValue(MotionEvent.AXIS_VSCROLL);
+            if (Math.abs(vScroll) > 0.5f) {
+                long now = System.currentTimeMillis();
+                if (now - lastScrollPageTurnTime > 300L) {
+                    lastScrollPageTurnTime = now;
+                    if (vScroll < 0) {
+                        navigation.pageDown();
+                    } else {
+                        navigation.pageUp();
+                    }
+                }
+                return true;
+            }
+        }
+        return super.onGenericMotionEvent(event);
+    }
+
+    @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode != RESULT_OK || data == null || data.getData() == null) {
@@ -277,7 +302,13 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         findViewById(R.id.button_style).setOnClickListener(v -> styleDialogs.showStyleDialog(REQUEST_PICK_BACKGROUND));
         findViewById(R.id.button_reader_options).setOnClickListener(v -> optionsDialogs.showReaderOptionsDialog());
         views.themeToggleButton.setOnClickListener(v -> chrome.toggleReaderUiTheme());
-        views.ttsButton.setOnClickListener(v -> tts.showTtsDialog());
+        views.ttsButton.setOnClickListener(v -> {
+            if (state.ttsActive || state.ttsPaused) {
+                tts.toggleTts();
+            } else {
+                tts.showTtsDialog();
+            }
+        });
         views.autoPageButton.setOnClickListener(v -> autoPage.showAutoPageDialog());
         views.readerTitle.setOnClickListener(v -> openReadingStatsForCurrentBook());
         views.pageStage.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
@@ -356,6 +387,17 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 state.lastTapY = y;
                 if (col == 1 && row == 1) {
                     chrome.setControlsVisible(true);
+                } else if (state.ttsActive && tts != null) {
+                    int offset = bodyCharOffsetFromTouch(e);
+                    if (offset >= 0) {
+                        tts.startTtsFrom(state.currentChapterIndex, offset);
+                    } else if (col == 0 || (col == 1 && row == 0)) {
+                        navigation.requestTapPageTurn(-1);
+                        resumeTtsAfterPageTurn();
+                    } else {
+                        navigation.requestTapPageTurn(1);
+                        resumeTtsAfterPageTurn();
+                    }
                 } else if (col == 0 || (col == 1 && row == 0)) {
                     navigation.requestTapPageTurn(-1);
                 } else {
@@ -370,10 +412,14 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                     return false;
                 }
                 if (Math.abs(velocityX) > Math.abs(velocityY) * 1.3f && Math.abs(velocityX) > 700f) {
+                    boolean flipped;
                     if (velocityX < 0) {
-                        navigation.pageDown();
+                        flipped = navigation.pageDown();
                     } else {
-                        navigation.pageUp();
+                        flipped = navigation.pageUp();
+                    }
+                    if (flipped) {
+                        resumeTtsAfterPageTurn();
                     }
                     return true;
                 }
@@ -407,6 +453,33 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         if (selection != null) {
             selection.clearSelection();
         }
+    }
+
+    private int bodyCharOffsetFromTouch(MotionEvent e) {
+        if (views.pageBodyCurrent == null) return -1;
+        int[] loc = new int[2];
+        views.pageBodyCurrent.getLocationOnScreen(loc);
+        float localX = e.getRawX() - loc[0];
+        float localY = e.getRawY() - loc[1];
+        int viewOffset = views.pageBodyCurrent.offsetForTouch(localX, localY);
+        if (viewOffset < 0) return -1;
+        List<PageSlice> pages = content.getPagesForChapter(state.currentChapterIndex);
+        if (pages.isEmpty()) return -1;
+        PageSlice slice = pages.get(ui.clamp(state.currentPageIndex, 0, pages.size() - 1));
+        int bodyStartInSlice = Math.max(slice.bodyStartInSlice, 0);
+        return slice.start + Math.max(0, viewOffset - bodyStartInSlice);
+    }
+
+    private void resumeTtsAfterPageTurn() {
+        if (!state.ttsActive || tts == null) return;
+        long delayMs = paging.readerFlipDurationMs() + 60L;
+        runtime.mainHandler.postDelayed(() -> {
+            if (!state.ttsActive || state.isAnimating || state.interactivePaging) return;
+            List<PageSlice> pages = content.getPagesForChapter(state.currentChapterIndex);
+            if (pages.isEmpty()) return;
+            int firstVisibleOffset = pages.get(ui.clamp(state.currentPageIndex, 0, pages.size() - 1)).start;
+            tts.startTtsFrom(state.currentChapterIndex, firstVisibleOffset);
+        }, delayMs);
     }
 
     private void showBookmarkDialog() {
