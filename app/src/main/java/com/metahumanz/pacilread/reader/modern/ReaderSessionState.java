@@ -31,6 +31,7 @@ public final class ReaderSessionState {
     public boolean controlsVisible = false;
     public boolean autoPageActive = false;
     public boolean ttsActive = false;
+    public boolean ttsPaused = false;
     public int ttsChapterIndex = -1;
     public int currentTtsUnitIndex = -1;
     public int ttsHighlightPageIndex = -1;

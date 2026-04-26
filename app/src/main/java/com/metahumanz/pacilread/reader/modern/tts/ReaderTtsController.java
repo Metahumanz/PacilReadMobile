@@ -1,6 +1,7 @@
 package com.metahumanz.pacilread.reader.modern.tts;
 
 import android.app.AlertDialog;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.Button;
@@ -20,10 +21,14 @@ import com.metahumanz.pacilread.reader.modern.dialog.ReaderDialogSupport;
 import com.metahumanz.pacilread.reader.modern.paging.ReaderNavigationController;
 import com.metahumanz.pacilread.reader.modern.paging.ReaderPagingAnimator;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
+import com.metahumanz.pacilread.tts.SystemTtsClient;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -33,6 +38,7 @@ public final class ReaderTtsController {
     private static final String[] TTS_ENGINE_LABELS = new String[]{"系统 TTS", "小米 MiMo"};
     private static final String[] TTS_MIMO_VOICE_KEYS = new String[]{"冰糖", "茉莉", "苏打", "白桦"};
     private static final String[] TTS_MIMO_VOICE_LABELS = new String[]{"冰糖（女声）", "茉莉（女声）", "苏打（男声）", "白桦（男声）"};
+    private static final int MIMO_PRECACHE_AHEAD = 2;
 
     private final ModernReaderActivity activity;
     private final ReaderRuntime runtime;
@@ -41,6 +47,9 @@ public final class ReaderTtsController {
     private final ReaderUiUtils ui;
     private final ReaderDialogSupport dialogSupport;
     private final List<SpeechUnit> ttsUnits = new ArrayList<>();
+    private final Map<Integer, byte[]> mimoPcmCache = new LinkedHashMap<>();
+    private final List<Runnable> pendingHighlightTasks = new CopyOnWriteArrayList<>();
+    private boolean batchQueued = false;
 
     private ReaderNavigationController navigation;
     private ReaderContentController content;
@@ -80,8 +89,12 @@ public final class ReaderTtsController {
     }
 
     public void toggleTts() {
+        if (state.ttsPaused) {
+            resumeTts();
+            return;
+        }
         if (state.ttsActive) {
-            stopTts();
+            pauseTts();
             return;
         }
         if ("mimo".equals(runtime.settingsStore.getTtsEngine()) && runtime.settingsStore.getTtsMimoApiKey().isBlank()) {
@@ -122,17 +135,50 @@ public final class ReaderTtsController {
 
     public void stopTts() {
         state.ttsActive = false;
+        state.ttsPaused = false;
         state.ttsSessionId++;
         ttsUnits.clear();
         state.ttsChapterIndex = -1;
         state.currentTtsUnitIndex = -1;
-        runtime.systemTtsClient.cancel();
+        batchQueued = false;
+        runtime.systemTtsClient.stop();
         runtime.mimoTtsClient.cancel();
+        cancelHighlightProgression();
+        synchronized (mimoPcmCache) {
+            mimoPcmCache.clear();
+        }
         state.ttsHighlightPageIndex = -1;
         state.ttsHighlightStart = -1;
         state.ttsHighlightEnd = -1;
         updateTtsHighlight();
         chrome.styleReaderMenuButton(views.ttsButton, false);
+    }
+
+    public void pauseTts() {
+        if (!state.ttsActive || state.ttsPaused) return;
+        batchQueued = false;
+        state.ttsPaused = true;
+        runtime.systemTtsClient.pause();
+        runtime.mimoTtsClient.cancel();
+        cancelHighlightProgression();
+        synchronized (mimoPcmCache) {
+            mimoPcmCache.clear();
+        }
+        state.ttsHighlightPageIndex = -1;
+        state.ttsHighlightStart = -1;
+        state.ttsHighlightEnd = -1;
+        updateTtsHighlight();
+        chrome.styleReaderMenuButton(views.ttsButton, true);
+    }
+
+    public void resumeTts() {
+        if (!state.ttsActive || !state.ttsPaused) return;
+        state.ttsPaused = false;
+        if ("mimo".equals(runtime.settingsStore.getTtsEngine())) {
+            playCurrentTtsUnit();
+        } else {
+            playCurrentTtsUnit();
+        }
     }
 
     public void updateTtsHighlight() {
@@ -162,28 +208,70 @@ public final class ReaderTtsController {
         SeekBar seekBar = contentView.findViewById(R.id.tts_seek_rate);
         View mimoVoiceLayout = contentView.findViewById(R.id.tts_layout_mimo_voice);
         Spinner mimoVoiceSpinner = contentView.findViewById(R.id.tts_spinner_mimo_voice);
+        View systemEngineLayout = contentView.findViewById(R.id.tts_layout_system_engine);
+        Spinner systemEngineSpinner = contentView.findViewById(R.id.tts_spinner_system_engine);
         TextView valueText = contentView.findViewById(R.id.tts_text_rate);
         TextView noteText = contentView.findViewById(R.id.tts_text_note);
         Button toggleButton = contentView.findViewById(R.id.tts_button_toggle);
+        Button stopButton = contentView.findViewById(R.id.tts_button_stop);
+
+        // Engine spinner
         engineSpinner.setAdapter(dialogSupport.buildSpinnerAdapter(TTS_ENGINE_LABELS));
         engineSpinner.setSelection(indexOf(TTS_ENGINE_KEYS, runtime.settingsStore.getTtsEngine(), 0), false);
+
+        // MiMo voice spinner
         mimoVoiceSpinner.setAdapter(dialogSupport.buildSpinnerAdapter(TTS_MIMO_VOICE_LABELS));
         mimoVoiceSpinner.setSelection(indexOf(TTS_MIMO_VOICE_KEYS, runtime.settingsStore.getTtsMimoVoice(), 0), false);
+
+        // System engine spinner
+        List<SystemTtsClient.EngineInfo> engines = SystemTtsClient.queryAvailableEngines(activity);
+        String[] engineLabels = new String[engines.size()];
+        for (int i = 0; i < engines.size(); i++) {
+            engineLabels[i] = engines.get(i).label;
+        }
+        systemEngineSpinner.setAdapter(dialogSupport.buildSpinnerAdapter(engineLabels));
+        String currentEngine = runtime.settingsStore.getTtsSystemEnginePackage();
+        int currentEngineIndex = 0;
+        for (int i = 0; i < engines.size(); i++) {
+            if (engines.get(i).packageName.equals(currentEngine)) {
+                currentEngineIndex = i;
+                break;
+            }
+        }
+        systemEngineSpinner.setSelection(currentEngineIndex, false);
+
+        // Rate seekbar
         seekBar.setProgress(ui.clamp(Math.round((runtime.settingsStore.getTtsRate() - 0.5f) * 10f), 0, 15));
         valueText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%.1f 倍", runtime.settingsStore.getTtsRate()));
-        updateTtsDialogViews(runtime.settingsStore.getTtsEngine(), mimoVoiceLayout, noteText);
+
+        updateTtsDialogViews(runtime.settingsStore.getTtsEngine(), mimoVoiceLayout, systemEngineLayout, noteText);
+
         engineSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
                 String engine = TTS_ENGINE_KEYS[position];
                 runtime.settingsStore.setTtsEngine(engine);
-                updateTtsDialogViews(engine, mimoVoiceLayout, noteText);
+                updateTtsDialogViews(engine, mimoVoiceLayout, systemEngineLayout, noteText);
             }
 
             @Override
             public void onNothingSelected(android.widget.AdapterView<?> parent) {
             }
         });
+
+        systemEngineSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                if (position >= 0 && position < engines.size()) {
+                    runtime.settingsStore.setTtsSystemEnginePackage(engines.get(position).packageName);
+                }
+            }
+
+            @Override
+            public void onNothingSelected(android.widget.AdapterView<?> parent) {
+            }
+        });
+
         mimoVoiceSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
@@ -194,37 +282,61 @@ public final class ReaderTtsController {
             public void onNothingSelected(android.widget.AdapterView<?> parent) {
             }
         });
+
         seekBar.setOnSeekBarChangeListener(new ReaderDialogSupport.SimpleSeekListener(() -> {
             float rate = 0.5f + (seekBar.getProgress() / 10f);
             valueText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%.1f 倍", rate));
             runtime.settingsStore.setTtsRate(rate);
         }));
-        toggleButton.setText(state.ttsActive ? "停止听书" : "开始听书");
+
+        // Button text
+        if (state.ttsPaused) {
+            toggleButton.setText("继续听书");
+        } else if (state.ttsActive) {
+            toggleButton.setText("暂停听书");
+        } else {
+            toggleButton.setText("开始听书");
+        }
+        stopButton.setVisibility((state.ttsActive || state.ttsPaused) ? View.VISIBLE : View.GONE);
+
         AlertDialog dialog = new AlertDialog.Builder(activity).setView(contentView).create();
+
         toggleButton.setOnClickListener(v -> {
-            if (state.ttsActive) {
-                stopTts();
+            if (state.ttsPaused) {
+                resumeTts();
+            } else if (state.ttsActive) {
+                pauseTts();
             } else {
                 toggleTts();
             }
             dialog.dismiss();
         });
+
+        stopButton.setOnClickListener(v -> {
+            stopTts();
+            dialog.dismiss();
+        });
+
         dialogSupport.showStyledDialog(dialog);
     }
 
     private void playCurrentTtsUnit() {
         if (!state.ttsActive) {
+            Log.d("TtsHighlight", "playCurrentTtsUnit: ttsActive=false, return");
             return;
         }
         if (state.ttsChapterIndex < 0 || state.ttsChapterIndex >= state.chapters.size()) {
+            Log.d("TtsHighlight", "playCurrentTtsUnit: bad chapter index, stop");
             stopTts();
             return;
         }
         if (state.isAnimating || state.interactivePaging) {
+            Log.d("TtsHighlight", "playCurrentTtsUnit: isAnimating=" + state.isAnimating + " interactivePaging=" + state.interactivePaging + ", delay retry");
             scheduleTtsPlayback(paging.readerFlipDurationMs() + 60L);
             return;
         }
         if (state.currentTtsUnitIndex >= ttsUnits.size()) {
+            Log.d("TtsHighlight", "playCurrentTtsUnit: index=" + state.currentTtsUnitIndex + " >= size=" + ttsUnits.size() + ", next chapter");
             advanceToNextTtsChapter();
             return;
         }
@@ -252,7 +364,9 @@ public final class ReaderTtsController {
             advanceToNextTtsChapter();
             return;
         }
+        int groupCount = computeGroupUnitCount();
         SpeechUnit unit = ttsUnits.get(state.currentTtsUnitIndex);
+        SpeechUnit lastUnit = ttsUnits.get(state.currentTtsUnitIndex + groupCount - 1);
         VisiblePage visiblePage = findVisiblePageForUnit(pages, unit);
         if (visiblePage == null) {
             PageSlice lastVisibleSlice = pages.get(ui.clamp(
@@ -273,8 +387,8 @@ public final class ReaderTtsController {
             return;
         }
         PageSlice highlightSlice = visiblePage.slice;
-        int highlightStartOffset = Math.max(unit.start, highlightSlice.start);
-        int highlightEndOffset = Math.min(unit.end, highlightSlice.end);
+        int highlightStartOffset = Math.max(textStartWithoutLeadingSymbols(unit), highlightSlice.start);
+        int highlightEndOffset = Math.min(textEndWithoutTrailingPunctuation(unit), highlightSlice.end);
         if (highlightEndOffset <= highlightStartOffset) {
             if (navigation.pageDown()) {
                 scheduleTtsPlayback(paging.readerFlipDurationMs() + 60L);
@@ -287,9 +401,11 @@ public final class ReaderTtsController {
         state.ttsHighlightPageIndex = visiblePage.pageIndex;
         state.ttsHighlightStart = bodyOffsetInSlice + (highlightStartOffset - highlightSlice.start);
         state.ttsHighlightEnd = bodyOffsetInSlice + (highlightEndOffset - highlightSlice.start);
+        Log.d("TtsHighlight", "playCurrentTtsUnit: set highlight unitIdx=" + state.currentTtsUnitIndex +
+                " pageIndex=" + state.ttsHighlightPageIndex + " start=" + state.ttsHighlightStart + " end=" + state.ttsHighlightEnd);
         updateTtsHighlight();
         activity.markReadingActivity();
-        speakCurrentTtsGroup();
+        speakCurrentTtsGroup(groupCount);
     }
 
     private boolean rebuildTtsUnitsForChapter(int chapterIndex, int minOffset) {
@@ -368,23 +484,186 @@ public final class ReaderTtsController {
         }, paging.readerFlipDurationMs() * 2L + 60L);
     }
 
-    private void speakCurrentTtsGroup() {
+    private int computeGroupUnitCount() {
+        return computeGroupUnitCountAt(state.currentTtsUnitIndex);
+    }
+
+    private int computeGroupUnitCountAt(int startIndex) {
+        int groupCount = 1;
+        while (startIndex + groupCount < ttsUnits.size()
+                && !endsWithFullSentence(ttsUnits.get(startIndex + groupCount - 1).text)) {
+            groupCount++;
+        }
+        return groupCount;
+    }
+
+    private String buildGroupText(int startIndex, int groupCount) {
+        StringBuilder builder = new StringBuilder(ttsUnits.get(startIndex).text);
+        for (int i = 1; i < groupCount; i++) {
+            builder.append(ttsUnits.get(startIndex + i).text);
+        }
+        return builder.toString().trim();
+    }
+
+    private void preloadMimoGroups(int afterUnitIndex, int afterGroupCount, int sessionId,
+                                    String apiKey, String voice) {
+        int nextStart = afterUnitIndex + afterGroupCount;
+        for (int i = 0; i < MIMO_PRECACHE_AHEAD && nextStart < ttsUnits.size(); i++) {
+            int gc = computeGroupUnitCountAt(nextStart);
+            String text = buildGroupText(nextStart, gc);
+            int cacheKey = nextStart;
+            runtime.synthesisExecutor.execute(() -> {
+                if (!state.ttsActive || sessionId != state.ttsSessionId) {
+                    return;
+                }
+                try {
+                    byte[] pcm = runtime.mimoTtsClient.synthesize(text, apiKey, voice);
+                    synchronized (mimoPcmCache) {
+                        if (state.ttsActive && sessionId == state.ttsSessionId) {
+                            mimoPcmCache.put(cacheKey, pcm);
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+            });
+            nextStart += gc;
+        }
+    }
+
+    private void scheduleHighlightProgression(int startIdx, int groupCount, int sessionId,
+                                               byte[] pcm, float rate) {
+        if (groupCount <= 1 || !state.ttsActive || sessionId != state.ttsSessionId) return;
+        int sampleRate = com.metahumanz.pacilread.tts.MimoTtsClient.getSampleRate();
+        long totalMs = Math.round((pcm.length / 2f / sampleRate) / Math.max(rate, 0.5f) * 1000f);
+        int totalLen = 0;
+        for (int i = 0; i < groupCount && startIdx + i < ttsUnits.size(); i++) {
+            totalLen += ttsUnits.get(startIdx + i).text.length();
+        }
+        if (totalLen <= 0 || totalMs <= 200) return;
+
+        int cumulativeLen = 0;
+        for (int i = 0; i < groupCount && startIdx + i < ttsUnits.size(); i++) {
+            long delayMs = Math.round((float) cumulativeLen / totalLen * totalMs);
+            cumulativeLen += ttsUnits.get(startIdx + i).text.length();
+            SpeechUnit unit = ttsUnits.get(startIdx + i);
+
+            Runnable task = buildHighlightTask(sessionId, unit, startIdx, i, groupCount, delayMs);
+            pendingHighlightTasks.add(task);
+            runtime.mainHandler.postDelayed(task, Math.max(delayMs, 50L));
+        }
+    }
+
+    private Runnable buildHighlightTask(int sessionId, SpeechUnit unit,
+                                         int startIdx, int unitOffset, int groupCount,
+                                         long originalDelayMs) {
+        return new Runnable() {
+            private long retryDelayMs = originalDelayMs;
+            private int retries = 0;
+
+            @Override
+            public void run() {
+                if (!state.ttsActive || sessionId != state.ttsSessionId) return;
+                if (state.isAnimating || state.interactivePaging) {
+                    if (retries++ < 30) {
+                        runtime.mainHandler.postDelayed(this, paging.readerFlipDurationMs() + 20L);
+                    }
+                    return;
+                }
+                List<PageSlice> pages = content.getPagesForChapter(state.ttsChapterIndex);
+                if (pages == null || pages.isEmpty()) return;
+                VisiblePage vp = findVisiblePageForUnit(pages, unit);
+                if (vp != null) {
+                    state.ttsHighlightPageIndex = vp.pageIndex;
+                    int bos = Math.max(vp.slice.bodyStartInSlice, 0);
+                    int hs = Math.max(textStartWithoutLeadingSymbols(unit), vp.slice.start);
+                    int he = Math.min(textEndWithoutTrailingPunctuation(unit), vp.slice.end);
+                    state.ttsHighlightStart = bos + (hs - vp.slice.start);
+                    state.ttsHighlightEnd = bos + (he - vp.slice.start);
+                    if (state.ttsHighlightEnd > state.ttsHighlightStart) {
+                        updateTtsHighlight();
+                    }
+                    return;
+                }
+                int firstVisible = ui.clamp(state.currentPageIndex, 0, pages.size() - 1);
+                if (unit.start >= pages.get(firstVisible).end) {
+                    if (navigation.pageDown()) {
+                        if (retries++ < 30) {
+                            runtime.mainHandler.postDelayed(this,
+                                    paging.readerFlipDurationMs() + 20L);
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    private void highlightUnit(int unitIndex) {
+        if (unitIndex < 0 || unitIndex >= ttsUnits.size()) return;
+        List<PageSlice> pages = content.getPagesForChapter(state.ttsChapterIndex);
+        if (pages == null || pages.isEmpty()) return;
+        SpeechUnit unit = ttsUnits.get(unitIndex);
+        VisiblePage vp = findVisiblePageForUnit(pages, unit);
+        if (vp == null) {
+            PageSlice lastSlice = pages.get(ui.clamp(
+                    state.currentPageIndex + content.pagesPerScreen() - 1,
+                    0, pages.size() - 1));
+            if (unit.start >= lastSlice.end) {
+                if (navigation.pageDown()) {
+                    scheduleTtsPlayback(paging.readerFlipDurationMs() + 60L);
+                }
+                return;
+            }
+            return;
+        }
+        int hs = Math.max(textStartWithoutLeadingSymbols(unit), vp.slice.start);
+        int he = Math.min(textEndWithoutTrailingPunctuation(unit), vp.slice.end);
+        if (he <= hs) return;
+        int bos = Math.max(vp.slice.bodyStartInSlice, 0);
+        state.ttsHighlightPageIndex = vp.pageIndex;
+        state.ttsHighlightStart = bos + (hs - vp.slice.start);
+        state.ttsHighlightEnd = bos + (he - vp.slice.start);
+        updateTtsHighlight();
+    }
+
+    private void scheduleSystemHighlightProgression(int startIdx, int groupCount, int sessionId,
+                                                     float rate) {
+        if (groupCount <= 1 || !state.ttsActive || sessionId != state.ttsSessionId) return;
+        int totalLen = 0;
+        for (int i = 0; i < groupCount && startIdx + i < ttsUnits.size(); i++) {
+            totalLen += ttsUnits.get(startIdx + i).text.length();
+        }
+        if (totalLen <= 0) return;
+        long totalMs = Math.round(totalLen * 250f / Math.max(rate, 0.5f));
+        if (totalMs <= 200) return;
+
+        int cumulativeLen = 0;
+        for (int i = 0; i < groupCount && startIdx + i < ttsUnits.size(); i++) {
+            long delayMs = Math.round((float) cumulativeLen / totalLen * totalMs);
+            cumulativeLen += ttsUnits.get(startIdx + i).text.length();
+            SpeechUnit unit = ttsUnits.get(startIdx + i);
+            Runnable task = buildHighlightTask(sessionId, unit, startIdx, i, groupCount, delayMs);
+            pendingHighlightTasks.add(task);
+            runtime.mainHandler.postDelayed(task, Math.max(delayMs, 50L));
+        }
+    }
+
+    private void cancelHighlightProgression() {
+        for (Runnable task : pendingHighlightTasks) {
+            runtime.mainHandler.removeCallbacks(task);
+        }
+        pendingHighlightTasks.clear();
+    }
+
+    private void speakCurrentTtsGroup(int groupCount) {
         if (state.currentTtsUnitIndex < 0 || state.currentTtsUnitIndex >= ttsUnits.size()) {
             advanceToNextTtsChapter();
             return;
         }
-        speakWithCurrentEngine();
+        speakWithCurrentEngine(groupCount);
     }
 
-    private void speakWithCurrentEngine() {
-        int groupCount = 1;
-        StringBuilder builder = new StringBuilder(ttsUnits.get(state.currentTtsUnitIndex).text);
-        while (state.currentTtsUnitIndex + groupCount < ttsUnits.size()
-                && !endsWithFullSentence(ttsUnits.get(state.currentTtsUnitIndex + groupCount - 1).text)) {
-            builder.append(ttsUnits.get(state.currentTtsUnitIndex + groupCount).text);
-            groupCount++;
-        }
-        String groupText = builder.toString().trim();
+    private void speakWithCurrentEngine(int groupCount) {
+        String groupText = buildGroupText(state.currentTtsUnitIndex, groupCount);
         if (groupText.isEmpty()) {
             advanceTtsPlayback(groupCount);
             return;
@@ -393,34 +672,162 @@ public final class ReaderTtsController {
         int consumedUnits = groupCount;
         String engine = runtime.settingsStore.getTtsEngine();
         String engineLabel = engineLabel(engine);
-        runtime.ttsExecutor.execute(() -> {
-            try {
-                if ("mimo".equals(engine)) {
-                    runtime.mimoTtsClient.speak(
-                            groupText,
-                            runtime.settingsStore.getTtsMimoApiKey(),
-                            runtime.settingsStore.getTtsMimoVoice(),
-                            runtime.settingsStore.getTtsRate()
-                    );
-                } else {
-                    runtime.systemTtsClient.speak(groupText, runtime.settingsStore.getTtsRate());
+
+        if ("mimo".equals(engine)) {
+            runtime.ttsExecutor.execute(() -> {
+                try {
+                    if (!state.ttsActive || sessionId != state.ttsSessionId) {
+                        return;
+                    }
+                    String apiKey = runtime.settingsStore.getTtsMimoApiKey();
+                    String voice = runtime.settingsStore.getTtsMimoVoice();
+                    float playbackRate = runtime.settingsStore.getTtsRate();
+                    byte[] pcm;
+                    synchronized (mimoPcmCache) {
+                        pcm = mimoPcmCache.remove(state.currentTtsUnitIndex);
+                    }
+                    if (pcm != null) {
+                        preloadMimoGroups(state.currentTtsUnitIndex, consumedUnits,
+                                sessionId, apiKey, voice);
+                    } else {
+                        if (!state.ttsActive || sessionId != state.ttsSessionId) {
+                            return;
+                        }
+                        pcm = runtime.mimoTtsClient.synthesize(groupText, apiKey, voice);
+                        preloadMimoGroups(state.currentTtsUnitIndex, consumedUnits,
+                                sessionId, apiKey, voice);
+                    }
+                    scheduleHighlightProgression(state.currentTtsUnitIndex, consumedUnits,
+                            sessionId, pcm, playbackRate);
+                    runtime.mimoTtsClient.playPcm(pcm, playbackRate);
+                    cancelHighlightProgression();
+                    activity.runOnUiThread(() -> {
+                        if (!state.ttsActive || sessionId != state.ttsSessionId) {
+                            return;
+                        }
+                        advanceTtsPlayback(consumedUnits);
+                    });
+                } catch (Exception error) {
+                    activity.runOnUiThread(() -> {
+                        if (!state.ttsActive || sessionId != state.ttsSessionId) {
+                            return;
+                        }
+                        stopTts();
+                        ui.showToast(engineLabel + " 听书失败: " + error.getMessage());
+                    });
                 }
+            });
+            return;
+        }
+
+        // === System TTS path: batch-queue all groups like Legado ===
+        if (batchQueued) {
+            return;
+        }
+
+        if (!runtime.systemTtsClient.requestAudioFocus()) {
+            ui.showToast("未获取到音频焦点");
+            stopTts();
+            return;
+        }
+
+        List<String> allTexts = new ArrayList<>();
+        List<Integer> allGroupStartIndices = new ArrayList<>();
+        List<Integer> allGroupCounts = new ArrayList<>();
+        int idx = state.currentTtsUnitIndex;
+        while (idx < ttsUnits.size()) {
+            int gc = computeGroupUnitCountAt(idx);
+            String t = buildGroupText(idx, gc);
+            if (!t.isEmpty()) {
+                allTexts.add(t);
+                allGroupStartIndices.add(idx);
+                allGroupCounts.add(gc);
+            }
+            idx += gc;
+        }
+
+        if (allTexts.isEmpty()) {
+            advanceToNextTtsChapter();
+            return;
+        }
+
+        batchQueued = true;
+        float rate = runtime.settingsStore.getTtsRate();
+        int[] completed = new int[]{0};
+        // Schedule per-unit highlighting for the first group
+        scheduleSystemHighlightProgression(
+                allGroupStartIndices.get(0), allGroupCounts.get(0), sessionId, rate);
+        runtime.systemTtsClient.speakAll(allTexts, rate, new SystemTtsClient.SpeakCallback() {
+            @Override
+            public void onStart() {
+            }
+
+            @Override
+            public void onDone() {
+                int i = completed[0];
+                completed[0] = i + 1;
+                int units = allGroupCounts.get(i);
+                Log.d("TtsHighlight", "onDone: i=" + i + " units=" + units + " totalGroups=" + allTexts.size());
                 activity.runOnUiThread(() -> {
                     if (!state.ttsActive || sessionId != state.ttsSessionId) {
+                        Log.d("TtsHighlight", "onDone ui: state inactive, skip");
                         return;
                     }
-                    advanceTtsPlayback(consumedUnits);
+                    cancelHighlightProgression();
+                    if (i + 1 >= allTexts.size()) {
+                        batchQueued = false;
+                        Log.d("TtsHighlight", "onDone ui: last group, batchQueued=false");
+                    } else {
+                        scheduleSystemHighlightProgression(
+                                allGroupStartIndices.get(i + 1), allGroupCounts.get(i + 1),
+                                sessionId, rate);
+                    }
+                    advanceTtsPlayback(units);
                 });
-            } catch (Exception error) {
+            }
+
+            @Override
+            public void onError(String message) {
+                batchQueued = false;
                 activity.runOnUiThread(() -> {
-                    if (!state.ttsActive || sessionId != state.ttsSessionId) {
-                        return;
-                    }
+                    if (!state.ttsActive || sessionId != state.ttsSessionId) return;
+                    cancelHighlightProgression();
                     stopTts();
-                    ui.showToast(engineLabel + " 听书失败: " + error.getMessage());
+                    ui.showToast("系统 TTS 听书失败: " + message);
                 });
             }
         });
+    }
+
+    private int textEndWithoutTrailingPunctuation(SpeechUnit unit) {
+        String text = unit.text;
+        int len = text.length();
+        while (len > 0) {
+            char c = text.charAt(len - 1);
+            if (c == '。' || c == '！' || c == '？' || c == '!' || c == '?' ||
+                c == '，' || c == ',' || c == '；' || c == ';' || c == '、' || c == '.' ||
+                c == '：' || c == '"' || c == '"' || c == '"' || c == '」' || c == '』') {
+                len--;
+            } else {
+                break;
+            }
+        }
+        return len == 0 ? unit.end : unit.start + len;
+    }
+
+    private int textStartWithoutLeadingSymbols(SpeechUnit unit) {
+        String text = unit.text;
+        int offset = 0;
+        while (offset < text.length()) {
+            char c = text.charAt(offset);
+            if (c == '"' || c == '"' || c == '"' || c == '\'' ||
+                c == '「' || c == '『') {
+                offset++;
+            } else {
+                break;
+            }
+        }
+        return unit.start + offset;
     }
 
     private boolean endsWithFullSentence(String text) {
@@ -435,15 +842,19 @@ public final class ReaderTtsController {
         return lastChar == '。' || lastChar == '！' || lastChar == '？' || lastChar == '!' || lastChar == '?';
     }
 
-    private void updateTtsDialogViews(String engine, View mimoVoiceLayout, TextView noteText) {
+    private void updateTtsDialogViews(String engine, View mimoVoiceLayout, View systemEngineLayout,
+                                      TextView noteText) {
         if (mimoVoiceLayout != null) {
             mimoVoiceLayout.setVisibility("mimo".equals(engine) ? View.VISIBLE : View.GONE);
+        }
+        if (systemEngineLayout != null) {
+            systemEngineLayout.setVisibility(!"mimo".equals(engine) ? View.VISIBLE : View.GONE);
         }
         if (noteText == null) {
             return;
         }
         if ("mimo".equals(engine)) {
-            noteText.setText("MiMo 模式会调用小米云端 TTS，模型为 mimo-v2.5-tts，API Key 请在设置页维护。");
+            noteText.setText("MiMo 模式会调用小米云端 TTS，模型为 mimo-v2.5-tts，API Key 请在设置页维护。\nMiMo 听书不推荐调整语速倍率。");
             return;
         }
         noteText.setText("系统 TTS 使用设备内置语音引擎，无需联网。");

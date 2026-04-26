@@ -17,6 +17,7 @@ import java.util.concurrent.Executors;
 public final class ReaderRuntime {
     public final ExecutorService executor = Executors.newSingleThreadExecutor();
     public final ExecutorService ttsExecutor = Executors.newSingleThreadExecutor();
+    public final ExecutorService synthesisExecutor = Executors.newSingleThreadExecutor();
     public final Handler mainHandler = new Handler(Looper.getMainLooper());
     public final ReaderDatabaseHelper databaseHelper;
     public final SettingsStore settingsStore;
@@ -31,7 +32,7 @@ public final class ReaderRuntime {
         webDavClient = new WebDavClient(settingsStore);
         readingStatsSyncManager = new ReadingStatsSyncManager(context, databaseHelper, settingsStore, webDavClient);
         mimoTtsClient = new MimoTtsClient();
-        systemTtsClient = new SystemTtsClient(context);
+        systemTtsClient = new SystemTtsClient(context, settingsStore.getTtsSystemEnginePackage());
     }
 
     public void shutdown() {
@@ -39,6 +40,7 @@ public final class ReaderRuntime {
         systemTtsClient.shutdown();
         executor.shutdownNow();
         ttsExecutor.shutdownNow();
+        synthesisExecutor.shutdownNow();
         mimoTtsClient.cancel();
     }
 }
