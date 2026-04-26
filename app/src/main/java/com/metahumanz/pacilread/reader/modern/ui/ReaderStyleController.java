@@ -1,6 +1,5 @@
 package com.metahumanz.pacilread.reader.modern.ui;
 
-import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -12,8 +11,6 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
-import android.widget.CheckBox;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.metahumanz.pacilread.reader.modern.ModernReaderActivity;
@@ -26,7 +23,6 @@ import com.metahumanz.pacilread.reader.modern.content.ReaderContentController;
 import com.metahumanz.pacilread.reader.modern.paging.ReaderPagingAnimator;
 import com.metahumanz.pacilread.reader.modern.theme.ReaderDisplayModeHelper;
 import com.metahumanz.pacilread.reader.modern.theme.ReaderThemePalette;
-import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.tts.MimoTtsClient;
 import com.metahumanz.pacilread.util.FileAssetHelper;
 
@@ -49,8 +45,6 @@ public final class ReaderStyleController {
     private ReaderPagingAnimator paging;
     private ReaderContentController content;
     private com.metahumanz.pacilread.reader.modern.tts.ReaderTtsController tts;
-    private String autoNightSessionPolicy = "";
-    private boolean autoNightPolicyPromptShowing = false;
 
     public ReaderStyleController(
             ModernReaderActivity activity,
@@ -151,7 +145,6 @@ public final class ReaderStyleController {
         chrome.applyGlassOpacity();
         chrome.updateReaderHud();
         paging.invalidatePreparedPagingSnapshots();
-        maybePromptAutoNightCustomPolicy();
     }
 
     public void attachBackground(Uri uri) {
@@ -246,7 +239,7 @@ public final class ReaderStyleController {
 
     public int resolveReaderTextColor(ReaderThemePalette palette) {
         String colorKey = runtime.settingsStore.getReaderTextColor();
-        if (ReaderDisplayModeHelper.shouldOverrideCustomVisuals(activity, runtime.settingsStore, autoNightSessionPolicy)) {
+        if (ReaderDisplayModeHelper.shouldOverrideCustomVisuals(activity, runtime.settingsStore, null)) {
             colorKey = "theme_default";
         }
         return resolveReaderTextColorValue(colorKey, palette);
@@ -355,48 +348,7 @@ public final class ReaderStyleController {
         if (path == null || path.isBlank()) {
             return false;
         }
-        return !ReaderDisplayModeHelper.shouldOverrideCustomVisuals(activity, runtime.settingsStore, autoNightSessionPolicy);
-    }
-
-    private void maybePromptAutoNightCustomPolicy() {
-        if (autoNightPolicyPromptShowing
-                || !ReaderDisplayModeHelper.isAutoNightActive(activity, runtime.settingsStore)
-                || !ReaderDisplayModeHelper.hasCustomReaderVisuals(runtime.settingsStore)
-                || !ReaderDisplayModeHelper.AUTO_NIGHT_POLICY_ASK.equals(runtime.settingsStore.getReaderAutoNightCustomPolicy())
-                || (autoNightSessionPolicy != null && !autoNightSessionPolicy.isBlank())) {
-            return;
-        }
-        autoNightPolicyPromptShowing = true;
-        CheckBox rememberCheck = new CheckBox(activity);
-        rememberCheck.setText("记住我的选择");
-        rememberCheck.setTextColor(resolveReaderTextColor(ReaderDisplayModeHelper.resolvePalette(activity, runtime.settingsStore)));
-        int padding = ui.dp(20);
-        rememberCheck.setPadding(padding, ui.dp(8), padding, ui.dp(4));
-        LinearLayout container = new LinearLayout(activity);
-        container.setOrientation(LinearLayout.VERTICAL);
-        container.addView(rememberCheck);
-        new AlertDialog.Builder(activity)
-                .setTitle("自动夜航")
-                .setMessage("当前阅读样式有自定义背景或字色。进入深色阅读界面时，要使用夜航背景和字色，还是保留自定义视觉？")
-                .setView(container)
-                .setPositiveButton("使用夜航视觉", (dialog, which) -> applyAutoNightPolicyChoice(
-                        ReaderDisplayModeHelper.AUTO_NIGHT_POLICY_OVERRIDE,
-                        rememberCheck.isChecked()
-                ))
-                .setNegativeButton("保留自定义", (dialog, which) -> applyAutoNightPolicyChoice(
-                        ReaderDisplayModeHelper.AUTO_NIGHT_POLICY_PRESERVE,
-                        rememberCheck.isChecked()
-                ))
-                .setOnDismissListener(dialog -> autoNightPolicyPromptShowing = false)
-                .show();
-    }
-
-    private void applyAutoNightPolicyChoice(String policy, boolean remember) {
-        autoNightSessionPolicy = SettingsStore.normalizeReaderAutoNightCustomPolicy(policy);
-        if (remember) {
-            runtime.settingsStore.setReaderAutoNightCustomPolicy(autoNightSessionPolicy);
-        }
-        applyReaderSettings();
+        return !ReaderDisplayModeHelper.shouldOverrideCustomVisuals(activity, runtime.settingsStore, null);
     }
 
     private void stylePageTitleView(TextView textView, Typeface typeface, int textColor) {

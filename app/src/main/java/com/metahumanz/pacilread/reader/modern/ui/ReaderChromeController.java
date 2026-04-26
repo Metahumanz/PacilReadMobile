@@ -1,5 +1,6 @@
 package com.metahumanz.pacilread.reader.modern.ui;
 
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Insets;
 import android.graphics.drawable.GradientDrawable;
@@ -111,11 +112,13 @@ public final class ReaderChromeController {
             int previousInsetTop = state.systemInsetTop;
             int previousInsetBottom = state.systemInsetBottom;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                Insets insets = windowInsets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-                state.systemInsetLeft = insets.left;
-                state.systemInsetTop = insets.top;
-                state.systemInsetRight = insets.right;
-                state.systemInsetBottom = insets.bottom;
+                Insets systemBars = windowInsets.getInsets(WindowInsets.Type.systemBars());
+                Insets cutout = windowInsets.getInsets(WindowInsets.Type.displayCutout());
+                boolean landscape = view.getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+                state.systemInsetLeft = landscape ? systemBars.left : Math.max(systemBars.left, cutout.left);
+                state.systemInsetTop = Math.max(systemBars.top, cutout.top);
+                state.systemInsetRight = landscape ? systemBars.right : Math.max(systemBars.right, cutout.right);
+                state.systemInsetBottom = Math.max(systemBars.bottom, cutout.bottom);
             } else {
                 state.systemInsetLeft = windowInsets.getSystemWindowInsetLeft();
                 state.systemInsetTop = windowInsets.getSystemWindowInsetTop();

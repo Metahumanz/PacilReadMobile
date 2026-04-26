@@ -14,64 +14,39 @@
         android:textSize="20sp"
         android:textStyle="bold" />
 
+    <com.metahumanz.pacilread.ui.HsvColorPlaneView
+        android:id="@+id/color_plane"
+        android:layout_width="match_parent"
+        android:layout_height="220dp"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/bg_input" />
+
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="红色 (R)"
+        android:layout_marginTop="14dp"
+        android:text="色相"
         android:textColor="?attr/themeColorOnSurface"
         android:textStyle="bold" />
 
     <SeekBar
-        android:id="@+id/color_seek_red"
+        android:id="@+id/color_seek_hue"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:max="255" />
+        android:max="359" />
 
     <TextView
-        android:id="@+id/color_text_red"
-        android:layout_width="wrap_content"
+        android:id="@+id/color_text_rgb"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
         android:textColor="?attr/themeColorOnSurfaceMuted" />
 
     <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="绿色 (G)"
-        android:textColor="?attr/themeColorOnSurface"
-        android:textStyle="bold" />
-
-    <SeekBar
-        android:id="@+id/color_seek_green"
+        android:id="@+id/color_text_hex"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:max="255" />
-
-    <TextView
-        android:id="@+id/color_text_green"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="?attr/themeColorOnSurfaceMuted" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="蓝色 (B)"
-        android:textColor="?attr/themeColorOnSurface"
-        android:textStyle="bold" />
-
-    <SeekBar
-        android:id="@+id/color_seek_blue"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:max="255" />
-
-    <TextView
-        android:id="@+id/color_text_blue"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
         android:textColor="?attr/themeColorOnSurfaceMuted" />
 
     <View

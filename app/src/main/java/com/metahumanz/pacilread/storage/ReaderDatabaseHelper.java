@@ -141,6 +141,10 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         ensureColumn(db, "books", "pinned", "pinned INTEGER NOT NULL DEFAULT 0");
         repairLegacyBookLastReadColumn(db);
 
+        ensureColumn(db, "books", "chapter_count", "chapter_count INTEGER NOT NULL DEFAULT 0");
+        ensureColumn(db, "books", "current_chapter_title", "current_chapter_title TEXT NOT NULL DEFAULT ''");
+        backfillBookshelfSummaryColumns(db);
+
         ensureColumn(db, "chapters", "body_html", "body_html TEXT NOT NULL DEFAULT ''");
         ensureColumn(db, "chapters", "body_text", "body_text TEXT NOT NULL DEFAULT ''");
         ensureColumn(db, "chapters", "order_index", "order_index INTEGER NOT NULL DEFAULT 0");
@@ -269,6 +273,10 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
             bookValues.put("progress_offset", 0);
             bookValues.put("last_read_at", System.currentTimeMillis());
             bookValues.put("pinned", 0);
+            bookValues.put("chapter_count", importedBook.chapters.size());
+            String firstChapterTitle = importedBook.chapters.isEmpty() ? "" :
+                    (importedBook.chapters.get(0).title == null ? "" : importedBook.chapters.get(0).title);
+            bookValues.put("current_chapter_title", firstChapterTitle);
             long bookId = db.insertOrThrow("books", null, bookValues);
 
             for (ImportedBook.ChapterSeed seed : importedBook.chapters) {
@@ -290,19 +298,18 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
 
     public synchronized List<BookRecord> getBooks() {
         List<BookRecord> books = new ArrayList<>();
-        SQLiteDatabase db = getReadableDatabase();
-        try (Cursor cursor = db.query(
-                "books",
-                null,
-                null,
-                null,
-                null,
-                null,
+        try (Cursor cursor = getReadableDatabase().query(
+                "books", null, null, null, null, null,
                 "pinned DESC, last_read_at DESC, title COLLATE NOCASE ASC"
         )) {
             while (cursor.moveToNext()) {
                 BookRecord book = readBook(cursor);
-                populateBookshelfSummary(db, book);
+                if (book.chapterCount > 0) {
+                    book.progressIndex = Math.max(0, Math.min(book.progressIndex, book.chapterCount - 1));
+                } else {
+                    book.progressIndex = 0;
+                    book.currentChapterTitle = "";
+                }
                 books.add(book);
             }
         }
@@ -424,11 +431,15 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     }
 
     public synchronized void updateProgress(long bookId, int chapterIndex, int charOffset) {
-        ContentValues values = new ContentValues();
-        values.put("progress_index", chapterIndex);
-        values.put("progress_offset", Math.max(charOffset, 0));
-        values.put("last_read_at", System.currentTimeMillis());
-        getWritableDatabase().update("books", values, "id=?", new String[]{String.valueOf(bookId)});
+        getWritableDatabase().execSQL(
+                "UPDATE books SET progress_index = ?, progress_offset = ?, last_read_at = ?, " +
+                        "current_chapter_title = COALESCE((" +
+                        "SELECT title FROM chapters WHERE chapters.book_id = books.id " +
+                        "AND chapters.order_index = ?), '') " +
+                        "WHERE id = ?",
+                new Object[]{chapterIndex, Math.max(charOffset, 0), System.currentTimeMillis(),
+                        chapterIndex, bookId}
+        );
     }
 
     public synchronized long getMostRecentBookId() {
@@ -775,6 +786,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     public synchronized File exportDatabase(File destination) throws IOException {
         close();
         copyFile(getDatabaseFile(), destination);
+        stripPlatformSettingsTable(destination);
         getWritableDatabase();
         return destination;
     }
@@ -796,7 +808,9 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                     "progress_index INTEGER NOT NULL DEFAULT 0," +
                     "progress_offset INTEGER NOT NULL DEFAULT 0," +
                     "last_read_at INTEGER NOT NULL," +
-                    "pinned INTEGER NOT NULL DEFAULT 0" +
+                    "pinned INTEGER NOT NULL DEFAULT 0," +
+                    "chapter_count INTEGER NOT NULL DEFAULT 0," +
+                    "current_chapter_title TEXT NOT NULL DEFAULT ''" +
                     ")");
             liteDb.execSQL("CREATE TABLE replacement_rules (" +
                     "id INTEGER PRIMARY KEY AUTOINCREMENT," +
@@ -855,7 +869,20 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         close();
         deleteSidecarFiles();
         copyFile(source, getDatabaseFile());
-        getWritableDatabase();
+        SQLiteDatabase db = getWritableDatabase();
+        dropPlatformSettingsTable(db);
+    }
+
+    public synchronized void stripPlatformSettingsTable(File databaseFile) {
+        if (databaseFile == null || !databaseFile.exists()) {
+            return;
+        }
+        SQLiteDatabase db = SQLiteDatabase.openDatabase(databaseFile.getAbsolutePath(), null, SQLiteDatabase.OPEN_READWRITE);
+        try {
+            dropPlatformSettingsTable(db);
+        } finally {
+            db.close();
+        }
     }
 
     public synchronized void rebaseLocalAssetPaths() {
@@ -936,6 +963,10 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                     values.put("progress_offset", sourceBooks.getInt(sourceBooks.getColumnIndexOrThrow("progress_offset")));
                     values.put("last_read_at", sourceBooks.getLong(sourceBooks.getColumnIndexOrThrow("last_read_at")));
                     values.put("pinned", sourceBooks.getInt(sourceBooks.getColumnIndexOrThrow("pinned")));
+                    int ccIndex = sourceBooks.getColumnIndex("chapter_count");
+                    if (ccIndex >= 0) values.put("chapter_count", sourceBooks.getInt(ccIndex));
+                    int cctIndex = sourceBooks.getColumnIndex("current_chapter_title");
+                    if (cctIndex >= 0) values.put("current_chapter_title", sourceBooks.getString(cctIndex));
 
                     if (match != null) {
                         target.update("books", values, "id=?", new String[]{String.valueOf(match.id)});
@@ -971,6 +1002,10 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     private void deleteSidecarFiles() {
         deleteFileIfExists(getDatabaseFile().getAbsolutePath() + "-wal");
         deleteFileIfExists(getDatabaseFile().getAbsolutePath() + "-shm");
+    }
+
+    private void dropPlatformSettingsTable(SQLiteDatabase db) {
+        db.execSQL("DROP TABLE IF EXISTS settings");
     }
 
     private void copyRows(SQLiteDatabase from, SQLiteDatabase to, String table) {
@@ -1109,6 +1144,10 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         book.progressOffset = cursor.getInt(cursor.getColumnIndexOrThrow("progress_offset"));
         book.lastReadAt = cursor.getLong(cursor.getColumnIndexOrThrow("last_read_at"));
         book.pinned = cursor.getInt(cursor.getColumnIndexOrThrow("pinned")) == 1;
+        int ccIndex = cursor.getColumnIndex("chapter_count");
+        book.chapterCount = ccIndex >= 0 ? cursor.getInt(ccIndex) : 0;
+        int cctIndex = cursor.getColumnIndex("current_chapter_title");
+        book.currentChapterTitle = cctIndex >= 0 ? cursor.getString(cctIndex) : "";
         return book;
     }
 
@@ -1139,6 +1178,35 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 book.currentChapterTitle = "";
             }
         }
+    }
+
+    private void populateBookshelfSummary(Cursor cursor, BookRecord book) {
+        if (cursor == null || book == null) {
+            return;
+        }
+        int chapterCountIndex = cursor.getColumnIndex("bookshelf_chapter_count");
+        book.chapterCount = chapterCountIndex >= 0 ? Math.max(0, cursor.getInt(chapterCountIndex)) : 0;
+        if (book.chapterCount <= 0) {
+            book.progressIndex = 0;
+            book.currentChapterTitle = "";
+            return;
+        }
+        book.progressIndex = Math.max(0, Math.min(book.progressIndex, book.chapterCount - 1));
+        int currentTitleIndex = cursor.getColumnIndex("bookshelf_current_chapter_title");
+        book.currentChapterTitle = currentTitleIndex >= 0 && !cursor.isNull(currentTitleIndex)
+                ? cursor.getString(currentTitleIndex)
+                : "";
+    }
+
+    private void backfillBookshelfSummaryColumns(SQLiteDatabase db) {
+        db.execSQL("UPDATE books SET chapter_count = COALESCE((" +
+                "SELECT COUNT(*) FROM chapters WHERE chapters.book_id = books.id" +
+                "), 0) WHERE chapter_count IS NULL OR chapter_count = 0");
+        db.execSQL("UPDATE books SET current_chapter_title = COALESCE((" +
+                "SELECT title FROM chapters WHERE chapters.book_id = books.id" +
+                " AND chapters.order_index = MAX(0, MIN(books.progress_index, " +
+                "(SELECT COUNT(*) FROM chapters WHERE chapters.book_id = books.id) - 1))" +
+                "), '') WHERE current_chapter_title IS NULL OR TRIM(current_chapter_title) = ''");
     }
 
     private String getOptionalString(Cursor cursor, String columnName, String fallbackColumnName) {

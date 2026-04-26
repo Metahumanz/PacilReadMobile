@@ -5,12 +5,23 @@ import android.content.SharedPreferences;
 
 import org.json.JSONObject;
 
+import java.io.File;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Iterator;
+import java.util.Set;
 import java.util.UUID;
 
 public class SettingsStore {
     private static final String PREFS_NAME = "pacil_read_settings";
+    private static final String PLATFORM_ANDROID = "android";
+    private static final int ANDROID_SETTINGS_SCHEMA_VERSION = 1;
+    private static final String JSON_PLATFORM = "platform";
+    private static final String JSON_SCHEMA_VERSION = "schemaVersion";
+    private static final String JSON_BACKGROUND_FILE = "reader_background_file";
+    private static final String DEFAULT_WEB_DAV_ROOT_DIR = "PacilRead";
+    private static final String DEFAULT_ANDROID_SETTINGS_DIR = "android-settings";
 
     private static final String KEY_AUTO_OPEN = "auto_open_last";
     private static final String KEY_WEB_DAV_ENABLED = "webdav_enabled";
@@ -48,6 +59,7 @@ public class SettingsStore {
     private static final String KEY_TTS_RATE = "tts_rate";
     private static final String KEY_TTS_MIMO_API_KEY = "tts_mimo_api_key";
     private static final String KEY_TTS_MIMO_VOICE = "tts_mimo_voice";
+    private static final String KEY_TTS_SYSTEM_ENGINE = "tts_system_engine";
     private static final String KEY_FLIP_MODE = "flip_mode";
     private static final String KEY_READER_SLIDER_MODE = "reader_slider_mode";
     private static final String KEY_VOLUME_KEY_UP_ACTION = "volume_key_up_action";
@@ -77,6 +89,7 @@ public class SettingsStore {
     private static final String KEY_READING_STATS_DEVICE_ID = "reading_stats_device_id";
     private static final String KEY_READER_DOUBLE_PAGE_ENABLED = "reader_double_page_enabled";
     private static final String KEY_READER_DOUBLE_PAGE_MODE = "reader_double_page_mode";
+    private static final String KEY_READER_DOUBLE_PAGE_TURN_STEP = "reader_double_page_turn_step";
     private static final String KEY_READER_AUTO_NIGHT_ENABLED = "reader_auto_night_enabled";
     private static final String KEY_READER_AUTO_NIGHT_CUSTOM_POLICY = "reader_auto_night_custom_policy";
     private static final String KEY_BOOKSHELF_SHOW_ADD_ENTRY = "bookshelf_show_add_entry";
@@ -85,6 +98,77 @@ public class SettingsStore {
     private static final String KEY_HOME_NAV_LANDSCAPE_MODE = "home_nav_landscape_mode";
     private static final String KEY_HOME_SIDEBAR_PRESENTATION = "home_sidebar_presentation";
     private static final String KEY_HOME_FIXED_SIDEBAR_STYLE = "home_fixed_sidebar_style";
+    private static final String KEY_READER_ORIENTATION_MODE = "reader_orientation_mode";
+
+    private static final Set<String> ANDROID_PRIVATE_SYNC_KEYS = new HashSet<>(Arrays.asList(
+            KEY_AUTO_OPEN,
+            KEY_FONT_SIZE,
+            KEY_FONT_FAMILY,
+            KEY_FONT_WEIGHT,
+            KEY_TEXT_COLOR,
+            KEY_LINE_SPACING,
+            KEY_LEFT_PADDING,
+            KEY_RIGHT_PADDING,
+            KEY_TOP_PADDING,
+            KEY_BOTTOM_PADDING,
+            KEY_APP_THEME_MODE,
+            KEY_READER_UI_THEME_MODE,
+            KEY_APP_LIGHT_STYLE_VARIANT,
+            KEY_APP_DARK_STYLE_VARIANT,
+            KEY_THEME,
+            KEY_KEEP_SCREEN_ON,
+            KEY_AUTO_PAGE_SECONDS,
+            KEY_TTS_ENGINE,
+            KEY_TTS_RATE,
+            KEY_TTS_MIMO_API_KEY,
+            KEY_TTS_MIMO_VOICE,
+            KEY_TTS_SYSTEM_ENGINE,
+            KEY_FLIP_MODE,
+            KEY_READER_SLIDER_MODE,
+            KEY_VOLUME_KEY_UP_ACTION,
+            KEY_VOLUME_KEY_DOWN_ACTION,
+            KEY_CHAPTER_TITLE_VISIBILITY,
+            KEY_BOOKSHELF_VIEW_MODE,
+            KEY_GLASS_OPACITY_PERCENT,
+            KEY_HUD_TOP_LEFT,
+            KEY_HUD_TOP_CENTER,
+            KEY_HUD_TOP_RIGHT,
+            KEY_HUD_BOTTOM_LEFT,
+            KEY_HUD_BOTTOM_CENTER,
+            KEY_HUD_BOTTOM_RIGHT,
+            KEY_LETTER_SPACING,
+            KEY_FIRST_LINE_INDENT,
+            KEY_PARAGRAPH_SPACING,
+            KEY_BACKGROUND_BLUR_PERCENT,
+            KEY_CUSTOM_TEXT_COLOR,
+            KEY_CHAPTER_TITLE_ALIGNMENT,
+            KEY_BODY_TEXT_JUSTIFY,
+            KEY_FLIP_SPEED,
+            KEY_HUD_VERTICAL_MARGIN,
+            KEY_HUD_TOP_MARGIN,
+            KEY_HUD_BOTTOM_MARGIN,
+            KEY_READER_MENU_AUTO_HIDE,
+            KEY_READING_TIME_TRACKING_ENABLED,
+            KEY_READER_DOUBLE_PAGE_ENABLED,
+            KEY_READER_DOUBLE_PAGE_MODE,
+            KEY_READER_DOUBLE_PAGE_TURN_STEP,
+            KEY_READER_AUTO_NIGHT_ENABLED,
+            KEY_READER_AUTO_NIGHT_CUSTOM_POLICY,
+            KEY_BOOKSHELF_SHOW_ADD_ENTRY,
+            KEY_HOME_BOTTOM_NAV_STYLE,
+            KEY_HOME_NAV_PORTRAIT_MODE,
+            KEY_HOME_NAV_LANDSCAPE_MODE,
+            KEY_HOME_SIDEBAR_PRESENTATION,
+            KEY_HOME_FIXED_SIDEBAR_STYLE,
+            KEY_READER_ORIENTATION_MODE
+    ));
+
+    private static final Set<String> FLOAT_SYNC_KEYS = new HashSet<>(Arrays.asList(
+            KEY_FONT_SIZE,
+            KEY_LINE_SPACING,
+            KEY_TTS_RATE,
+            KEY_LETTER_SPACING
+    ));
 
     private final SharedPreferences preferences;
 
@@ -117,19 +201,25 @@ public class SettingsStore {
     }
 
     public String getWebDavDir() {
-        return normalizeDirectory(preferences.getString(KEY_WEB_DAV_DIR, "Books"));
+        return normalizeDirectoryOrDefault(preferences.getString(KEY_WEB_DAV_DIR, DEFAULT_WEB_DAV_ROOT_DIR), DEFAULT_WEB_DAV_ROOT_DIR);
     }
 
     public void setWebDavDir(String value) {
-        preferences.edit().putString(KEY_WEB_DAV_DIR, normalizeDirectory(value)).apply();
+        preferences.edit().putString(KEY_WEB_DAV_DIR, normalizeDirectoryOrDefault(value, DEFAULT_WEB_DAV_ROOT_DIR)).apply();
     }
 
     public String getWebDavSettingsSubdir() {
-        return normalizeDirectory(preferences.getString(KEY_WEB_DAV_SETTINGS_SUBDIR, ""));
+        return normalizeDirectoryOrDefault(
+                preferences.getString(KEY_WEB_DAV_SETTINGS_SUBDIR, DEFAULT_ANDROID_SETTINGS_DIR),
+                DEFAULT_ANDROID_SETTINGS_DIR
+        );
     }
 
     public void setWebDavSettingsSubdir(String value) {
-        preferences.edit().putString(KEY_WEB_DAV_SETTINGS_SUBDIR, normalizeDirectory(value)).apply();
+        preferences.edit().putString(
+                KEY_WEB_DAV_SETTINGS_SUBDIR,
+                normalizeDirectoryOrDefault(value, DEFAULT_ANDROID_SETTINGS_DIR)
+        ).apply();
     }
 
     public String getWebDavUser() {
@@ -404,6 +494,14 @@ public class SettingsStore {
         preferences.edit().putString(KEY_TTS_MIMO_VOICE, normalizeTtsMimoVoice(value)).apply();
     }
 
+    public String getTtsSystemEnginePackage() {
+        return preferences.getString(KEY_TTS_SYSTEM_ENGINE, "");
+    }
+
+    public void setTtsSystemEnginePackage(String packageName) {
+        preferences.edit().putString(KEY_TTS_SYSTEM_ENGINE, packageName == null ? "" : packageName.trim()).apply();
+    }
+
     public String getFlipMode() {
         return normalizeFlipMode(preferences.getString(KEY_FLIP_MODE, "slide"));
     }
@@ -456,7 +554,7 @@ public class SettingsStore {
     }
 
     public boolean isReaderMenuAutoHideEnabled() {
-        return preferences.getBoolean(KEY_READER_MENU_AUTO_HIDE, true);
+        return preferences.getBoolean(KEY_READER_MENU_AUTO_HIDE, false);
     }
 
     public void setReaderMenuAutoHideEnabled(boolean enabled) {
@@ -477,6 +575,14 @@ public class SettingsStore {
 
     public void setReaderDoublePageMode(String value) {
         preferences.edit().putString(KEY_READER_DOUBLE_PAGE_MODE, normalizeReaderDoublePageMode(value)).apply();
+    }
+
+    public String getReaderDoublePageTurnStep() {
+        return normalizeReaderDoublePageTurnStep(preferences.getString(KEY_READER_DOUBLE_PAGE_TURN_STEP, "two"));
+    }
+
+    public void setReaderDoublePageTurnStep(String value) {
+        preferences.edit().putString(KEY_READER_DOUBLE_PAGE_TURN_STEP, normalizeReaderDoublePageTurnStep(value)).apply();
     }
 
     public boolean isReaderAutoNightEnabled() {
@@ -530,6 +636,14 @@ public class SettingsStore {
 
     public void setLandscapeHomeNavigationMode(String value) {
         preferences.edit().putString(KEY_HOME_NAV_LANDSCAPE_MODE, normalizeHomeNavigationMode(value)).apply();
+    }
+
+    public String getReaderOrientationMode() {
+        return normalizeReaderOrientationMode(preferences.getString(KEY_READER_ORIENTATION_MODE, "system"));
+    }
+
+    public void setReaderOrientationMode(String value) {
+        preferences.edit().putString(KEY_READER_ORIENTATION_MODE, normalizeReaderOrientationMode(value)).apply();
     }
 
     public String getHomeSidebarPresentation() {
@@ -705,8 +819,68 @@ public class SettingsStore {
 
     public String getWebDavProgressBaseUrl() {
         String base = normalizeBaseUrl(getWebDavUrl());
-        String dir = normalizeDirectory(getWebDavDir());
-        return base + dir;
+        return base + parentDirectory(getWebDavDir());
+    }
+
+    public String getWebDavProgressDir() {
+        return parentDirectory(getWebDavDir());
+    }
+
+    public JSONObject exportAndroidPrivateSettingsJson() {
+        JSONObject object = new JSONObject();
+        try {
+            object.put(JSON_PLATFORM, PLATFORM_ANDROID);
+            object.put(JSON_SCHEMA_VERSION, ANDROID_SETTINGS_SCHEMA_VERSION);
+            Map<String, ?> all = preferences.getAll();
+            for (Map.Entry<String, ?> entry : all.entrySet()) {
+                if (ANDROID_PRIVATE_SYNC_KEYS.contains(entry.getKey())) {
+                    object.put(entry.getKey(), entry.getValue());
+                }
+            }
+            object.put(JSON_BACKGROUND_FILE, readerBackgroundFileName());
+        } catch (Exception ignore) {
+        }
+        return object;
+    }
+
+    public void importAndroidPrivateSettingsJson(JSONObject jsonObject, String restoredBackgroundPath) {
+        if (jsonObject == null) {
+            throw new IllegalArgumentException("设置快照为空");
+        }
+        if (!PLATFORM_ANDROID.equals(jsonObject.optString(JSON_PLATFORM, ""))) {
+            throw new IllegalArgumentException("设置快照不是 Android 平台");
+        }
+        SharedPreferences.Editor editor = preferences.edit();
+        Iterator<String> iterator = jsonObject.keys();
+        while (iterator.hasNext()) {
+            String key = iterator.next();
+            if (!ANDROID_PRIVATE_SYNC_KEYS.contains(key)) {
+                continue;
+            }
+            putJsonPreference(editor, key, jsonObject.opt(key));
+        }
+        if (restoredBackgroundPath != null && !restoredBackgroundPath.isBlank()) {
+            editor.putString(KEY_BACKGROUND_PATH, restoredBackgroundPath);
+        } else if (jsonObject.has(JSON_BACKGROUND_FILE) && jsonObject.optString(JSON_BACKGROUND_FILE, "").isBlank()) {
+            editor.putString(KEY_BACKGROUND_PATH, "");
+        }
+        editor.apply();
+    }
+
+    public String readerBackgroundFileName() {
+        String path = getReaderBackgroundPath();
+        if (path == null || path.isBlank()) {
+            return "";
+        }
+        return new File(path).getName();
+    }
+
+    public String androidSettingsBackgroundFileName(JSONObject jsonObject) {
+        if (jsonObject == null) {
+            return "";
+        }
+        String value = jsonObject.optString(JSON_BACKGROUND_FILE, "");
+        return sanitizeRemoteFileName(value);
     }
 
     public JSONObject exportAsJson() {
@@ -762,6 +936,50 @@ public class SettingsStore {
         return trimmed;
     }
 
+    private String normalizeDirectoryOrDefault(String value, String fallback) {
+        String normalized = normalizeDirectory(value);
+        return normalized.isBlank() ? normalizeDirectory(fallback) : normalized;
+    }
+
+    private String parentDirectory(String directory) {
+        String normalized = normalizeDirectory(directory);
+        if (normalized.isBlank()) {
+            return "";
+        }
+        String withoutTrailing = normalized.substring(0, normalized.length() - 1);
+        int slashIndex = withoutTrailing.lastIndexOf('/');
+        if (slashIndex < 0) {
+            return "";
+        }
+        return withoutTrailing.substring(0, slashIndex + 1);
+    }
+
+    private void putJsonPreference(SharedPreferences.Editor editor, String key, Object value) {
+        if (value instanceof Boolean) {
+            editor.putBoolean(key, (Boolean) value);
+        } else if (value instanceof Number) {
+            Number number = (Number) value;
+            if (FLOAT_SYNC_KEYS.contains(key)) {
+                editor.putFloat(key, number.floatValue());
+            } else {
+                editor.putInt(key, number.intValue());
+            }
+        } else if (value instanceof String) {
+            editor.putString(key, (String) value);
+        }
+    }
+
+    private String sanitizeRemoteFileName(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String name = new File(value).getName();
+        if (name.contains("/") || name.contains("\\") || ".".equals(name) || "..".equals(name)) {
+            return "";
+        }
+        return name;
+    }
+
     private static float clamp(float value, float min, float max) {
         return Math.max(min, Math.min(max, value));
     }
@@ -799,6 +1017,10 @@ public class SettingsStore {
         return "landscape";
     }
 
+    public static String normalizeReaderDoublePageTurnStep(String value) {
+        return "one".equals(value) ? "one" : "two";
+    }
+
     public static String normalizeReaderAutoNightCustomPolicy(String value) {
         if ("override".equals(value) || "preserve".equals(value)) {
             return value;
@@ -815,6 +1037,13 @@ public class SettingsStore {
             return value;
         }
         return "auto";
+    }
+
+    public static String normalizeReaderOrientationMode(String value) {
+        if ("portrait".equals(value) || "landscape".equals(value)) {
+            return value;
+        }
+        return "system";
     }
 
     public static String normalizeHomeSidebarPresentation(String value) {

@@ -1,6 +1,7 @@
 package com.metahumanz.pacilread.storage;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
@@ -217,6 +218,47 @@ public class ReaderDatabaseMigrationTest {
         assertEquals("<p>第一段正文</p><p>第二段正文</p>", chapters.get(0).bodyHtml);
         assertTrue(chapters.get(0).bodyText.contains("第一段正文"));
         assertTrue(chapters.get(0).bodyText.contains("第二段正文"));
+    }
+
+    @Test
+    public void exportAndImportStripLegacySettingsTable() throws Exception {
+        ReaderDatabaseHelper helper = ReaderDatabaseHelper.getInstance(context);
+        helper.getWritableDatabase().execSQL("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)");
+        helper.getWritableDatabase().execSQL("INSERT OR REPLACE INTO settings(key, value) VALUES ('reader_pageMode', 'double')");
+
+        File exportedDb = new File(context.getCacheDir(), "reader_export_strip.db");
+        if (exportedDb.exists()) {
+            exportedDb.delete();
+        }
+        helper.exportDatabase(exportedDb);
+        SQLiteDatabase exported = SQLiteDatabase.openDatabase(exportedDb.getAbsolutePath(), null, SQLiteDatabase.OPEN_READONLY);
+        try {
+            assertFalse(hasTable(exported, "settings"));
+        } finally {
+            exported.close();
+            exportedDb.delete();
+        }
+
+        File sourceDbFile = new File(context.getCacheDir(), "reader_import_with_settings.db");
+        if (sourceDbFile.exists()) {
+            sourceDbFile.delete();
+        }
+        SQLiteDatabase sourceDb = SQLiteDatabase.openOrCreateDatabase(sourceDbFile, null);
+        try {
+            sourceDb.execSQL("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)");
+            sourceDb.execSQL("INSERT INTO settings(key, value) VALUES ('reader_pageMode', 'double')");
+        } finally {
+            sourceDb.close();
+        }
+
+        helper.importDatabase(sourceDbFile);
+        SQLiteDatabase imported = SQLiteDatabase.openDatabase(context.getDatabasePath(DATABASE_NAME).getAbsolutePath(), null, SQLiteDatabase.OPEN_READONLY);
+        try {
+            assertFalse(hasTable(imported, "settings"));
+        } finally {
+            imported.close();
+            sourceDbFile.delete();
+        }
     }
 
     private boolean hasColumn(SQLiteDatabase db, String table, String column) {

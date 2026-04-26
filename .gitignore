@@ -17,3 +17,5 @@
 .workbuddy/*
 CLAUDE.md
 SYNC_PUBLIC_PRIVATE_CONTRACT.md
+.claude/*
+.vscode/*

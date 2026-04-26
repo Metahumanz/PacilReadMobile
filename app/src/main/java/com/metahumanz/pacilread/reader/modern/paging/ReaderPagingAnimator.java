@@ -83,7 +83,9 @@ public final class ReaderPagingAnimator {
                 state.pagingDownY = localTouchY(event);
                 state.pagingLastX = state.pagingDownX;
                 state.pagingLastEventTime = event.getEventTime();
+                state.pagingLastMoveDeltaX = 0f;
                 state.pagingVelocityX = 0f;
+                state.interactiveCancel = false;
                 captureInteractiveStartPoint(state.pagingDownX, state.pagingDownY);
                 return false;
             case MotionEvent.ACTION_MOVE:
@@ -96,11 +98,16 @@ public final class ReaderPagingAnimator {
                 if (!state.interactivePaging) {
                     float deltaX = currentTouchX - state.pagingDownX;
                     float deltaY = currentTouchY - state.pagingDownY;
-                    if (Math.abs(deltaY) > state.pagingTouchSlop && Math.abs(deltaY) > Math.abs(deltaX)) {
+                    float slop = Math.max(state.pagingTouchSlop, 1);
+                    float distanceSquare = deltaX * deltaX + deltaY * deltaY;
+                    if (distanceSquare <= slop * slop) {
+                        return false;
+                    }
+                    if (Math.abs(deltaY) > Math.abs(deltaX)) {
                         state.pagingGestureCandidate = false;
                         return false;
                     }
-                    if (Math.abs(deltaX) <= state.pagingTouchSlop || Math.abs(deltaX) <= Math.abs(deltaY)) {
+                    if (Math.abs(deltaX) <= Math.abs(deltaY)) {
                         return false;
                     }
                     int direction = deltaX < 0f ? 1 : -1;
@@ -110,6 +117,7 @@ public final class ReaderPagingAnimator {
                     }
                 }
                 updateInteractiveTouchPoint(currentTouchX, currentTouchY);
+                updateInteractiveCancelState();
                 float width = Math.max(views.pageStage.getWidth(), ui.dp(240));
                 float deltaX = currentTouchX - state.pagingDownX;
                 float progress = state.interactiveDirection > 0 ? -deltaX / width : deltaX / width;
@@ -144,9 +152,7 @@ public final class ReaderPagingAnimator {
             return false;
         }
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
-            if (event.getRepeatCount() == 0) {
-                navigation.requestTapPageTurn("page_up".equals(action) ? -1 : 1);
-            }
+            navigation.requestTapPageTurn("page_up".equals(action) ? -1 : 1);
             return true;
         }
         return event.getAction() == KeyEvent.ACTION_UP;
@@ -155,6 +161,7 @@ public final class ReaderPagingAnimator {
     public void animateTransition(int targetChapterIndex, int targetPageIndex, int direction) {
         long token = ++state.animationToken;
         state.isAnimating = true;
+        rememberAnimationTarget(targetChapterIndex, targetPageIndex);
         String mode = runtime.settingsStore.getFlipMode();
         float width = Math.max(views.pageStage.getWidth(), ui.dp(240));
         float height = Math.max(views.pageStage.getHeight(), ui.dp(320));
@@ -320,13 +327,40 @@ public final class ReaderPagingAnimator {
         }
     }
 
+    public boolean settleInterruptedPagingAnimation() {
+        if (!state.isAnimating && !state.interactivePaging && state.interactiveAnimator == null) {
+            return false;
+        }
+        int targetChapterIndex = state.animationTargetChapterIndex >= 0
+                ? state.animationTargetChapterIndex
+                : state.interactiveTargetChapterIndex;
+        int targetPageIndex = state.animationTargetPageIndex >= 0
+                ? state.animationTargetPageIndex
+                : state.interactiveTargetPageIndex;
+        state.animationToken++;
+        cancelInteractiveAnimator();
+        if (targetChapterIndex >= 0 && targetPageIndex >= 0 && !state.chapters.isEmpty()) {
+            settleOnPage(targetChapterIndex, targetPageIndex);
+            return true;
+        }
+        if (!state.chapters.isEmpty()) {
+            settleOnPage(state.currentChapterIndex, state.currentPageIndex);
+            return true;
+        }
+        cancelInteractivePaging();
+        clearAnimationTarget();
+        return false;
+    }
+
     public void cancelInteractivePaging() {
         state.pagingGestureCandidate = false;
         state.interactivePaging = false;
         state.interactiveDirection = 0;
+        state.interactiveCancel = false;
         state.interactiveProgress = 0f;
         state.interactiveTargetChapterIndex = -1;
         state.interactiveTargetPageIndex = -1;
+        clearAnimationTarget();
         resetInteractiveTouchState();
         restoreLivePageLayers(false);
         resetAnimatedPage(views.pageCurrent);
@@ -354,13 +388,60 @@ public final class ReaderPagingAnimator {
         }
     }
 
+    private void settleOnPage(int targetChapterIndex, int targetPageIndex) {
+        int safeChapterIndex = ui.clamp(targetChapterIndex, 0, state.chapters.size() - 1);
+        List<PageSlice> pages = content.getPagesForChapter(safeChapterIndex);
+        if (pages.isEmpty()) {
+            cancelInteractivePaging();
+            return;
+        }
+        int safePageIndex = ui.clamp(targetPageIndex, 0, pages.size() - 1);
+        state.currentChapterIndex = safeChapterIndex;
+        state.currentPageIndex = safePageIndex;
+        navigation.bindCurrentSpread(safeChapterIndex, safePageIndex);
+        restoreLivePageLayers(false);
+        resetAnimatedPage(views.pageCurrent);
+        resetAnimatedPage(views.pageIncoming);
+        views.pageCurrent.setVisibility(View.VISIBLE);
+        views.pageCurrent.bringToFront();
+        views.pageIncoming.setVisibility(View.GONE);
+        resetShadowView();
+        resetInteractiveTouchState();
+        state.pagingGestureCandidate = false;
+        state.interactivePaging = false;
+        state.interactiveDirection = 0;
+        state.interactiveCancel = false;
+        state.interactiveProgress = 0f;
+        state.interactiveTargetChapterIndex = -1;
+        state.interactiveTargetPageIndex = -1;
+        clearAnimationTarget();
+        state.pendingTapPagingDelta = 0;
+        state.isAnimating = false;
+        activity.markReadingActivity();
+        chrome.updateUiAfterPageChange();
+        content.scheduleProgressSave();
+        chrome.scheduleAutoHide();
+        schedulePagingSnapshotWarmup();
+    }
+
     private void updatePagingVelocity(MotionEvent event) {
         long now = event.getEventTime();
         long elapsed = Math.max(1L, now - state.pagingLastEventTime);
         float currentX = localTouchX(event);
-        state.pagingVelocityX = (currentX - state.pagingLastX) / elapsed;
+        state.pagingLastMoveDeltaX = currentX - state.pagingLastX;
+        state.pagingVelocityX = state.pagingLastMoveDeltaX / elapsed;
         state.pagingLastX = currentX;
         state.pagingLastEventTime = now;
+    }
+
+    private void updateInteractiveCancelState() {
+        if (!state.interactivePaging || Math.abs(state.pagingLastMoveDeltaX) < 1f) {
+            return;
+        }
+        float directionalMove = state.interactiveDirection > 0
+                ? -state.pagingLastMoveDeltaX
+                : state.pagingLastMoveDeltaX;
+        state.interactiveCancel = directionalMove < 0f;
     }
 
     private boolean prepareInteractivePaging(int direction, float startX, float startY) {
@@ -374,6 +455,7 @@ public final class ReaderPagingAnimator {
         state.interactiveDirection = direction;
         state.interactiveTargetChapterIndex = target.chapterIndex;
         state.interactiveTargetPageIndex = target.pageIndex;
+        rememberAnimationTarget(target.chapterIndex, target.pageIndex);
         state.interactiveProgress = 0f;
         captureInteractiveStartPoint(startX, startY);
         navigation.bindIncomingSpread(target.chapterIndex, target.pageIndex);
@@ -459,12 +541,16 @@ public final class ReaderPagingAnimator {
 
     private boolean shouldCommitInteractivePaging() {
         float directionalVelocity = state.interactiveDirection > 0 ? -state.pagingVelocityX : state.pagingVelocityX;
-        String mode = runtime.settingsStore.getFlipMode();
-        float progressThreshold = "cover".equals(mode)
-                ? 0.18f
-                : ("simulation".equals(mode) ? 0.24f : ("scroll".equals(mode) ? 0.28f : 0.22f));
-        float velocityThreshold = "scroll".equals(mode) ? 0.7f : 0.85f;
-        return state.interactiveProgress >= progressThreshold || directionalVelocity > velocityThreshold;
+        if (directionalVelocity > 1.05f) {
+            return true;
+        }
+        if (directionalVelocity < -0.25f || state.interactiveCancel) {
+            return false;
+        }
+        float directionalDrag = state.interactiveDirection > 0
+                ? state.pagingDownX - state.interactiveTouchX
+                : state.interactiveTouchX - state.pagingDownX;
+        return directionalDrag > Math.max(state.pagingTouchSlop, 1);
     }
 
     private void finishInteractivePaging(boolean commit) {
@@ -472,6 +558,11 @@ public final class ReaderPagingAnimator {
         float end = commit ? 1f : 0f;
         long token = ++state.animationToken;
         cancelInteractiveAnimator();
+        if (commit) {
+            rememberAnimationTarget(state.interactiveTargetChapterIndex, state.interactiveTargetPageIndex);
+        } else {
+            rememberAnimationTarget(state.currentChapterIndex, state.currentPageIndex);
+        }
         state.interactiveAnimator = ValueAnimator.ofFloat(start, end);
         String mode = runtime.settingsStore.getFlipMode();
         float remainingDistance = Math.max(0.2f, Math.abs(end - start));
@@ -521,6 +612,16 @@ public final class ReaderPagingAnimator {
         state.interactiveAnimator.start();
     }
 
+    private void rememberAnimationTarget(int targetChapterIndex, int targetPageIndex) {
+        state.animationTargetChapterIndex = targetChapterIndex;
+        state.animationTargetPageIndex = targetPageIndex;
+    }
+
+    private void clearAnimationTarget() {
+        state.animationTargetChapterIndex = -1;
+        state.animationTargetPageIndex = -1;
+    }
+
     private float localTouchX(MotionEvent event) {
         int[] stageLocation = new int[2];
         views.pageStage.getLocationOnScreen(stageLocation);
@@ -549,9 +650,11 @@ public final class ReaderPagingAnimator {
         state.pagingGestureCandidate = false;
         state.interactivePaging = false;
         state.interactiveDirection = 0;
+        state.interactiveCancel = false;
         state.interactiveProgress = 0f;
         state.interactiveTargetChapterIndex = -1;
         state.interactiveTargetPageIndex = -1;
+        clearAnimationTarget();
         if (keepIncomingCover) {
             views.pageIncoming.bringToFront();
             views.pageCurrent.setVisibility(View.INVISIBLE);
@@ -570,16 +673,12 @@ public final class ReaderPagingAnimator {
         views.pageIncoming.setVisibility(View.GONE);
         resetInteractiveTouchState();
         state.isAnimating = false;
+        state.pendingTapPagingDelta = 0;
         activity.markReadingActivity();
         chrome.updateUiAfterPageChange();
         content.scheduleProgressSave();
         chrome.scheduleAutoHide();
         schedulePagingSnapshotWarmup();
-        if (views.pageStage != null) {
-            views.pageStage.post(navigation::consumePendingTapPageTurn);
-        } else {
-            navigation.consumePendingTapPageTurn();
-        }
     }
 
     private void preparePagingSnapshots(int targetChapterIndex, int targetPageIndex) {

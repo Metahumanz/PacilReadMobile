@@ -54,46 +54,50 @@ public class WebDavClient {
     }
 
     public void ensureProgressDirectory() throws Exception {
-        String base = requireConfiguredProgressBaseUrl();
-        if (!settingsStore.getWebDavDir().isBlank()) {
-            requireSuccessfulResponse(request(base, "MKCOL", null, null), "初始化同步目录", true);
-        }
-        requireSuccessfulResponse(request(base + "bookProgress/", "MKCOL", null, null), "初始化进度目录", true);
+        ensureDirectoryTree(requireConfiguredServerUrl(), settingsStore.getWebDavProgressDir(), "初始化进度父目录");
+        requireSuccessfulResponse(request(requireConfiguredProgressBaseUrl() + "bookProgress/", "MKCOL", null, null), "初始化进度目录", true);
     }
 
     public void ensureBackupDirectories() throws Exception {
         String base = backupBaseUrl();
-        requireSuccessfulResponse(request(base, "MKCOL", null, null), "初始化备份目录", true);
+        ensureDirectoryTree(requireConfiguredServerUrl(), settingsStore.getWebDavDir(), "初始化备份目录");
         requireSuccessfulResponse(request(base + "books/", "MKCOL", null, null), "初始化书籍备份目录", true);
         requireSuccessfulResponse(request(base + "covers/", "MKCOL", null, null), "初始化封面备份目录", true);
-        requireSuccessfulResponse(request(base + "backgrounds/", "MKCOL", null, null), "初始化背景备份目录", true);
-        ensureSettingsSnapshotDirectory();
+        ensureAndroidSettingsDirectory();
     }
 
     public void ensureReadingStatsDirectory() throws Exception {
         String base = backupBaseUrl();
-        requireSuccessfulResponse(request(base, "MKCOL", null, null), "初始化备份目录", true);
+        ensureDirectoryTree(requireConfiguredServerUrl(), settingsStore.getWebDavDir(), "初始化备份目录");
         requireSuccessfulResponse(request(readingStatsBaseUrl(), "MKCOL", null, null), "初始化阅读统计目录", true);
     }
 
     public String backupBaseUrl() {
-        String base = requireConfiguredProgressBaseUrl();
-        if (!base.endsWith("/")) {
-            base += "/";
-        }
-        return base + "PacilRead/";
+        return backupRootBaseUrl();
+    }
+
+    public String backupRootBaseUrl() {
+        return appendDirectory(requireConfiguredServerUrl(), settingsStore.getWebDavDir());
     }
 
     public String readingStatsBaseUrl() {
         return backupBaseUrl() + "readingStats/";
     }
 
+    public String androidSettingsBaseUrl() {
+        return appendDirectory(backupRootBaseUrl(), settingsStore.getWebDavSettingsSubdir());
+    }
+
+    public String androidSettingsBackgroundsBaseUrl() {
+        return androidSettingsBaseUrl() + "backgrounds/";
+    }
+
+    public String androidSettingsSnapshotUrl() {
+        return androidSettingsBaseUrl() + "android-settings.json";
+    }
+
     public String settingsSnapshotUrl() {
-        String subdir = settingsStore.getWebDavSettingsSubdir();
-        if (subdir.isBlank()) {
-            return backupBaseUrl() + "settings.json";
-        }
-        return backupBaseUrl() + "settings/" + subdir + "settings.json";
+        return androidSettingsSnapshotUrl();
     }
 
     public ProgressPayload downloadProgress(BookRecord book) throws Exception {
@@ -284,20 +288,43 @@ public class WebDavClient {
         return "Basic " + Base64.encodeToString(raw.getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP);
     }
 
-    private void ensureSettingsSnapshotDirectory() throws Exception {
-        String subdir = settingsStore.getWebDavSettingsSubdir();
-        if (subdir.isBlank()) {
+    private void ensureAndroidSettingsDirectory() throws Exception {
+        ensureDirectoryTree(backupRootBaseUrl(), settingsStore.getWebDavSettingsSubdir(), "初始化 Android 设置目录");
+        requireSuccessfulResponse(request(androidSettingsBackgroundsBaseUrl(), "MKCOL", null, null), "初始化 Android 背景目录", true);
+    }
+
+    private void ensureDirectoryTree(String parentUrl, String directory, String action) throws Exception {
+        String normalizedParent = parentUrl.endsWith("/") ? parentUrl : parentUrl + "/";
+        String normalizedDirectory = directory == null ? "" : directory.trim();
+        while (normalizedDirectory.startsWith("/")) {
+            normalizedDirectory = normalizedDirectory.substring(1);
+        }
+        if (normalizedDirectory.isBlank()) {
             return;
         }
-        String currentUrl = backupBaseUrl() + "settings/";
-        requireSuccessfulResponse(request(currentUrl, "MKCOL", null, null), "初始化设置目录", true);
-        for (String segment : subdir.split("/")) {
+        String currentUrl = normalizedParent;
+        for (String segment : normalizedDirectory.split("/")) {
             if (segment == null || segment.isBlank()) {
                 continue;
             }
             currentUrl += segment + "/";
-            requireSuccessfulResponse(request(currentUrl, "MKCOL", null, null), "初始化设置子目录", true);
+            requireSuccessfulResponse(request(currentUrl, "MKCOL", null, null), action, true);
         }
+    }
+
+    private String appendDirectory(String baseUrl, String directory) {
+        String normalizedBase = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
+        String normalizedDirectory = directory == null ? "" : directory.trim();
+        while (normalizedDirectory.startsWith("/")) {
+            normalizedDirectory = normalizedDirectory.substring(1);
+        }
+        if (normalizedDirectory.isBlank()) {
+            return normalizedBase;
+        }
+        if (!normalizedDirectory.endsWith("/")) {
+            normalizedDirectory += "/";
+        }
+        return normalizedBase + normalizedDirectory;
     }
 
     private boolean sameDirectory(String directoryUrl, String absoluteUrl) {

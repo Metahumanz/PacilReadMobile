@@ -78,6 +78,11 @@ final class HomePagerController {
     void showImmediate(int page) {
         cancelAnimation();
         currentPage = page;
+        normalizeSectionsForPage(page);
+        callback.onSelectionChanged();
+    }
+
+    private void normalizeSectionsForPage(int visiblePage) {
         for (int candidate : ALL_PAGES) {
             View section = callback.sectionForPage(candidate);
             if (section == null) {
@@ -85,9 +90,8 @@ final class HomePagerController {
             }
             section.animate().cancel();
             section.setTranslationX(0f);
-            section.setVisibility(candidate == page ? View.VISIBLE : View.GONE);
+            section.setVisibility(candidate == visiblePage ? View.VISIBLE : View.GONE);
         }
-        callback.onSelectionChanged();
     }
 
     void selectPage(int page, boolean animate, boolean syncFirst) {
@@ -197,11 +201,7 @@ final class HomePagerController {
                 duration,
                 pageSwitchInterpolator,
                 () -> {
-                    if (currentPage != oldPage) {
-                        oldSection.setVisibility(View.GONE);
-                    }
-                    oldSection.setTranslationX(0f);
-                    newSection.setTranslationX(0f);
+                    normalizeSectionsForPage(newPage);
                     callback.onSelectionChanged();
                 }
         );
@@ -285,11 +285,7 @@ final class HomePagerController {
                     SETTLE_ANIMATION_DURATION,
                     pageSwitchInterpolator,
                     () -> {
-                        if (currentPage != oldPage) {
-                            current.setVisibility(View.GONE);
-                        }
-                        current.setTranslationX(0f);
-                        target.setTranslationX(0f);
+                        normalizeSectionsForPage(targetPage);
                         callback.onSelectionChanged();
                     }
             );
@@ -306,9 +302,7 @@ final class HomePagerController {
                     REBOUND_ANIMATION_DURATION,
                     pageReboundInterpolator,
                     () -> {
-                        target.setVisibility(View.GONE);
-                        current.setTranslationX(0f);
-                        target.setTranslationX(0f);
+                        normalizeSectionsForPage(currentPage);
                         callback.onSelectionChanged();
                     }
             );
@@ -327,7 +321,10 @@ final class HomePagerController {
                 0f,
                 REBOUND_ANIMATION_DURATION,
                 pageReboundInterpolator,
-                () -> callback.onSelectionChanged()
+                () -> {
+                    normalizeSectionsForPage(currentPage);
+                    callback.onSelectionChanged();
+                }
         );
     }
 

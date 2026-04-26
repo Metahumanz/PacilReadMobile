@@ -42,6 +42,8 @@ public class WebDavBackupManager {
             databaseHelper.exportDatabase(fullDb);
             listener.onStatus("上传数据库...");
             webDavClient.uploadFile(fullDb, webDavClient.backupBaseUrl() + "reader.db");
+        }
+        if (shouldSyncSettingsSnapshot()) {
             uploadSettingsSnapshot(listener);
         }
 
@@ -65,44 +67,54 @@ public class WebDavBackupManager {
             databaseHelper.exportLiteDatabase(liteDb);
             listener.onStatus("上传增量数据库...");
             webDavClient.uploadFile(liteDb, webDavClient.backupBaseUrl() + "reader_lite.db");
+        }
+        if (shouldSyncSettingsSnapshot()) {
             uploadSettingsSnapshot(listener);
         }
 
-        uploadLocalAssets(listener, true, settingsStore.isWebDavSyncFilesEnabled(), false);
+        uploadLocalAssets(listener, true, settingsStore.isWebDavSyncFilesEnabled(), settingsStore.isWebDavSyncBackgroundsEnabled());
         settingsStore.setWebDavLastLiteBackupAt(System.currentTimeMillis());
     }
 
     public void fullRestore(StatusListener listener) throws Exception {
-        ensureDatabaseSnapshotEnabled();
-        File tempDir = new File(context.getCacheDir(), "backup_restore");
-        if (!tempDir.exists()) {
-            tempDir.mkdirs();
+        ensureRestoreScopeSelected();
+
+        if (shouldSyncDatabaseSnapshot()) {
+            File tempDir = new File(context.getCacheDir(), "backup_restore");
+            if (!tempDir.exists()) {
+                tempDir.mkdirs();
+            }
+            File fullDb = new File(tempDir, "reader_full_restore.db");
+
+            listener.onStatus("下载完整数据库...");
+            webDavClient.downloadBinaryFile(webDavClient.backupBaseUrl() + "reader.db", fullDb);
+
+            listener.onStatus("应用数据库...");
+            databaseHelper.stripPlatformSettingsTable(fullDb);
+            databaseHelper.importDatabase(fullDb);
+            databaseHelper.rebaseLocalAssetPaths();
         }
-        File fullDb = new File(tempDir, "reader_full_restore.db");
-
-        listener.onStatus("下载完整数据库...");
-        webDavClient.downloadBinaryFile(webDavClient.backupBaseUrl() + "reader.db", fullDb);
-
-        listener.onStatus("应用数据库...");
-        databaseHelper.importDatabase(fullDb);
-        databaseHelper.rebaseLocalAssetPaths();
 
         restoreSettingsJsonIfPresent(listener);
     }
 
     public void incrementalRestore(StatusListener listener) throws Exception {
-        ensureDatabaseSnapshotEnabled();
-        File tempDir = new File(context.getCacheDir(), "backup_restore");
-        if (!tempDir.exists()) {
-            tempDir.mkdirs();
+        ensureRestoreScopeSelected();
+
+        if (shouldSyncDatabaseSnapshot()) {
+            File tempDir = new File(context.getCacheDir(), "backup_restore");
+            if (!tempDir.exists()) {
+                tempDir.mkdirs();
+            }
+            File liteDb = new File(tempDir, "reader_lite_restore.db");
+
+            listener.onStatus("下载精简数据库...");
+            webDavClient.downloadBinaryFile(webDavClient.backupBaseUrl() + "reader_lite.db", liteDb);
+
+            listener.onStatus("合并基础数据...");
+            databaseHelper.stripPlatformSettingsTable(liteDb);
+            databaseHelper.mergeLiteDatabase(liteDb);
         }
-        File liteDb = new File(tempDir, "reader_lite_restore.db");
-
-        listener.onStatus("下载精简数据库...");
-        webDavClient.downloadBinaryFile(webDavClient.backupBaseUrl() + "reader_lite.db", liteDb);
-
-        listener.onStatus("合并基础数据...");
-        databaseHelper.mergeLiteDatabase(liteDb);
 
         restoreSettingsJsonIfPresent(listener);
     }
@@ -118,22 +130,50 @@ public class WebDavBackupManager {
     }
 
     private void uploadSettingsSnapshot(StatusListener listener) throws Exception {
-        listener.onStatus("上传设置...");
+        listener.onStatus("上传 Android 设置...");
         webDavClient.uploadText(
-                webDavClient.settingsSnapshotUrl(),
-                settingsStore.exportAsJson().toString(2),
+                webDavClient.androidSettingsSnapshotUrl(),
+                settingsStore.exportAndroidPrivateSettingsJson().toString(2),
                 "application/json; charset=utf-8"
         );
     }
 
     private void restoreSettingsJsonIfPresent(StatusListener listener) throws Exception {
-        String remotePath = webDavClient.settingsSnapshotUrl();
+        if (!shouldSyncSettingsSnapshot()) {
+            return;
+        }
+        String remotePath = webDavClient.androidSettingsSnapshotUrl();
         if (webDavClient.head(remotePath).code != 200) {
             return;
         }
-        listener.onStatus("恢复设置...");
+        listener.onStatus("恢复 Android 设置...");
         String json = webDavClient.downloadText(remotePath);
-        settingsStore.importFromJson(new JSONObject(json));
+        JSONObject settingsJson = new JSONObject(json);
+        String restoredBackgroundPath = restoreBackgroundIfPresent(listener, settingsJson);
+        settingsStore.importAndroidPrivateSettingsJson(settingsJson, restoredBackgroundPath);
+    }
+
+    private String restoreBackgroundIfPresent(StatusListener listener, JSONObject settingsJson) {
+        String backgroundFileName = settingsStore.androidSettingsBackgroundFileName(settingsJson);
+        if (backgroundFileName.isBlank()) {
+            return null;
+        }
+        try {
+            String remotePath = webDavClient.androidSettingsBackgroundsBaseUrl() + backgroundFileName;
+            if (webDavClient.head(remotePath).code != 200) {
+                return null;
+            }
+            File folder = new File(context.getFilesDir(), "backgrounds");
+            if (!folder.exists() && !folder.mkdirs()) {
+                return null;
+            }
+            File destination = new File(folder, backgroundFileName);
+            listener.onStatus("恢复背景图片...");
+            webDavClient.downloadBinaryFile(remotePath, destination);
+            return destination.getAbsolutePath();
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private void uploadLocalAssets(StatusListener listener, boolean skipRemoteExisting, boolean includeFiles, boolean includeBackgrounds) throws Exception {
@@ -172,7 +212,7 @@ public class WebDavBackupManager {
         if (!backgroundPath.isBlank()) {
             File backgroundFile = new File(backgroundPath);
             if (backgroundFile.exists()) {
-                String remotePath = webDavClient.backupBaseUrl() + "backgrounds/" + backgroundFile.getName();
+                String remotePath = webDavClient.androidSettingsBackgroundsBaseUrl() + backgroundFile.getName();
                 if (!skipRemoteExisting || webDavClient.head(remotePath).code != 200) {
                     listener.onStatus("上传背景图片...");
                     webDavClient.uploadFile(backgroundFile, remotePath);
@@ -182,23 +222,31 @@ public class WebDavBackupManager {
     }
 
     private void ensureAnySyncScopeSelected() {
-        if (shouldSyncDatabaseSnapshot() || settingsStore.isWebDavSyncFilesEnabled() || settingsStore.isWebDavSyncBackgroundsEnabled()) {
+        if (shouldSyncDatabaseSnapshot()
+                || shouldSyncSettingsSnapshot()
+                || settingsStore.isWebDavSyncFilesEnabled()
+                || settingsStore.isWebDavSyncBackgroundsEnabled()) {
             return;
         }
         throw new IllegalStateException("请先选择至少一种同步内容");
     }
 
-    private void ensureDatabaseSnapshotEnabled() {
-        if (shouldSyncDatabaseSnapshot()) {
+    private void ensureRestoreScopeSelected() {
+        if (shouldSyncDatabaseSnapshot() || shouldSyncSettingsSnapshot()) {
             return;
         }
-        throw new IllegalStateException("当前未包含书架/界面/主题快照，无法执行恢复");
+        throw new IllegalStateException("当前未包含书架、界面、主题或背景快照，无法执行恢复");
     }
 
     private boolean shouldSyncDatabaseSnapshot() {
         return settingsStore.isWebDavSyncBookshelfEnabled()
-                || settingsStore.isWebDavSyncUiSettingsEnabled()
                 || settingsStore.isWebDavSyncThemesEnabled();
+    }
+
+    private boolean shouldSyncSettingsSnapshot() {
+        return settingsStore.isWebDavSyncUiSettingsEnabled()
+                || settingsStore.isWebDavSyncThemesEnabled()
+                || settingsStore.isWebDavSyncBackgroundsEnabled();
     }
 
     public interface StatusListener {

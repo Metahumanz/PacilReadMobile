@@ -10,6 +10,8 @@ public final class ReaderOptionCatalog {
     public static final String[] UI_THEME_KEYS = new String[]{"follow_app", "system", "light", "dark"};
     public static final String[] DOUBLE_PAGE_MODE_KEYS = new String[]{"landscape", "always", "landscape_or_tablet"};
     public static final String[] DOUBLE_PAGE_MODE_LABELS = new String[]{"仅横屏生效", "始终生效", "横屏或平板设备生效"};
+    public static final String[] DOUBLE_PAGE_TURN_STEP_KEYS = new String[]{"one", "two"};
+    public static final String[] DOUBLE_PAGE_TURN_STEP_LABELS = new String[]{"每次翻 1 页", "每次翻 2 页"};
     public static final String[] HUD_KEYS = new String[]{"none", "title", "chapter", "title_chapter", "time", "battery", "chapter_page", "book_progress", "page_and_progress", "time_and_battery"};
     public static final String[] FLIP_KEYS = new String[]{"cover", "slide", "simulation", "scroll", "none"};
 

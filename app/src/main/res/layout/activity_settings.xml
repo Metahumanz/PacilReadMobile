@@ -45,7 +45,8 @@
             android:clipToPadding="false"
             android:overScrollMode="never"
             android:padding="18dp"
-            android:scrollbarStyle="outsideOverlay">
+            android:scrollbarStyle="outsideOverlay"
+            android:scrollbars="none">
 
             <include layout="@layout/include_settings_content" />
         </ScrollView>

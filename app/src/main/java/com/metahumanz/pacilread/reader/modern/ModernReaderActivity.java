@@ -5,10 +5,12 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ActivityInfo;
 import android.os.BatteryManager;
 import android.os.Bundle;
 import android.view.GestureDetector;
 import android.view.Gravity;
+import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -26,6 +28,7 @@ import com.metahumanz.pacilread.R;
 import com.metahumanz.pacilread.ReadingStatsActivity;
 import com.metahumanz.pacilread.model.BookmarkRecord;
 import com.metahumanz.pacilread.model.ChapterRecord;
+import com.metahumanz.pacilread.reader.PageSlice;
 import com.metahumanz.pacilread.stats.ReadingStatsUtils;
 import com.metahumanz.pacilread.reader.modern.content.ReaderContentController;
 import com.metahumanz.pacilread.reader.modern.dialog.ReaderDialogSupport;
@@ -35,10 +38,12 @@ import com.metahumanz.pacilread.reader.modern.dialog.ReaderStyleDialogController
 import com.metahumanz.pacilread.reader.modern.paging.ReaderNavigationController;
 import com.metahumanz.pacilread.reader.modern.paging.ReaderPagingAnimator;
 import com.metahumanz.pacilread.reader.modern.playback.ReaderAutoPageController;
+import com.metahumanz.pacilread.reader.modern.selection.ReaderTextSelectionController;
 import com.metahumanz.pacilread.reader.modern.stats.ReaderReadingStatsTracker;
 import com.metahumanz.pacilread.reader.modern.tts.ReaderTtsController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderStyleController;
+import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedReaderActivity;
 
 import java.util.List;
@@ -60,16 +65,19 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private ReaderStyleController style;
     private ReaderAutoPageController autoPage;
     private ReaderTtsController tts;
+    private ReaderTextSelectionController selection;
     private ReaderLibraryDialogs libraryDialogs;
     private ReaderStyleDialogController styleDialogs;
     private ReaderOptionsDialogController optionsDialogs;
     private ReaderReadingStatsTracker readingStatsTracker;
     private GestureDetector gestureDetector;
     private BroadcastReceiver sysMetricsReceiver;
+    private long lastScrollPageTurnTime;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        applyReaderOrientationPreference();
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         setContentView(R.layout.activity_reader);
 
@@ -105,6 +113,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        applyReaderOrientationPreference();
         if (readingStatsTracker != null) {
             readingStatsTracker.resume();
         }
@@ -114,6 +123,17 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             chrome.scheduleAutoHide();
         } else {
             chrome.cancelAutoHide();
+        }
+    }
+
+    private void applyReaderOrientationPreference() {
+        String mode = new SettingsStore(this).getReaderOrientationMode();
+        if ("portrait".equals(mode)) {
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        } else if ("landscape".equals(mode)) {
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+        } else {
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
         }
     }
 
@@ -159,6 +179,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
 
     @Override
     public void onBackPressed() {
+        if (selection != null && selection.hasSelection()) {
+            selection.clearSelection();
+            return;
+        }
         if (state.controlsVisible) {
             chrome.setControlsVisible(false);
             return;
@@ -171,6 +195,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     public boolean dispatchTouchEvent(MotionEvent event) {
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
             markReadingActivity();
+        }
+        if (selection != null && selection.handleTouchEvent(event)) {
+            return true;
         }
         if (paging.handleReaderPagingTouchEvent(event)) {
             return true;
@@ -187,6 +214,28 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             return true;
         }
         return super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    public boolean onGenericMotionEvent(MotionEvent event) {
+        if ((event.getSource() & InputDevice.SOURCE_CLASS_POINTER) != 0
+                && event.getActionMasked() == MotionEvent.ACTION_SCROLL
+                && !state.controlsVisible) {
+            float vScroll = event.getAxisValue(MotionEvent.AXIS_VSCROLL);
+            if (Math.abs(vScroll) > 0.5f) {
+                long now = System.currentTimeMillis();
+                if (now - lastScrollPageTurnTime > 300L) {
+                    lastScrollPageTurnTime = now;
+                    if (vScroll < 0) {
+                        navigation.pageDown();
+                    } else {
+                        navigation.pageUp();
+                    }
+                }
+                return true;
+            }
+        }
+        return super.onGenericMotionEvent(event);
     }
 
     @Override
@@ -212,12 +261,14 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         libraryDialogs = new ReaderLibraryDialogs(this, runtime, state, ui, dialogSupport, content, navigation);
         styleDialogs = new ReaderStyleDialogController(this, runtime, state, ui, dialogSupport, content, navigation, style, chrome);
         optionsDialogs = new ReaderOptionsDialogController(this, runtime, state, ui, dialogSupport, content, navigation, style, chrome);
+        selection = new ReaderTextSelectionController(this, runtime, views, state, ui, content);
 
         content.attachControllers(navigation, style, paging, chrome);
         navigation.attachControllers(content, paging, chrome);
         paging.attachControllers(navigation, content, chrome);
         autoPage.attachControllers(navigation, chrome);
         tts.attachControllers(navigation, content, paging, chrome);
+        selection.attachControllers(libraryDialogs, tts);
         chrome.attachControllers(content, paging, autoPage, tts);
         style.attachControllers(chrome, paging, content, tts);
     }
@@ -251,7 +302,13 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         findViewById(R.id.button_style).setOnClickListener(v -> styleDialogs.showStyleDialog(REQUEST_PICK_BACKGROUND));
         findViewById(R.id.button_reader_options).setOnClickListener(v -> optionsDialogs.showReaderOptionsDialog());
         views.themeToggleButton.setOnClickListener(v -> chrome.toggleReaderUiTheme());
-        views.ttsButton.setOnClickListener(v -> tts.showTtsDialog());
+        views.ttsButton.setOnClickListener(v -> {
+            if (state.ttsActive || state.ttsPaused) {
+                tts.toggleTts();
+            } else {
+                tts.showTtsDialog();
+            }
+        });
         views.autoPageButton.setOnClickListener(v -> autoPage.showAutoPageDialog());
         views.readerTitle.setOnClickListener(v -> openReadingStatsForCurrentBook());
         views.pageStage.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
@@ -330,6 +387,17 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 state.lastTapY = y;
                 if (col == 1 && row == 1) {
                     chrome.setControlsVisible(true);
+                } else if (state.ttsActive && tts != null) {
+                    int offset = bodyCharOffsetFromTouch(e);
+                    if (offset >= 0) {
+                        tts.startTtsFrom(state.currentChapterIndex, offset);
+                    } else if (col == 0 || (col == 1 && row == 0)) {
+                        navigation.requestTapPageTurn(-1);
+                        resumeTtsAfterPageTurn();
+                    } else {
+                        navigation.requestTapPageTurn(1);
+                        resumeTtsAfterPageTurn();
+                    }
                 } else if (col == 0 || (col == 1 && row == 0)) {
                     navigation.requestTapPageTurn(-1);
                 } else {
@@ -344,10 +412,14 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                     return false;
                 }
                 if (Math.abs(velocityX) > Math.abs(velocityY) * 1.3f && Math.abs(velocityX) > 700f) {
+                    boolean flipped;
                     if (velocityX < 0) {
-                        navigation.pageDown();
+                        flipped = navigation.pageDown();
                     } else {
-                        navigation.pageUp();
+                        flipped = navigation.pageUp();
+                    }
+                    if (flipped) {
+                        resumeTtsAfterPageTurn();
                     }
                     return true;
                 }
@@ -375,6 +447,39 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         Intent intent = new Intent(this, ReadingStatsActivity.class);
         intent.putExtra("book_id", state.book.id);
         startActivity(intent);
+    }
+
+    public void clearTextSelection() {
+        if (selection != null) {
+            selection.clearSelection();
+        }
+    }
+
+    private int bodyCharOffsetFromTouch(MotionEvent e) {
+        if (views.pageBodyCurrent == null) return -1;
+        int[] loc = new int[2];
+        views.pageBodyCurrent.getLocationOnScreen(loc);
+        float localX = e.getRawX() - loc[0];
+        float localY = e.getRawY() - loc[1];
+        int viewOffset = views.pageBodyCurrent.offsetForTouch(localX, localY);
+        if (viewOffset < 0) return -1;
+        List<PageSlice> pages = content.getPagesForChapter(state.currentChapterIndex);
+        if (pages.isEmpty()) return -1;
+        PageSlice slice = pages.get(ui.clamp(state.currentPageIndex, 0, pages.size() - 1));
+        int bodyStartInSlice = Math.max(slice.bodyStartInSlice, 0);
+        return slice.start + Math.max(0, viewOffset - bodyStartInSlice);
+    }
+
+    private void resumeTtsAfterPageTurn() {
+        if (!state.ttsActive || tts == null) return;
+        long delayMs = paging.readerFlipDurationMs() + 60L;
+        runtime.mainHandler.postDelayed(() -> {
+            if (!state.ttsActive || state.isAnimating || state.interactivePaging) return;
+            List<PageSlice> pages = content.getPagesForChapter(state.currentChapterIndex);
+            if (pages.isEmpty()) return;
+            int firstVisibleOffset = pages.get(ui.clamp(state.currentPageIndex, 0, pages.size() - 1)).start;
+            tts.startTtsFrom(state.currentChapterIndex, firstVisibleOffset);
+        }, delayMs);
     }
 
     private void showBookmarkDialog() {

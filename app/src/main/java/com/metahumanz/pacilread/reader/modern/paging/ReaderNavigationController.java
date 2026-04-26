@@ -3,6 +3,7 @@ package com.metahumanz.pacilread.reader.modern.paging;
 import android.view.View;
 import android.widget.TextView;
 
+import com.metahumanz.pacilread.reader.JustifiedPageTextView;
 import com.metahumanz.pacilread.reader.PageSlice;
 import com.metahumanz.pacilread.reader.ReaderPaginator;
 import com.metahumanz.pacilread.reader.modern.ModernReaderActivity;
@@ -81,6 +82,7 @@ public final class ReaderNavigationController {
         if (!paging.ensurePageAreaReady(() -> showPage(chapterIndex, pageIndex, animate, direction))) {
             return;
         }
+        activity.clearTextSelection();
         int safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size() - 1);
         List<PageSlice> pages = content.getPagesForChapter(safeChapterIndex);
         int safePageIndex = ui.clamp(pageIndex, 0, pages.size() - 1);
@@ -128,10 +130,7 @@ public final class ReaderNavigationController {
             return false;
         }
         if (state.isAnimating || state.interactivePaging) {
-            paging.cancelInteractiveAnimator();
-            state.isAnimating = false;
-            state.interactivePaging = false;
-            state.pendingTapPagingDelta = 0;
+            paging.settleInterruptedPagingAnimation();
         }
         return direction > 0 ? pageDown() : pageUp();
     }
@@ -200,7 +199,10 @@ public final class ReaderNavigationController {
     }
 
     public int pageStep() {
-        return content != null && content.isDoublePageActive() ? 2 : 1;
+        if (content == null || !content.isDoublePageActive()) {
+            return 1;
+        }
+        return "one".equals(runtime.settingsStore.getReaderDoublePageTurnStep()) ? 1 : 2;
     }
 
     public int lastSpreadStart(List<PageSlice> pages) {
@@ -208,20 +210,22 @@ public final class ReaderNavigationController {
         return Math.max(0, pageCount - pageStep());
     }
 
-    public void bindPage(TextView titleView, TextView bodyView, int chapterIndex, int pageIndex) {
+    public void bindPage(TextView titleView, JustifiedPageTextView bodyView, int chapterIndex, int pageIndex) {
         List<PageSlice> pages = content.getPagesForChapter(chapterIndex);
-        PageSlice slice = pages.get(ui.clamp(pageIndex, 0, pages.size() - 1));
+        int safePageIndex = ui.clamp(pageIndex, 0, pages.size() - 1);
+        PageSlice slice = pages.get(safePageIndex);
         titleView.setVisibility(View.GONE);
         titleView.setText(null);
         paging.updateBodyTopMargin(bodyView, 0);
+        bodyView.setTreatFinalLineAsParagraphEnd(safePageIndex >= pages.size() - 1);
         bodyView.setText(slice.text == null ? "" : slice.text);
     }
 
     private void bindSpread(
             TextView leftTitleView,
-            com.metahumanz.pacilread.reader.JustifiedPageTextView leftBodyView,
+            JustifiedPageTextView leftBodyView,
             TextView rightTitleView,
-            com.metahumanz.pacilread.reader.JustifiedPageTextView rightBodyView,
+            JustifiedPageTextView rightBodyView,
             View rightPane,
             View gutter,
             int chapterIndex,
@@ -230,13 +234,13 @@ public final class ReaderNavigationController {
         bindPage(leftTitleView, leftBodyView, chapterIndex, pageIndex);
         boolean showRight = content.isDoublePageActive();
         if (!showRight) {
-            clearRightPane(rightTitleView, rightBodyView, rightPane, gutter);
+            clearRightPane(rightTitleView, rightBodyView, rightPane, gutter, false);
             return;
         }
         List<PageSlice> pages = content.getPagesForChapter(chapterIndex);
         int rightPageIndex = pageIndex + 1;
         if (rightPageIndex >= pages.size()) {
-            clearRightPane(rightTitleView, rightBodyView, rightPane, gutter);
+            clearRightPane(rightTitleView, rightBodyView, rightPane, gutter, true);
             return;
         }
         if (rightPane != null) {
@@ -250,22 +254,24 @@ public final class ReaderNavigationController {
 
     private void clearRightPane(
             TextView rightTitleView,
-            com.metahumanz.pacilread.reader.JustifiedPageTextView rightBodyView,
+            JustifiedPageTextView rightBodyView,
             View rightPane,
-            View gutter
+            View gutter,
+            boolean reserveSpace
     ) {
         if (rightTitleView != null) {
             rightTitleView.setText(null);
             rightTitleView.setVisibility(View.GONE);
         }
         if (rightBodyView != null) {
+            rightBodyView.setTreatFinalLineAsParagraphEnd(true);
             rightBodyView.setText("");
         }
         if (rightPane != null) {
-            rightPane.setVisibility(View.GONE);
+            rightPane.setVisibility(reserveSpace ? View.VISIBLE : View.GONE);
         }
         if (gutter != null) {
-            gutter.setVisibility(View.GONE);
+            gutter.setVisibility(reserveSpace ? View.VISIBLE : View.GONE);
         }
     }
 

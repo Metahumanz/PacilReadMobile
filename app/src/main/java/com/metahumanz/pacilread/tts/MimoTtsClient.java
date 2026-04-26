@@ -24,7 +24,11 @@ public class MimoTtsClient {
     private static final String ENDPOINT = "https://api.xiaomimimo.com/v1/chat/completions";
     private static final String MODEL = "mimo-v2.5-tts";
     private static final String DEFAULT_VOICE = "冰糖";
-    private static final int SAMPLE_RATE = 24000;
+    public static final int SAMPLE_RATE = 24000;
+
+    public static int getSampleRate() {
+        return SAMPLE_RATE;
+    }
 
     private volatile boolean cancelled = false;
     private volatile HttpURLConnection activeConnection;
@@ -40,16 +44,24 @@ public class MimoTtsClient {
         activeTrack = null;
     }
 
-    public void speak(String text, String apiKey, String voice, float rate) throws Exception {
+    public byte[] synthesize(String text, String apiKey, String voice) throws Exception {
         cancelled = false;
-        byte[] pcm = synthesizePcm16(text, apiKey, voice);
-        if (cancelled || pcm.length == 0) {
-            return;
+        if (TextUtils.isEmpty(apiKey)) {
+            throw new IllegalStateException("MiMo API Key 为空");
+        }
+        if (TextUtils.isEmpty(text)) {
+            return new byte[0];
+        }
+        return synthesizePcm16(text, apiKey, voice, true);
+    }
+
+    public void playPcm(byte[] pcm, float rate) throws Exception {
+        if (pcm.length == 0) {
+            throw new IllegalStateException("MiMo 返回空音频，请检查 API Key 或网络");
         }
 
         AudioTrack track = createTrack(pcm.length);
         activeTrack = track;
-        track.write(pcm, 0, pcm.length);
 
         float playbackRate = Math.max(0.5f, Math.min(rate, 2f));
         try {
@@ -58,9 +70,12 @@ public class MimoTtsClient {
         }
 
         track.play();
-        long durationMs = Math.round((pcm.length / 2f / SAMPLE_RATE) / playbackRate * 1000f) + 120L;
-        long deadline = SystemClock.uptimeMillis() + durationMs;
+        track.write(pcm, 0, pcm.length);
+        SystemClock.sleep(80L);
+        long estimatedMs = Math.round((pcm.length / 2f / SAMPLE_RATE) / playbackRate * 1000f) + 500L;
+        long deadline = SystemClock.uptimeMillis() + estimatedMs;
         while (!cancelled && SystemClock.uptimeMillis() < deadline) {
+            if (track.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) break;
             SystemClock.sleep(40L);
         }
 
@@ -76,16 +91,16 @@ public class MimoTtsClient {
         }
     }
 
-    private byte[] synthesizePcm16(String text, String apiKey, String voice) throws Exception {
-        if (TextUtils.isEmpty(text)) {
-            return new byte[0];
-        }
-        if (TextUtils.isEmpty(apiKey)) {
-            throw new IllegalStateException("MiMo API Key 为空");
-        }
+    public void speak(String text, String apiKey, String voice, float rate) throws Exception {
+        cancelled = false;
+        playPcm(synthesize(text, apiKey, voice), rate);
+    }
 
+    private byte[] synthesizePcm16(String text, String apiKey, String voice, boolean trackConnection) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(ENDPOINT).openConnection();
-        activeConnection = connection;
+        if (trackConnection) {
+            activeConnection = connection;
+        }
         connection.setConnectTimeout(10000);
         connection.setReadTimeout(60000);
         connection.setRequestMethod("POST");
@@ -158,7 +173,7 @@ public class MimoTtsClient {
             }
         } finally {
             connection.disconnect();
-            if (activeConnection == connection) {
+            if (trackConnection && activeConnection == connection) {
                 activeConnection = null;
             }
         }
@@ -186,7 +201,8 @@ public class MimoTtsClient {
                 .setSampleRate(SAMPLE_RATE)
                 .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                 .build();
-        return new AudioTrack(attributes, format, Math.max(pcmLength, 4096), AudioTrack.MODE_STATIC, AudioManager.AUDIO_SESSION_ID_GENERATE);
+        int minBuffer = AudioTrack.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT);
+        return new AudioTrack(attributes, format, Math.max(minBuffer * 2, pcmLength), AudioTrack.MODE_STREAM, AudioManager.AUDIO_SESSION_ID_GENERATE);
     }
 
     private String readText(InputStream inputStream) throws Exception {

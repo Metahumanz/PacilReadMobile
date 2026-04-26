@@ -31,8 +31,10 @@ public final class ReaderSessionState {
     public boolean controlsVisible = false;
     public boolean autoPageActive = false;
     public boolean ttsActive = false;
+    public boolean ttsPaused = false;
     public int ttsChapterIndex = -1;
     public int currentTtsUnitIndex = -1;
+    public int ttsHighlightPageIndex = -1;
     public int ttsHighlightStart = -1;
     public int ttsHighlightEnd = -1;
     public int ttsSessionId = 0;
@@ -45,6 +47,7 @@ public final class ReaderSessionState {
     public float pagingDownX = 0f;
     public float pagingDownY = 0f;
     public float pagingLastX = 0f;
+    public float pagingLastMoveDeltaX = 0f;
     public float pagingVelocityX = 0f;
     public float interactiveProgress = 0f;
     public float interactiveStartX = 0f;
@@ -53,8 +56,11 @@ public final class ReaderSessionState {
     public float interactiveTouchY = 0f;
     public long pagingLastEventTime = 0L;
     public int interactiveDirection = 0;
+    public boolean interactiveCancel = false;
     public int interactiveTargetChapterIndex = -1;
     public int interactiveTargetPageIndex = -1;
+    public int animationTargetChapterIndex = -1;
+    public int animationTargetPageIndex = -1;
     public ValueAnimator interactiveAnimator;
     public int totalProcessedBookLength = -1;
     public int currentReaderPageColor = 0xFFF7F0E1;

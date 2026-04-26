@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:paddingStart="48dp"
+    android:paddingEnd="48dp"
+    android:theme="@style/AppChromeSurfaceTheme">
+
+    <ImageView
+        android:id="@+id/splash_icon"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:contentDescription="PacilRead"
+        android:src="@mipmap/ic_launcher" />
+
+    <TextView
+        android:id="@+id/splash_title"
+        style="@style/AppChromePageTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="PacilRead" />
+
+    <TextView
+        android:id="@+id/splash_subtitle"
+        style="@style/AppChromeBodyMuted"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="轻松阅读，享受时光" />
+</LinearLayout>

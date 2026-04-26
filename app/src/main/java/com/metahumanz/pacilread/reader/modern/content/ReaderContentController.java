@@ -124,7 +124,6 @@ public final class ReaderContentController {
             state.currentChapterIndex = targetChapterIndex;
             int initialAnchorOffset = resolveInitialAnchorOffset(state.book.progressOffset);
             state.sessionStartOffset = initialAnchorOffset;
-            resetRestoredPosition();
             style.applyReaderSettings();
             activity.onReaderBookLoaded();
             scheduleReflowAfterLayout(targetChapterIndex, initialAnchorOffset);
@@ -176,7 +175,6 @@ public final class ReaderContentController {
                     state.currentChapterIndex = targetChapterIndex;
                     int initialAnchorOffset = resolveInitialAnchorOffset(loadedBook.progressOffset);
                     state.sessionStartOffset = initialAnchorOffset;
-                    resetRestoredPosition();
                     style.applyReaderSettings();
                     activity.onReaderBookLoaded();
                     scheduleReflowAfterLayout(targetChapterIndex, initialAnchorOffset);
@@ -544,8 +542,20 @@ public final class ReaderContentController {
         if (state.book == null || state.chapters.isEmpty()) {
             return;
         }
-        pendingReflowChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size() - 1);
-        pendingReflowAnchorOffset = Math.max(anchorOffset, 0);
+        if (state.restoredChapterIndex >= 0 && state.restoredProgressOffset >= 0) {
+            pendingReflowChapterIndex = ui.clamp(state.restoredChapterIndex, 0, state.chapters.size() - 1);
+            pendingReflowAnchorOffset = Math.max(state.restoredProgressOffset, 0);
+        } else if (state.requestedChapterOrderIndex >= 0 && state.requestedChapterOffset >= 0) {
+            pendingReflowChapterIndex = ui.clamp(
+                    navigation.chapterIndexFromOrder(state.requestedChapterOrderIndex),
+                    0,
+                    state.chapters.size() - 1
+            );
+            pendingReflowAnchorOffset = Math.max(state.requestedChapterOffset, 0);
+        } else {
+            pendingReflowChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size() - 1);
+            pendingReflowAnchorOffset = Math.max(anchorOffset, 0);
+        }
         reflowGeneration++;
         runtime.mainHandler.removeCallbacks(scheduledReflowRunnable);
         runtime.mainHandler.postDelayed(scheduledReflowRunnable, REFLOW_DEBOUNCE_MS);
@@ -661,7 +671,12 @@ public final class ReaderContentController {
         return Math.max(defaultOffset, 0);
     }
 
-    private void resetRestoredPosition() {
+    private boolean hasInitialPositionRequest() {
+        return (state.restoredChapterIndex >= 0 && state.restoredProgressOffset >= 0)
+                || (state.requestedChapterOrderIndex >= 0 && state.requestedChapterOffset >= 0);
+    }
+
+    private void resetInitialPositionRequest() {
         state.restoredChapterIndex = -1;
         state.restoredPageIndex = -1;
         state.restoredProgressOffset = -1;
@@ -676,6 +691,7 @@ public final class ReaderContentController {
         final int generation = reflowGeneration;
         final int chapterIndex = ui.clamp(pendingReflowChapterIndex, 0, state.chapters.size() - 1);
         final int anchorOffset = Math.max(pendingReflowAnchorOffset, 0);
+        final boolean shouldResetInitialPosition = hasInitialPositionRequest();
         final Boolean previousDoublePageActive = lastAppliedDoublePageActive;
         style.applyReaderSettings();
         final boolean nextDoublePageActive = isDoublePageActive();
@@ -691,6 +707,9 @@ public final class ReaderContentController {
             }
             ensurePaginationCacheMatchesLayout();
             navigation.openChapter(chapterIndex, anchorOffset, false, 0);
+            if (shouldResetInitialPosition) {
+                resetInitialPositionRequest();
+            }
             lastAppliedDoublePageActive = isDoublePageActive();
         });
     }

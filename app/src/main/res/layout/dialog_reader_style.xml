@@ -66,15 +66,6 @@
             android:paddingBottom="8dp" />
 
         <CheckBox
-            android:id="@+id/style_check_auto_night"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:minHeight="44dp"
-            android:text="深色阅读界面自动使用夜航"
-            android:textColor="?attr/themeColorOnSurface" />
-
-        <CheckBox
             android:id="@+id/style_check_double_page"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -94,6 +85,50 @@
             android:paddingTop="8dp"
             android:paddingEnd="10dp"
             android:paddingBottom="8dp" />
+
+        <TextView
+            android:id="@+id/style_text_double_page_turn_step_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="双页翻动"
+            android:textColor="?attr/themeColorOnSurface"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:id="@+id/style_layout_double_page_turn_step"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/style_button_double_page_turn_one"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_outline_button"
+                android:minHeight="44dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:text="每次翻 1 页"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorOnSurface" />
+
+            <Button
+                android:id="@+id/style_button_double_page_turn_two"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_outline_button"
+                android:minHeight="44dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:text="每次翻 2 页"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorOnSurface" />
+        </LinearLayout>
 
         <TextView
             android:layout_width="wrap_content"

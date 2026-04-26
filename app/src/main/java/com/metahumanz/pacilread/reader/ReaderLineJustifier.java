@@ -229,6 +229,44 @@ final class ReaderLineJustifier {
             }
             return endX;
         }
+
+        int offsetForX(float x, TextPaint paint) {
+            if (text.isEmpty() || units.isEmpty() || x <= startX) {
+                return 0;
+            }
+            for (int i = 0; i < units.size(); i++) {
+                TextUnit unit = units.get(i);
+                float unitStartX = positions[i];
+                float unitEndX = unitStartX + measureRunAdvance(unit.text, unit.length(), paint);
+                if (x < unitStartX) {
+                    return unit.start;
+                }
+                if (x <= unitEndX) {
+                    return unit.start + nearestOffsetInUnit(unit.text, x - unitStartX, paint);
+                }
+                if (i + 1 < units.size() && x < positions[i + 1]) {
+                    return unit.end;
+                }
+            }
+            return text.length();
+        }
+
+        private int nearestOffsetInUnit(String unitText, float advance, TextPaint paint) {
+            if (unitText == null || unitText.isEmpty() || advance <= 0f) {
+                return 0;
+            }
+            int bestOffset = 0;
+            float bestDistance = Math.abs(advance);
+            for (int offset = 1; offset <= unitText.length(); offset++) {
+                float candidateAdvance = measureRunAdvance(unitText, offset, paint);
+                float distance = Math.abs(candidateAdvance - advance);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestOffset = offset;
+                }
+            }
+            return bestOffset;
+        }
     }
 
     static final class TextUnit {

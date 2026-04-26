@@ -426,20 +426,12 @@
                 android:textSize="11sp" />
         </LinearLayout>
 
-        <HorizontalScrollView
+        <com.metahumanz.pacilread.reader.modern.ui.ReaderMenuButtonFlowLayout
+            android:id="@+id/menu_top_actions"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
-            android:clipToPadding="false"
-            android:fadeScrollbars="false"
-            android:overScrollMode="never"
-            android:scrollbars="none">
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
+            android:clipToPadding="false">
 
                 <Button
                     android:id="@+id/button_search"
@@ -455,24 +447,6 @@
                     android:paddingRight="16dp"
                     android:paddingBottom="10dp"
                     android:text="@string/reader_search"
-                    android:textAllCaps="false"
-                    android:textColor="?attr/themeColorReaderMenuButtonText"
-                    android:textSize="12sp" />
-
-                <Button
-                    android:id="@+id/button_bookmark"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="8dp"
-                    android:background="@drawable/bg_reader_menu_button_solid"
-                    android:fontFamily="sans-serif-medium"
-                    android:minHeight="44dp"
-                    android:minWidth="0dp"
-                    android:paddingLeft="16dp"
-                    android:paddingTop="10dp"
-                    android:paddingRight="16dp"
-                    android:paddingBottom="10dp"
-                    android:text="书签"
                     android:textAllCaps="false"
                     android:textColor="?attr/themeColorReaderMenuButtonText"
                     android:textSize="12sp" />
@@ -550,6 +524,24 @@
                     android:textSize="12sp" />
 
                 <Button
+                    android:id="@+id/button_bookmark"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_reader_menu_button_solid"
+                    android:fontFamily="sans-serif-medium"
+                    android:minHeight="44dp"
+                    android:minWidth="0dp"
+                    android:paddingLeft="16dp"
+                    android:paddingTop="10dp"
+                    android:paddingRight="16dp"
+                    android:paddingBottom="10dp"
+                    android:text="书签"
+                    android:textAllCaps="false"
+                    android:textColor="?attr/themeColorReaderMenuButtonText"
+                    android:textSize="12sp" />
+
+                <Button
                     android:id="@+id/button_theme_toggle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -566,8 +558,7 @@
                     android:textColor="?attr/themeColorReaderMenuButtonText"
                     android:textSize="12sp"
                     android:visibility="gone" />
-            </LinearLayout>
-        </HorizontalScrollView>
+        </com.metahumanz.pacilread.reader.modern.ui.ReaderMenuButtonFlowLayout>
 
     </LinearLayout>
 
