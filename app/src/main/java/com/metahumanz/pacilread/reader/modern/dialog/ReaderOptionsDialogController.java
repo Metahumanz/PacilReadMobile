@@ -182,9 +182,24 @@ public final class ReaderOptionsDialogController {
         refs.flipSpinner.setOnItemSelectedListener(flipListener);
         refs.flipSpeedSpinner.setOnItemSelectedListener(flipListener);
 
+        final Spinner[] allHudSpinners = {
+                refs.topLeftSpinner, refs.topCenterSpinner, refs.topRightSpinner,
+                refs.bottomLeftSpinner, refs.bottomCenterSpinner, refs.bottomRightSpinner
+        };
+        final boolean[] isAdjustingHudSpinners = new boolean[]{false};
+
         android.widget.AdapterView.OnItemSelectedListener hudListener = new android.widget.AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                if (position > 0 && !isAdjustingHudSpinners[0]) {
+                    isAdjustingHudSpinners[0] = true;
+                    for (Spinner spinner : allHudSpinners) {
+                        if (spinner != parent && spinner.getSelectedItemPosition() == position) {
+                            spinner.setSelection(0, false);
+                        }
+                    }
+                    isAdjustingHudSpinners[0] = false;
+                }
                 autoApply.run();
             }
 
