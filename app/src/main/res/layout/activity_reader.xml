@@ -413,17 +413,22 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/text_progress"
+            <Button
+                android:id="@+id/button_more"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_reader_hud_pill"
-                android:paddingLeft="12dp"
-                android:paddingTop="6dp"
-                android:paddingRight="12dp"
-                android:paddingBottom="6dp"
-                android:textColor="?attr/themeColorReaderMenuText"
-                android:textSize="11sp" />
+                android:background="@drawable/bg_reader_menu_button_solid"
+                android:fontFamily="sans-serif-medium"
+                android:minHeight="44dp"
+                android:minWidth="0dp"
+                android:paddingLeft="16dp"
+                android:paddingTop="10dp"
+                android:paddingRight="16dp"
+                android:paddingBottom="10dp"
+                android:text="☰"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorReaderMenuButtonText"
+                android:textSize="12sp" />
         </LinearLayout>
 
         <com.metahumanz.pacilread.reader.modern.ui.ReaderMenuButtonFlowLayout
@@ -431,7 +436,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
-            android:clipToPadding="false">
+            android:clipToPadding="false"
+            android:visibility="gone">
 
                 <Button
                     android:id="@+id/button_search"

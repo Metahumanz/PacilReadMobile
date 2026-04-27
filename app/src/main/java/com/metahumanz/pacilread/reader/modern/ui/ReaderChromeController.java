@@ -211,8 +211,6 @@ public final class ReaderChromeController {
             views.progressSeekBar.setMax(Math.max(safePageCount - 1, 0));
             views.progressSeekBar.setProgress(state.currentPageIndex);
         }
-        int percent = Math.round(((state.currentChapterIndex + (state.currentPageIndex / (float) safePageCount)) / Math.max(state.chapters.size(), 1)) * 100f);
-        views.readerProgress.setText(percent + "%");
         updateReaderHud();
         styleReaderMenuButton(views.ttsButton, tts != null && tts.isActive());
         styleReaderMenuButton(views.autoPageButton, autoPage != null && autoPage.isActive());
@@ -428,15 +426,6 @@ public final class ReaderChromeController {
         applyReaderMenuHierarchy(views.menuTopPanel);
         applyReaderMenuHierarchy(views.menuInfoPanel);
         applyReaderMenuHierarchy(views.menuBottomPanel);
-        if (views.readerProgress != null) {
-            views.readerProgress.setTag(R.id.tag_glass_background, Boolean.FALSE);
-            views.readerProgress.setBackground(createRoundedDrawable(
-                    menuButtonColor,
-                    menuButtonStrokeColor,
-                    resolveDimensionAttr(R.attr.themeRadiusPill, 999)
-            ));
-            views.readerProgress.setTextColor(menuTextColor);
-        }
         styleReaderMenuButton(views.ttsButton, tts != null && tts.isActive());
         styleReaderMenuButton(views.autoPageButton, autoPage != null && autoPage.isActive());
         styleReaderMenuButton(views.themeToggleButton, ThemeModeHelper.isDark(activity.getResources()));

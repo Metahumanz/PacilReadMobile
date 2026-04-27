@@ -18,6 +18,7 @@ import android.view.ViewConfiguration;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.PopupWindow;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -310,6 +311,95 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             }
         });
         views.autoPageButton.setOnClickListener(v -> autoPage.showAutoPageDialog());
+        views.moreButton.setOnClickListener(v -> {
+            views.moreButton.animate().rotation(-90f).setDuration(200).start();
+
+            int pad = ui.dp(10);
+            int gap = ui.dp(8);
+            int btnPadH = ui.dp(14);
+            int btnPadV = ui.dp(8);
+            int maxPopupHeight = (int) (getResources().getDisplayMetrics().heightPixels * 0.55f);
+
+            ScrollView scrollView = new ScrollView(this);
+            scrollView.setClipToPadding(false);
+
+            LinearLayout popupContent = new LinearLayout(this);
+            popupContent.setOrientation(LinearLayout.VERTICAL);
+            popupContent.setBackgroundResource(R.drawable.bg_reader_popup_menu);
+            popupContent.setPadding(pad, pad, pad, pad);
+            scrollView.addView(popupContent);
+
+            PopupWindow popupWindow = new PopupWindow(scrollView,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    maxPopupHeight, true);
+            popupWindow.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+            popupWindow.setOutsideTouchable(true);
+            popupWindow.setOnDismissListener(() ->
+                    views.moreButton.animate().rotation(0f).setDuration(200).start());
+
+            String[][] rows = {
+                    {"搜索", "替换"},
+                    {"排版", "翻页"},
+                    {"听书", "书签"}
+            };
+            for (int r = 0; r < rows.length; r++) {
+                LinearLayout rowLayout = new LinearLayout(this);
+                rowLayout.setOrientation(LinearLayout.HORIZONTAL);
+                LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                if (r > 0) {
+                    rowLp.topMargin = gap;
+                }
+                popupContent.addView(rowLayout, rowLp);
+
+                for (int c = 0; c < rows[r].length; c++) {
+                    String item = rows[r][c];
+                    Button btn = new Button(this);
+                    btn.setText(item);
+                    btn.setAllCaps(false);
+                    btn.setMinHeight(ui.dp(40));
+                    btn.setMinWidth(0);
+                    btn.setPadding(btnPadH, btnPadV, btnPadH, btnPadV);
+                    chrome.styleReaderMenuButton(btn, false);
+                    btn.setOnClickListener(itemView -> {
+                        popupWindow.dismiss();
+                        switch (item) {
+                            case "搜索":
+                                libraryDialogs.showSearchDialog();
+                                break;
+                            case "替换":
+                                libraryDialogs.showRulesDialog();
+                                break;
+                            case "排版":
+                                styleDialogs.showStyleDialog(REQUEST_PICK_BACKGROUND);
+                                break;
+                            case "翻页":
+                                autoPage.showAutoPageDialog();
+                                break;
+                            case "听书":
+                                if (state.ttsActive || state.ttsPaused) {
+                                    tts.toggleTts();
+                                } else {
+                                    tts.showTtsDialog();
+                                }
+                                break;
+                            case "书签":
+                                showBookmarkDialog();
+                                break;
+                        }
+                    });
+
+                    LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
+                            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+                    if (c > 0) {
+                        btnLp.leftMargin = gap;
+                    }
+                    rowLayout.addView(btn, btnLp);
+                }
+            }
+
+            popupWindow.showAsDropDown(views.moreButton, 0, 0, Gravity.END);
+        });
         views.readerTitle.setOnClickListener(v -> openReadingStatsForCurrentBook());
         views.pageStage.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
             int width = right - left;
