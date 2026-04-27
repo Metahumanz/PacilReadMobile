@@ -435,7 +435,7 @@ public final class ReaderPagingAnimator {
     }
 
     private void updateInteractiveCancelState() {
-        if (!state.interactivePaging || Math.abs(state.pagingLastMoveDeltaX) < 1f) {
+        if (!state.interactivePaging || Math.abs(state.pagingLastMoveDeltaX) < 0.1f) {
             return;
         }
         float directionalMove = state.interactiveDirection > 0
