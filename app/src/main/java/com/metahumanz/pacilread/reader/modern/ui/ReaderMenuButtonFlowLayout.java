@@ -110,20 +110,18 @@ public final class ReaderMenuButtonFlowLayout extends ViewGroup {
             rowContentWidths.add(currentRowWidth);
         }
 
-        // Second pass: layout with extra space distributed evenly per row
+        // Second pass: layout rows centered horizontally
         int rowTop = getPaddingTop();
         for (int rowIdx = 0; rowIdx < rows.size(); rowIdx++) {
             List<View> rowChildren = rows.get(rowIdx);
             int rowContentWidth = rowContentWidths.get(rowIdx);
-            int extraPerChild = rowChildren.size() > 1 && availableWidth > rowContentWidth
-                    ? (availableWidth - rowContentWidth) / rowChildren.size()
-                    : 0;
+            int rowStartOffset = (availableWidth - rowContentWidth) / 2;
 
-            int x = getPaddingLeft();
+            int x = getPaddingLeft() + rowStartOffset;
             int rowHeight = 0;
             for (View child : rowChildren) {
                 MarginLayoutParams lp = (MarginLayoutParams) child.getLayoutParams();
-                int expandedWidth = child.getMeasuredWidth() + extraPerChild;
+                int expandedWidth = child.getMeasuredWidth();
                 int childLeft = x + lp.getMarginStart();
                 int childTop = rowTop + lp.topMargin;
                 child.layout(childLeft, childTop, childLeft + expandedWidth, childTop + child.getMeasuredHeight());
