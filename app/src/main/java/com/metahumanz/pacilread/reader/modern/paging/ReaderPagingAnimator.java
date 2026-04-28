@@ -1084,18 +1084,12 @@ public final class ReaderPagingAnimator {
 
     private float sanitizeStageTouchX(float value) {
         float width = Math.max(views.pageStage == null ? 0f : views.pageStage.getWidth(), 1f);
-        if ("simulation".equals(runtime.settingsStore.getFlipMode())) {
-            return Math.max(-width * 3f, Math.min(width * 4f, value));
-        }
-        return Math.max(0.1f, Math.min(width - 0.1f, value));
+        return Math.max(-width * 3f, Math.min(width * 4f, value));
     }
 
     private float sanitizeStageTouchY(float value) {
         float height = Math.max(views.pageStage == null ? 0f : views.pageStage.getHeight(), 1f);
-        if ("simulation".equals(runtime.settingsStore.getFlipMode())) {
-            return Math.max(-height * 3f, Math.min(height * 4f, value));
-        }
-        return Math.max(0.1f, Math.min(height - 0.1f, value));
+        return Math.max(-height * 3f, Math.min(height * 4f, value));
     }
 
     private float resolveSimulationTargetTouchX(int direction, boolean commit) {
