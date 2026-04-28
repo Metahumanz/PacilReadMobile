@@ -308,6 +308,12 @@ public final class ReaderChromeController {
         GlassUiHelper.applyToHierarchy(activity, views.menuBottomPanel, runtime.settingsStore.getGlassOpacityPercent());
     }
 
+    public void applyMenuLayoutMode() {
+        boolean persistent = runtime.settingsStore.isReaderMenuPersistentActionsEnabled();
+        views.moreButton.setVisibility(persistent ? View.GONE : View.VISIBLE);
+        views.menuTopActions.setVisibility(persistent ? View.VISIBLE : View.GONE);
+    }
+
     public void updateReaderThemeButtons(Button paper, Button forest, Button night, String current) {
         styleThemeButton(paper, "paper".equals(current));
         styleThemeButton(forest, "forest".equals(current));
@@ -330,6 +336,9 @@ public final class ReaderChromeController {
     public void setControlsVisible(boolean visible) {
         if (visible) {
             state.pendingTapPagingDelta = 0;
+            applyMenuLayoutMode();
+        } else {
+            activity.dismissReaderPopupImmediate();
         }
         if (state.controlsVisible == visible) {
             if (visible) {

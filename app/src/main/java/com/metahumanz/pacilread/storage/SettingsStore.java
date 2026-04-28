@@ -85,6 +85,7 @@ public class SettingsStore {
     private static final String KEY_HUD_TOP_MARGIN = "hud_top_margin";
     private static final String KEY_HUD_BOTTOM_MARGIN = "hud_bottom_margin";
     private static final String KEY_READER_MENU_AUTO_HIDE = "reader_menu_auto_hide";
+    private static final String KEY_READER_MENU_PERSISTENT_ACTIONS = "reader_menu_persistent_actions";
     private static final String KEY_READING_TIME_TRACKING_ENABLED = "reading_time_tracking_enabled";
     private static final String KEY_READING_STATS_DEVICE_ID = "reading_stats_device_id";
     private static final String KEY_READER_DOUBLE_PAGE_ENABLED = "reader_double_page_enabled";
@@ -148,6 +149,7 @@ public class SettingsStore {
             KEY_HUD_TOP_MARGIN,
             KEY_HUD_BOTTOM_MARGIN,
             KEY_READER_MENU_AUTO_HIDE,
+            KEY_READER_MENU_PERSISTENT_ACTIONS,
             KEY_READING_TIME_TRACKING_ENABLED,
             KEY_READER_DOUBLE_PAGE_ENABLED,
             KEY_READER_DOUBLE_PAGE_MODE,
@@ -559,6 +561,14 @@ public class SettingsStore {
 
     public void setReaderMenuAutoHideEnabled(boolean enabled) {
         preferences.edit().putBoolean(KEY_READER_MENU_AUTO_HIDE, enabled).apply();
+    }
+
+    public boolean isReaderMenuPersistentActionsEnabled() {
+        return preferences.getBoolean(KEY_READER_MENU_PERSISTENT_ACTIONS, false);
+    }
+
+    public void setReaderMenuPersistentActionsEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_READER_MENU_PERSISTENT_ACTIONS, enabled).apply();
     }
 
     public boolean isReaderDoublePageEnabled() {

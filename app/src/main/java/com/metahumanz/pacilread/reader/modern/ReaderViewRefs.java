@@ -56,6 +56,7 @@ public final class ReaderViewRefs {
     public final Button ttsButton;
     public final Button autoPageButton;
     public final Button themeToggleButton;
+    public final View menuTopActions;
 
     private ReaderViewRefs(Activity activity) {
         readerRoot = activity.findViewById(R.id.reader_root);
@@ -102,6 +103,7 @@ public final class ReaderViewRefs {
         ttsButton = activity.findViewById(R.id.button_tts);
         autoPageButton = activity.findViewById(R.id.button_auto_page);
         themeToggleButton = activity.findViewById(R.id.button_theme_toggle);
+        menuTopActions = activity.findViewById(R.id.menu_top_actions);
     }
 
     public static ReaderViewRefs bind(Activity activity) {
