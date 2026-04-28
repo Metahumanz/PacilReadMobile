@@ -211,8 +211,6 @@ public final class ReaderChromeController {
             views.progressSeekBar.setMax(Math.max(safePageCount - 1, 0));
             views.progressSeekBar.setProgress(state.currentPageIndex);
         }
-        int percent = Math.round(((state.currentChapterIndex + (state.currentPageIndex / (float) safePageCount)) / Math.max(state.chapters.size(), 1)) * 100f);
-        views.readerProgress.setText(percent + "%");
         updateReaderHud();
         styleReaderMenuButton(views.ttsButton, tts != null && tts.isActive());
         styleReaderMenuButton(views.autoPageButton, autoPage != null && autoPage.isActive());
@@ -310,6 +308,12 @@ public final class ReaderChromeController {
         GlassUiHelper.applyToHierarchy(activity, views.menuBottomPanel, runtime.settingsStore.getGlassOpacityPercent());
     }
 
+    public void applyMenuLayoutMode() {
+        boolean persistent = runtime.settingsStore.isReaderMenuPersistentActionsEnabled();
+        views.moreButton.setVisibility(persistent ? View.GONE : View.VISIBLE);
+        views.menuTopActions.setVisibility(persistent ? View.VISIBLE : View.GONE);
+    }
+
     public void updateReaderThemeButtons(Button paper, Button forest, Button night, String current) {
         styleThemeButton(paper, "paper".equals(current));
         styleThemeButton(forest, "forest".equals(current));
@@ -332,6 +336,9 @@ public final class ReaderChromeController {
     public void setControlsVisible(boolean visible) {
         if (visible) {
             state.pendingTapPagingDelta = 0;
+            applyMenuLayoutMode();
+        } else {
+            activity.dismissReaderPopupImmediate();
         }
         if (state.controlsVisible == visible) {
             if (visible) {
@@ -428,15 +435,6 @@ public final class ReaderChromeController {
         applyReaderMenuHierarchy(views.menuTopPanel);
         applyReaderMenuHierarchy(views.menuInfoPanel);
         applyReaderMenuHierarchy(views.menuBottomPanel);
-        if (views.readerProgress != null) {
-            views.readerProgress.setTag(R.id.tag_glass_background, Boolean.FALSE);
-            views.readerProgress.setBackground(createRoundedDrawable(
-                    menuButtonColor,
-                    menuButtonStrokeColor,
-                    resolveDimensionAttr(R.attr.themeRadiusPill, 999)
-            ));
-            views.readerProgress.setTextColor(menuTextColor);
-        }
         styleReaderMenuButton(views.ttsButton, tts != null && tts.isActive());
         styleReaderMenuButton(views.autoPageButton, autoPage != null && autoPage.isActive());
         styleReaderMenuButton(views.themeToggleButton, ThemeModeHelper.isDark(activity.getResources()));

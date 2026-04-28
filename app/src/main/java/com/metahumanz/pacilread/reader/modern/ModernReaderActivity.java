@@ -15,9 +15,11 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.PopupWindow;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -46,6 +48,7 @@ import com.metahumanz.pacilread.reader.modern.ui.ReaderStyleController;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedReaderActivity;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -72,6 +75,8 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private ReaderReadingStatsTracker readingStatsTracker;
     private GestureDetector gestureDetector;
     private BroadcastReceiver sysMetricsReceiver;
+    private PopupWindow readerPopupWindow;
+    private boolean readerPopupDismissingByCode;
     private long lastScrollPageTurnTime;
 
     @Override
@@ -310,6 +315,113 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             }
         });
         views.autoPageButton.setOnClickListener(v -> autoPage.showAutoPageDialog());
+        views.moreButton.setOnClickListener(v -> {
+            if (readerPopupWindow != null && readerPopupWindow.isShowing()) {
+                PopupWindow pw = readerPopupWindow;
+                animatePopupWaterfallClose(pw, () -> {
+                    readerPopupDismissingByCode = true;
+                    pw.dismiss();
+                });
+                return;
+            }
+
+            views.moreButton.animate().rotation(-90f).setDuration(200).start();
+
+            int pad = ui.dp(10);
+            int gap = ui.dp(8);
+            int btnPadH = ui.dp(14);
+            int btnPadV = ui.dp(8);
+            int rowHeight = ui.dp(40) + btnPadV * 2;
+
+            ScrollView scrollView = new ScrollView(this);
+            scrollView.setClipToPadding(false);
+
+            LinearLayout popupContent = new LinearLayout(this);
+            popupContent.setOrientation(LinearLayout.VERTICAL);
+            popupContent.setBackgroundResource(R.drawable.bg_reader_popup_menu);
+            popupContent.setPadding(pad, pad, pad, pad);
+            scrollView.addView(popupContent);
+
+            PopupWindow popupWindow = new PopupWindow(scrollView,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT, false);
+            popupWindow.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+            popupWindow.setOutsideTouchable(false);
+            popupWindow.setOnDismissListener(() -> {
+                views.moreButton.animate().rotation(0f).setDuration(200).start();
+                readerPopupDismissingByCode = false;
+                readerPopupWindow = null;
+            });
+            readerPopupWindow = popupWindow;
+
+            String[][] rows = {
+                    {"搜索", "替换"},
+                    {"排版", "翻页"},
+                    {"听书", "书签"}
+            };
+            List<LinearLayout> rowLayouts = new ArrayList<>();
+            for (int r = 0; r < rows.length; r++) {
+                LinearLayout rowLayout = new LinearLayout(this);
+                rowLayout.setOrientation(LinearLayout.HORIZONTAL);
+                LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                if (r > 0) {
+                    rowLp.topMargin = gap;
+                }
+                popupContent.addView(rowLayout, rowLp);
+                rowLayouts.add(rowLayout);
+
+                for (int c = 0; c < rows[r].length; c++) {
+                    String item = rows[r][c];
+                    Button btn = new Button(this);
+                    btn.setText(item);
+                    btn.setAllCaps(false);
+                    btn.setMinHeight(ui.dp(40));
+                    btn.setMinWidth(0);
+                    btn.setPadding(btnPadH, btnPadV, btnPadH, btnPadV);
+                    chrome.styleReaderMenuButton(btn, false);
+                    btn.setOnClickListener(itemView -> {
+                        readerPopupDismissingByCode = true;
+                        popupWindow.dismiss();
+                        views.moreButton.animate().rotation(0f).setDuration(200).start();
+                        switch (item) {
+                            case "搜索":
+                                libraryDialogs.showSearchDialog();
+                                break;
+                            case "替换":
+                                libraryDialogs.showRulesDialog();
+                                break;
+                            case "排版":
+                                styleDialogs.showStyleDialog(REQUEST_PICK_BACKGROUND);
+                                break;
+                            case "翻页":
+                                autoPage.showAutoPageDialog();
+                                break;
+                            case "听书":
+                                if (state.ttsActive || state.ttsPaused) {
+                                    tts.toggleTts();
+                                } else {
+                                    tts.showTtsDialog();
+                                }
+                                break;
+                            case "书签":
+                                showBookmarkDialog();
+                                break;
+                        }
+                    });
+
+                    LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
+                            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+                    if (c > 0) {
+                        btnLp.leftMargin = gap;
+                    }
+                    rowLayout.addView(btn, btnLp);
+                }
+            }
+
+            popupWindow.showAsDropDown(views.moreButton, 0, 0, Gravity.END);
+            animatePopupWaterfallOpen(rowLayouts, rowHeight);
+        });
         views.readerTitle.setOnClickListener(v -> openReadingStatsForCurrentBook());
         views.pageStage.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
             int width = right - left;
@@ -328,6 +440,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         View.OnTouchListener keepMenuAliveListener = (view, event) -> {
             if (state.controlsVisible && event.getActionMasked() == MotionEvent.ACTION_DOWN) {
                 chrome.scheduleAutoHide();
+                if (readerPopupWindow != null && readerPopupWindow.isShowing()) {
+                    readerPopupDismissingByCode = true;
+                    readerPopupWindow.dismiss();
+                }
             }
             return false;
         };
@@ -480,6 +596,65 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             int firstVisibleOffset = pages.get(ui.clamp(state.currentPageIndex, 0, pages.size() - 1)).start;
             tts.startTtsFrom(state.currentChapterIndex, firstVisibleOffset);
         }, delayMs);
+    }
+
+    public void dismissReaderPopupImmediate() {
+        if (readerPopupWindow != null && readerPopupWindow.isShowing()) {
+            readerPopupDismissingByCode = true;
+            readerPopupWindow.dismiss();
+            views.moreButton.animate().rotation(0f).setDuration(200).start();
+        }
+    }
+
+    private void animatePopupWaterfallOpen(List<LinearLayout> rows, int rowHeight) {
+        int staggerMs = 20;
+        int dropDistance = rowHeight + ui.dp(8);
+        for (int i = 0; i < rows.size(); i++) {
+            LinearLayout row = rows.get(i);
+            row.setTranslationY(-dropDistance);
+            row.setAlpha(0f);
+            row.animate()
+                    .translationY(0f)
+                    .alpha(1f)
+                    .setDuration(120)
+                    .setStartDelay(i * staggerMs)
+                    .start();
+        }
+    }
+
+    private void animatePopupWaterfallClose(PopupWindow popupWindow, Runnable onComplete) {
+        if (popupWindow == null || popupWindow.getContentView() == null) return;
+        View content = popupWindow.getContentView();
+        View popupRoot = content instanceof ScrollView ? ((ScrollView) content).getChildAt(0) : content;
+        if (!(popupRoot instanceof ViewGroup)) {
+            popupWindow.dismiss();
+            if (onComplete != null) onComplete.run();
+            return;
+        }
+        ViewGroup popupContent = (ViewGroup) popupRoot;
+        int childCount = popupContent.getChildCount();
+        if (childCount == 0) {
+            popupWindow.dismiss();
+            if (onComplete != null) onComplete.run();
+            return;
+        }
+        int staggerMs = 18;
+        int riseDistance = ui.dp(40) + ui.dp(8);
+        for (int i = 0; i < childCount; i++) {
+            View child = popupContent.getChildAt(i);
+            if (child instanceof LinearLayout) {
+                child.animate()
+                        .translationY(-riseDistance)
+                        .alpha(0f)
+                        .setDuration(90)
+                        .setStartDelay(i * staggerMs)
+                        .start();
+            }
+        }
+        long totalDuration = (childCount - 1) * staggerMs + 90 + 20;
+        popupContent.postDelayed(() -> {
+            if (onComplete != null) onComplete.run();
+        }, totalDuration);
     }
 
     private void showBookmarkDialog() {

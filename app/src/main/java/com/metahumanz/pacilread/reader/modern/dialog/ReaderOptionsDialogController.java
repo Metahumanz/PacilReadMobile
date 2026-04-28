@@ -62,6 +62,7 @@ public final class ReaderOptionsDialogController {
         refs.titleInput.setText(state.book == null ? "" : state.book.title);
         refs.authorInput.setText(state.book == null ? "" : state.book.author);
         refs.showTitleCheck.setChecked(runtime.settingsStore.isChapterTitleVisible());
+        refs.persistentActionsCheck.setChecked(runtime.settingsStore.isReaderMenuPersistentActionsEnabled());
 
         ArrayAdapter<String> flipAdapter = dialogSupport.buildSpinnerAdapter(new String[]{"覆盖", "平移", "仿真", "滚动", "无动画"});
         refs.flipSpinner.setAdapter(flipAdapter);
@@ -115,6 +116,7 @@ public final class ReaderOptionsDialogController {
             runtime.settingsStore.setFlipSpeed(speedKeys[refs.flipSpeedSpinner.getSelectedItemPosition()]);
             runtime.settingsStore.setReaderSliderMode(sliderMode[0]);
             runtime.settingsStore.setChapterTitleVisible(refs.showTitleCheck.isChecked());
+            runtime.settingsStore.setReaderMenuPersistentActionsEnabled(refs.persistentActionsCheck.isChecked());
             runtime.settingsStore.setHudTopLeft(ReaderOptionCatalog.HUD_KEYS[refs.topLeftSpinner.getSelectedItemPosition()]);
             runtime.settingsStore.setHudTopCenter(ReaderOptionCatalog.HUD_KEYS[refs.topCenterSpinner.getSelectedItemPosition()]);
             runtime.settingsStore.setHudTopRight(ReaderOptionCatalog.HUD_KEYS[refs.topRightSpinner.getSelectedItemPosition()]);
@@ -127,6 +129,7 @@ public final class ReaderOptionsDialogController {
                 content.scheduleReflowAfterLayout(state.currentChapterIndex, anchorOffset);
             } else {
                 chrome.updateReaderLayoutInsets();
+                chrome.applyMenuLayoutMode();
                 chrome.updateUiAfterPageChange();
             }
             runtime.executor.execute(() -> runtime.databaseHelper.updateBookInfo(state.bookId, finalTitle, finalAuthor));
@@ -149,6 +152,7 @@ public final class ReaderOptionsDialogController {
         refs.titleInput.addTextChangedListener(textWatcher);
         refs.authorInput.addTextChangedListener(textWatcher);
         refs.showTitleCheck.setOnCheckedChangeListener((buttonView, isChecked) -> autoApply.run());
+        refs.persistentActionsCheck.setOnCheckedChangeListener((buttonView, isChecked) -> autoApply.run());
         SeekBar.OnSeekBarChangeListener hudMarginSeekListener = new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
@@ -182,9 +186,24 @@ public final class ReaderOptionsDialogController {
         refs.flipSpinner.setOnItemSelectedListener(flipListener);
         refs.flipSpeedSpinner.setOnItemSelectedListener(flipListener);
 
+        final Spinner[] allHudSpinners = {
+                refs.topLeftSpinner, refs.topCenterSpinner, refs.topRightSpinner,
+                refs.bottomLeftSpinner, refs.bottomCenterSpinner, refs.bottomRightSpinner
+        };
+        final boolean[] isAdjustingHudSpinners = new boolean[]{false};
+
         android.widget.AdapterView.OnItemSelectedListener hudListener = new android.widget.AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                if (position > 0 && !isAdjustingHudSpinners[0]) {
+                    isAdjustingHudSpinners[0] = true;
+                    for (Spinner spinner : allHudSpinners) {
+                        if (spinner != parent && spinner.getSelectedItemPosition() == position) {
+                            spinner.setSelection(0, false);
+                        }
+                    }
+                    isAdjustingHudSpinners[0] = false;
+                }
                 autoApply.run();
             }
 
@@ -226,6 +245,7 @@ public final class ReaderOptionsDialogController {
         final EditText authorInput;
         final View contentContainer;
         final CheckBox showTitleCheck;
+        final CheckBox persistentActionsCheck;
         final Spinner flipSpinner;
         final Spinner flipSpeedSpinner;
         final Button sliderBookButton;
@@ -246,6 +266,7 @@ public final class ReaderOptionsDialogController {
             titleInput = root.findViewById(R.id.options_input_title);
             authorInput = root.findViewById(R.id.options_input_author);
             showTitleCheck = root.findViewById(R.id.options_check_show_title);
+            persistentActionsCheck = root.findViewById(R.id.options_check_persistent_actions);
             flipSpinner = root.findViewById(R.id.options_spinner_flip_mode);
             flipSpeedSpinner = root.findViewById(R.id.options_spinner_flip_speed);
             sliderBookButton = root.findViewById(R.id.options_button_slider_book);

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew.bat assembleDebug --no-daemon --console plain)"
+    ]
+  }
+}

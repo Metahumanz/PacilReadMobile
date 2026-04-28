@@ -41,7 +41,7 @@ public final class ReaderViewRefs {
     public final TextView hudBottomCenter;
     public final TextView hudBottomRight;
     public final TextView readerTitle;
-    public final TextView readerProgress;
+    public final Button moreButton;
     public final TextView chapterMeta;
     public final TextView pageMeta;
     public final TextView pageTitleCurrent;
@@ -56,6 +56,7 @@ public final class ReaderViewRefs {
     public final Button ttsButton;
     public final Button autoPageButton;
     public final Button themeToggleButton;
+    public final View menuTopActions;
 
     private ReaderViewRefs(Activity activity) {
         readerRoot = activity.findViewById(R.id.reader_root);
@@ -87,7 +88,7 @@ public final class ReaderViewRefs {
         hudBottomCenter = activity.findViewById(R.id.text_hud_bottom_center);
         hudBottomRight = activity.findViewById(R.id.text_hud_bottom_right);
         readerTitle = activity.findViewById(R.id.text_reader_title);
-        readerProgress = activity.findViewById(R.id.text_progress);
+        moreButton = activity.findViewById(R.id.button_more);
         chapterMeta = activity.findViewById(R.id.text_chapter_meta);
         pageMeta = activity.findViewById(R.id.text_page_meta);
         pageTitleCurrent = activity.findViewById(R.id.text_page_title_current);
@@ -102,6 +103,7 @@ public final class ReaderViewRefs {
         ttsButton = activity.findViewById(R.id.button_tts);
         autoPageButton = activity.findViewById(R.id.button_auto_page);
         themeToggleButton = activity.findViewById(R.id.button_theme_toggle);
+        menuTopActions = activity.findViewById(R.id.menu_top_actions);
     }
 
     public static ReaderViewRefs bind(Activity activity) {
