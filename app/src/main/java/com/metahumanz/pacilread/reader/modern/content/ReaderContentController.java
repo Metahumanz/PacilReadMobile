@@ -201,16 +201,17 @@ public final class ReaderContentController {
         state.book.progressIndex = chapterOrderIndex;
         state.book.progressOffset = offset;
         state.book.lastReadAt = persistedAt;
-        runtime.executor.execute(() -> {
-            runtime.databaseHelper.updateProgress(state.book.id, chapterOrderIndex, offset);
-            if (runtime.settingsStore.isWebDavEnabled()) {
+        // 数据库更新必须在主线程同步完成，防止 onDestroy 中 executor.shutdownNow() 中断写入
+        runtime.databaseHelper.updateProgress(state.book.id, chapterOrderIndex, offset);
+        if (runtime.settingsStore.isWebDavEnabled()) {
+            runtime.executor.execute(() -> {
                 try {
                     runtime.webDavClient.ensureProgressDirectory();
                     runtime.webDavClient.uploadProgress(state.book, chapter, offset);
                 } catch (Exception ignore) {
                 }
-            }
-        });
+            });
+        }
     }
 
     public void scheduleProgressSave() {
