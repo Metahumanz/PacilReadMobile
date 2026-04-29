@@ -8,6 +8,7 @@ import android.graphics.Insets;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -15,6 +16,7 @@ import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.widget.ArrayAdapter;
+import android.widget.FrameLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.window.BackEvent;
@@ -130,6 +132,73 @@ public final class ReaderDialogSupport {
             );
             return windowInsets;
         });
+    }
+
+    public void addAlignedCloseButton(
+            View contentView,
+            int titleViewId,
+            View contentContainer,
+            AlertDialog dialog
+    ) {
+        if (!(contentView instanceof FrameLayout) || contentContainer == null || dialog == null) {
+            return;
+        }
+        View titleView = contentView.findViewById(titleViewId);
+        if (titleView == null) {
+            return;
+        }
+        FrameLayout root = (FrameLayout) contentView;
+        TextView closeButton = new TextView(activity);
+        closeButton.setText("×");
+        closeButton.setTextSize(20f);
+        closeButton.setTextColor(ui.themeColor(R.color.on_surface));
+        closeButton.setGravity(Gravity.CENTER);
+        closeButton.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        closeButton.setContentDescription("关闭");
+        closeButton.setOnClickListener(v -> dialog.dismiss());
+
+        int size = ui.dp(48);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(size, size);
+        params.gravity = Gravity.TOP | Gravity.START;
+        root.addView(closeButton, params);
+
+        Runnable position = () -> positionAlignedCloseButton(root, titleView, contentContainer, closeButton, size);
+        root.post(position);
+        root.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> position.run());
+        titleView.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> position.run());
+        contentContainer.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> position.run());
+    }
+
+    private void positionAlignedCloseButton(
+            FrameLayout root,
+            View titleView,
+            View contentContainer,
+            View closeButton,
+            int size
+    ) {
+        if (root.getWidth() <= 0 || titleView.getWidth() <= 0 || contentContainer.getWidth() <= 0) {
+            return;
+        }
+        int[] rootLocation = new int[2];
+        int[] titleLocation = new int[2];
+        int[] containerLocation = new int[2];
+        root.getLocationOnScreen(rootLocation);
+        titleView.getLocationOnScreen(titleLocation);
+        contentContainer.getLocationOnScreen(containerLocation);
+
+        int titleCenterY = titleLocation[1] - rootLocation[1] + titleView.getHeight() / 2;
+        int contentRight = containerLocation[0] - rootLocation[0]
+                + contentContainer.getWidth()
+                - contentContainer.getPaddingRight();
+        int left = Math.max(0, contentRight - size);
+        int top = Math.max(0, titleCenterY - size / 2);
+
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) closeButton.getLayoutParams();
+        if (params.leftMargin != left || params.topMargin != top) {
+            params.leftMargin = left;
+            params.topMargin = top;
+            closeButton.setLayoutParams(params);
+        }
     }
 
     public void showImmersiveFullscreenDialog(AlertDialog dialog, boolean restoreShowSystemBars) {

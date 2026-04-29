@@ -101,6 +101,7 @@ public final class ReaderNavigationController {
             content.scheduleProgressSave();
             chrome.scheduleAutoHide();
             paging.schedulePagingSnapshotWarmup();
+            views.pageCurrent.post(activity::onReaderPageReadyForLaunchPreview);
             return;
         }
         bindIncomingSpread(safeChapterIndex, safePageIndex);

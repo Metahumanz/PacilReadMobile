@@ -52,23 +52,45 @@ public final class LaunchSourceTransition {
         final long durationMs;
         final float snapshotFadeStartFraction;
         final Interpolator interpolator;
+        final boolean enterUsesSnapshotOverlay;
+        final boolean enterFadesContent;
 
-        private Options(long durationMs, float snapshotFadeStartFraction, Interpolator interpolator) {
+        private Options(
+                long durationMs,
+                float snapshotFadeStartFraction,
+                Interpolator interpolator,
+                boolean enterUsesSnapshotOverlay,
+                boolean enterFadesContent
+        ) {
             this.durationMs = durationMs;
             this.snapshotFadeStartFraction = clampOption(snapshotFadeStartFraction, 0f, 1f);
             this.interpolator = interpolator;
+            this.enterUsesSnapshotOverlay = enterUsesSnapshotOverlay;
+            this.enterFadesContent = enterFadesContent;
         }
 
         public static Options defaults() {
-            return new Options(260L, 0.5f, new DecelerateInterpolator());
+            return new Options(260L, 0.5f, new DecelerateInterpolator(), true, true);
         }
 
         public Options withDuration(long durationMs) {
-            return new Options(durationMs, snapshotFadeStartFraction, interpolator);
+            return new Options(durationMs, snapshotFadeStartFraction, interpolator,
+                    enterUsesSnapshotOverlay, enterFadesContent);
         }
 
         public Options withSnapshotFadeStartFraction(float fraction) {
-            return new Options(durationMs, fraction, interpolator);
+            return new Options(durationMs, fraction, interpolator,
+                    enterUsesSnapshotOverlay, enterFadesContent);
+        }
+
+        public Options withEnterSnapshotOverlay(boolean useSnapshotOverlay) {
+            return new Options(durationMs, snapshotFadeStartFraction, interpolator,
+                    useSnapshotOverlay, enterFadesContent);
+        }
+
+        public Options withEnterContentFade(boolean fadeContent) {
+            return new Options(durationMs, snapshotFadeStartFraction, interpolator,
+                    enterUsesSnapshotOverlay, fadeContent);
         }
 
         private static float clampOption(float value, float min, float max) {
@@ -265,6 +287,92 @@ public final class LaunchSourceTransition {
         return true;
     }
 
+    public static boolean animateExitToSourceWithClip(
+            View targetView,
+            Source source,
+            Options options,
+            Runnable onComplete
+    ) {
+        Rect targetBounds = source == null ? null : source.bounds;
+        if (targetView == null || targetBounds == null || targetBounds.width() <= 0 || targetBounds.height() <= 0) {
+            return false;
+        }
+        if (targetView.getWidth() <= 0 || targetView.getHeight() <= 0) {
+            return false;
+        }
+
+        ScreenCornerClipper.apply(targetView);
+        targetView.animate().cancel();
+
+        float pivotX = targetView.getWidth() / 2f;
+        float pivotY = targetView.getHeight() / 2f;
+        targetView.setPivotX(pivotX);
+        targetView.setPivotY(pivotY);
+
+        int[] targetLocation = untransformedLocationOnScreen(targetView);
+        float startScaleX = clampScale(targetView.getScaleX());
+        float startScaleY = clampScale(targetView.getScaleY());
+        float startTransX = targetView.getTranslationX();
+        float startTransY = targetView.getTranslationY();
+        float startAlpha = targetView.getAlpha();
+
+        float destinationCenterX = targetBounds.centerX() - targetLocation[0];
+        float destinationCenterY = targetBounds.centerY() - targetLocation[1];
+        float destTransX = destinationCenterX - pivotX;
+        float destTransY = destinationCenterY - pivotY;
+        float finalClipWidth = Math.min(targetView.getWidth(), Math.max(1f, targetBounds.width() / startScaleX));
+        float finalClipHeight = Math.min(targetView.getHeight(), Math.max(1f, targetBounds.height() / startScaleY));
+
+        Rect startClip = targetView.getClipBounds();
+        if (startClip == null) {
+            startClip = new Rect(0, 0, targetView.getWidth(), targetView.getHeight());
+        }
+        Rect endClip = new Rect(
+                Math.round(pivotX - finalClipWidth / 2f),
+                Math.round(pivotY - finalClipHeight / 2f),
+                Math.round(pivotX + finalClipWidth / 2f),
+                Math.round(pivotY + finalClipHeight / 2f)
+        );
+        clampRectToView(endClip, targetView.getWidth(), targetView.getHeight());
+
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        animator.setDuration(options.durationMs);
+        animator.setInterpolator(options.interpolator);
+        Rect animatedClip = new Rect(startClip);
+        Rect finalStartClip = new Rect(startClip);
+        animator.addUpdateListener(animation -> {
+            float fraction = animation.getAnimatedFraction();
+            targetView.setScaleX(startScaleX);
+            targetView.setScaleY(startScaleY);
+            targetView.setTranslationX(lerp(startTransX, destTransX, fraction));
+            targetView.setTranslationY(lerp(startTransY, destTransY, fraction));
+
+            animatedClip.set(
+                    Math.round(lerp(finalStartClip.left, endClip.left, fraction)),
+                    Math.round(lerp(finalStartClip.top, endClip.top, fraction)),
+                    Math.round(lerp(finalStartClip.right, endClip.right, fraction)),
+                    Math.round(lerp(finalStartClip.bottom, endClip.bottom, fraction))
+            );
+            targetView.setClipBounds(animatedClip);
+
+            float fadeStart = Math.min(0.55f, options.snapshotFadeStartFraction);
+            float alpha = fraction < fadeStart
+                    ? startAlpha
+                    : lerp(startAlpha, 0f, (fraction - fadeStart) / Math.max(1f - fadeStart, 0.001f));
+            targetView.setAlpha(clampAlpha(alpha));
+        });
+        animator.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(android.animation.Animator animation) {
+                if (onComplete != null) {
+                    onComplete.run();
+                }
+            }
+        });
+        animator.start();
+        return true;
+    }
+
     // ==================== 进入动画（从来源放大到全屏） ====================
 
     public static boolean animateEnterFromSource(
@@ -296,17 +404,18 @@ public final class LaunchSourceTransition {
         float startTranslationX = sourceCenterX - pivotX;
         float startTranslationY = sourceCenterY - pivotY;
 
-        // 设置起始状态：从来源位置/尺寸开始，内容透明
+        // 设置起始状态：从来源位置/尺寸开始
         targetView.setScaleX(sourceScaleX);
         targetView.setScaleY(sourceScaleY);
         targetView.setTranslationX(startTranslationX);
         targetView.setTranslationY(startTranslationY);
-        targetView.setAlpha(0f);
+        targetView.setAlpha(options.enterFadesContent ? 0f : 1f);
 
-        // 来源快照覆盖层（初始在来源位置/大小，alpha=1）
-        ImageView snapshotView = createEnterSnapshotOverlay(
-                targetView, source, targetLocation, sourceScaleX, sourceScaleY,
-                startTranslationX, startTranslationY, pivotX, pivotY);
+        ImageView snapshotView = options.enterUsesSnapshotOverlay
+                ? createEnterSnapshotOverlay(
+                        targetView, source, targetLocation, sourceScaleX, sourceScaleY,
+                        startTranslationX, startTranslationY, pivotX, pivotY)
+                : null;
 
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(options.durationMs);
@@ -317,7 +426,7 @@ public final class LaunchSourceTransition {
             targetView.setScaleY(lerp(sourceScaleY, 1f, fraction));
             targetView.setTranslationX(lerp(startTranslationX, 0f, fraction));
             targetView.setTranslationY(lerp(startTranslationY, 0f, fraction));
-            targetView.setAlpha(clampAlpha(fraction));
+            targetView.setAlpha(options.enterFadesContent ? clampAlpha(fraction) : 1f);
 
             if (snapshotView != null) {
                 snapshotView.setScaleX(targetView.getScaleX());
@@ -476,6 +585,27 @@ public final class LaunchSourceTransition {
 
     private static float clampAlpha(float alpha) {
         return Math.max(0f, Math.min(1f, alpha));
+    }
+
+    private static void clampRectToView(Rect rect, int width, int height) {
+        int rectWidth = Math.max(1, rect.width());
+        int rectHeight = Math.max(1, rect.height());
+        if (rect.left < 0) {
+            rect.left = 0;
+            rect.right = Math.min(width, rectWidth);
+        }
+        if (rect.top < 0) {
+            rect.top = 0;
+            rect.bottom = Math.min(height, rectHeight);
+        }
+        if (rect.right > width) {
+            rect.right = width;
+            rect.left = Math.max(0, width - rectWidth);
+        }
+        if (rect.bottom > height) {
+            rect.bottom = height;
+            rect.top = Math.max(0, height - rectHeight);
+        }
     }
 
     private static float lerp(float start, float end, float fraction) {

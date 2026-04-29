@@ -311,6 +311,7 @@ public final class ReaderStyleDialogController {
         }));
 
         AlertDialog dialog = new AlertDialog.Builder(activity).setView(contentView).create();
+        dialogSupport.addAlignedCloseButton(contentView, R.id.style_title, refs.contentContainer, dialog);
         contentView.findViewById(R.id.style_button_pick_background).setOnClickListener(v -> style.openBackgroundPicker(backgroundPickerRequestCode));
         contentView.findViewById(R.id.style_button_clear_background).setOnClickListener(v -> {
             FileAssetHelper.deleteIfExists(runtime.settingsStore.getReaderBackgroundPath());

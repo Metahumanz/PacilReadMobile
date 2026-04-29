@@ -6,6 +6,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.os.Build;
 import android.os.BatteryManager;
 import android.os.Bundle;
 import android.view.GestureDetector;
@@ -18,6 +22,8 @@ import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.ScrollView;
@@ -82,6 +88,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private boolean readerPopupDismissingByCode;
     private boolean readerExitFinishing;
     private boolean readerEnterAnimationStarted;
+    private boolean readerExitFromBackGesture;
+    private ImageView launchPreviewOverlay;
+    private View transitionStatusBarMask;
+    private Runnable launchPreviewSaveRunnable;
     private LaunchSourceTransition.Source launchSource;
     private long lastScrollPageTurnTime;
 
@@ -98,6 +108,8 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         state.pagingTouchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
         state.bookId = getIntent().getLongExtra("book_id", -1L);
         launchSource = LaunchSourceTransition.fromIntentSource(getIntent());
+        state.deferSystemBarsForTransition = hasLaunchSource();
+        state.deferredSystemBarsVisible = false;
         state.requestedChapterOrderIndex = getIntent().getIntExtra("bookmark_chapter_order_index", -1);
         state.requestedChapterOffset = getIntent().getIntExtra("bookmark_chapter_offset", -1);
         if (savedInstanceState != null) {
@@ -112,28 +124,35 @@ public class ModernReaderActivity extends ThemedReaderActivity {
 
         chrome.configureReaderWindow();
         chrome.applyEdgeToEdgeInsets();
+        style.applyReaderSettings();
         setupGestures();
         setupControls();
         installPredictiveBack();
 
-        if (launchSource != null && launchSource.bounds() != null) {
+        if (hasLaunchSource()) {
             ActivityTransitionCompat.overrideOpen(this, 0, 0);
-            views.readerRoot.setAlpha(0f);
+            views.readerRoot.setAlpha(1f);
             views.readerRoot.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
                 @Override
                 public boolean onPreDraw() {
                     views.readerRoot.getViewTreeObserver().removeOnPreDrawListener(this);
                     if (readerExitFinishing || readerEnterAnimationStarted) return true;
                     readerEnterAnimationStarted = true;
+                    beginEnterStatusBarMask();
                     LaunchSourceTransition.animateEnterFromSource(
                             views.readerRoot,
                             launchSource,
-                            280L,
-                            null
+                            LaunchSourceTransition.Options.defaults()
+                                    .withDuration(280L)
+                                    .withEnterSnapshotOverlay(false)
+                                    .withEnterContentFade(false),
+                            ModernReaderActivity.this::finishEnterStatusBarMask
                     );
                     return true;
                 }
             });
+        } else {
+            chrome.setSystemBarsTransitionDeferred(false);
         }
 
         state.sessionStartTime = System.currentTimeMillis();
@@ -266,6 +285,194 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         if (requestCode == REQUEST_PICK_BACKGROUND) {
             style.attachBackground(data.getData());
         }
+    }
+
+    private boolean hasLaunchSource() {
+        return launchSource != null && launchSource.bounds() != null;
+    }
+
+    private void installLaunchPreviewOverlay() {
+        if (!(views.readerRoot instanceof ViewGroup)
+                || views.readerRoot.getWidth() <= 0
+                || views.readerRoot.getHeight() <= 0) {
+            return;
+        }
+        String key = ReaderLaunchPreviewCache.buildKey(
+                this,
+                runtime.settingsStore,
+                views.readerRoot.getWidth(),
+                views.readerRoot.getHeight()
+        );
+        Bitmap preview = ReaderLaunchPreviewCache.load(this, state.bookId, key);
+        if (preview == null) {
+            return;
+        }
+        ImageView overlay = new ImageView(this);
+        overlay.setImageBitmap(preview);
+        overlay.setScaleType(ImageView.ScaleType.FIT_XY);
+        overlay.setAlpha(1f);
+        overlay.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        ((ViewGroup) views.readerRoot).addView(overlay, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+        launchPreviewOverlay = overlay;
+    }
+
+    private void scheduleLaunchPreviewSave() {
+        if (runtime == null || runtime.mainHandler == null) {
+            return;
+        }
+        if (launchPreviewSaveRunnable != null) {
+            runtime.mainHandler.removeCallbacks(launchPreviewSaveRunnable);
+        }
+        launchPreviewSaveRunnable = this::saveLaunchPreviewNow;
+        runtime.mainHandler.postDelayed(launchPreviewSaveRunnable, 800L);
+    }
+
+    private void saveLaunchPreviewNow() {
+        if (runtime == null
+                || views == null
+                || views.readerRoot == null
+                || state == null
+                || state.bookId <= 0
+                || views.readerRoot.getWidth() <= 0
+                || views.readerRoot.getHeight() <= 0
+                || launchPreviewOverlay != null
+                || transitionStatusBarMask != null
+                || readerExitFinishing
+                || state.isAnimating
+                || state.interactivePaging
+                || views.readerRoot.getAlpha() < 0.99f
+                || Math.abs(views.readerRoot.getScaleX() - 1f) > 0.01f
+                || Math.abs(views.readerRoot.getScaleY() - 1f) > 0.01f) {
+            return;
+        }
+        if (launchPreviewSaveRunnable != null && runtime.mainHandler != null) {
+            runtime.mainHandler.removeCallbacks(launchPreviewSaveRunnable);
+            launchPreviewSaveRunnable = null;
+        }
+        String key = ReaderLaunchPreviewCache.buildKey(
+                this,
+                runtime.settingsStore,
+                views.readerRoot.getWidth(),
+                views.readerRoot.getHeight()
+        );
+        Bitmap bitmap;
+        try {
+            bitmap = Bitmap.createBitmap(
+                    views.readerRoot.getWidth(),
+                    views.readerRoot.getHeight(),
+                    Bitmap.Config.RGB_565
+            );
+            Canvas canvas = new Canvas(bitmap);
+            views.readerRoot.draw(canvas);
+        } catch (RuntimeException ignored) {
+            return;
+        }
+        long bookId = state.bookId;
+        Context appContext = getApplicationContext();
+        runtime.executor.execute(() -> ReaderLaunchPreviewCache.saveBitmap(appContext, bookId, key, bitmap));
+    }
+
+    private void beginEnterStatusBarMask() {
+        View mask = showTransitionStatusBarMask(0f);
+        if (mask == null) {
+            chrome.setSystemBarsTransitionDeferred(false);
+            return;
+        }
+        mask.animate().cancel();
+        mask.animate()
+                .alpha(1f)
+                .setDuration(110L)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                .withEndAction(() -> chrome.setSystemBarsTransitionDeferred(false))
+                .start();
+    }
+
+    private void finishEnterStatusBarMask() {
+        if (transitionStatusBarMask == null) {
+            return;
+        }
+        transitionStatusBarMask.animate().cancel();
+        transitionStatusBarMask.animate()
+                .alpha(0f)
+                .setDuration(150L)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                .withEndAction(this::removeTransitionStatusBarMask)
+                .start();
+    }
+
+    private View showTransitionStatusBarMask(float alpha) {
+        int height = transitionStatusBarHeight();
+        if (height <= 0) {
+            return null;
+        }
+        FrameLayout contentRoot = findViewById(android.R.id.content);
+        if (contentRoot == null) {
+            return null;
+        }
+        if (transitionStatusBarMask == null) {
+            transitionStatusBarMask = new View(this);
+            transitionStatusBarMask.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    height,
+                    Gravity.TOP
+            );
+            contentRoot.addView(transitionStatusBarMask, params);
+        } else if (transitionStatusBarMask.getParent() == null) {
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    height,
+                    Gravity.TOP
+            );
+            contentRoot.addView(transitionStatusBarMask, params);
+        } else {
+            ViewGroup.LayoutParams params = transitionStatusBarMask.getLayoutParams();
+            if (params != null && params.height != height) {
+                params.height = height;
+                transitionStatusBarMask.setLayoutParams(params);
+            }
+        }
+        transitionStatusBarMask.setBackgroundColor(statusBarMaskColor());
+        transitionStatusBarMask.setAlpha(alpha);
+        transitionStatusBarMask.bringToFront();
+        return transitionStatusBarMask;
+    }
+
+    private void removeTransitionStatusBarMask() {
+        if (transitionStatusBarMask != null && transitionStatusBarMask.getParent() instanceof ViewGroup) {
+            ((ViewGroup) transitionStatusBarMask.getParent()).removeView(transitionStatusBarMask);
+        }
+        transitionStatusBarMask = null;
+    }
+
+    private int transitionStatusBarHeight() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            android.view.WindowInsets insets = getWindow().getDecorView().getRootWindowInsets();
+            if (insets != null) {
+                int top = insets.getInsetsIgnoringVisibility(android.view.WindowInsets.Type.statusBars()).top;
+                if (top > 0) {
+                    return top;
+                }
+            }
+        }
+        if (state != null && state.systemInsetTop > 0) {
+            return state.systemInsetTop;
+        }
+        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        if (resourceId > 0) {
+            return getResources().getDimensionPixelSize(resourceId);
+        }
+        return Math.round(24f * getResources().getDisplayMetrics().density);
+    }
+
+    private int statusBarMaskColor() {
+        if (state != null && Color.alpha(state.currentReaderPageColor) > 0) {
+            return state.currentReaderPageColor;
+        }
+        return Color.BLACK;
     }
 
     private void initializeControllers() {
@@ -509,6 +716,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
 
                     @Override
                     public boolean commitBackFromGesture() {
+                        readerExitFromBackGesture = true;
                         return true;
                     }
                 });
@@ -543,8 +751,17 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             finishReaderActivityNow();
             return;
         }
+        removeTransitionStatusBarMask();
         LaunchSourceTransition.Options options = LaunchSourceTransition.Options.defaults()
                 .withDuration(260L);
+        if (readerExitFromBackGesture && LaunchSourceTransition.animateExitToSourceWithClip(
+                views.readerRoot,
+                launchSource,
+                options,
+                this::finishReaderActivityNow
+        )) {
+            return;
+        }
         if (LaunchSourceTransition.animateExitToSource(
                 views.readerRoot,
                 launchSource,
@@ -559,6 +776,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private void animateReaderExitToCenter() {
         float minScale = PredictiveBackScaleController.READER_MIN_SCALE;
         views.readerRoot.animate().cancel();
+        removeTransitionStatusBarMask();
         views.readerRoot.animate()
                 .scaleX(minScale)
                 .scaleY(minScale)
@@ -572,6 +790,8 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     }
 
     private void finishReaderActivityNow() {
+        removeTransitionStatusBarMask();
+        chrome.setSystemBarsTransitionDeferred(false);
         if (content != null) {
             content.persistProgress();
         }
@@ -693,6 +913,27 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         if (readingStatsTracker != null) {
             readingStatsTracker.bindBook(state.book);
         }
+    }
+
+    public void onReaderPageReadyForLaunchPreview() {
+        if (launchPreviewOverlay != null && launchPreviewOverlay.getParent() instanceof ViewGroup) {
+            ImageView overlay = launchPreviewOverlay;
+            launchPreviewOverlay = null;
+            overlay.animate().cancel();
+            overlay.animate()
+                    .alpha(0f)
+                    .setDuration(140L)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                    .withEndAction(() -> {
+                        if (overlay.getParent() instanceof ViewGroup) {
+                            ((ViewGroup) overlay.getParent()).removeView(overlay);
+                        }
+                        scheduleLaunchPreviewSave();
+                    })
+                    .start();
+            return;
+        }
+        scheduleLaunchPreviewSave();
     }
 
     public void openReadingStatsForCurrentBook() {

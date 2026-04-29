@@ -1,16 +1,12 @@
 package com.metahumanz.pacilread.reader.modern.dialog;
 
 import android.app.AlertDialog;
-import android.content.res.Configuration;
-import android.graphics.Insets;
 import android.graphics.Typeface;
-import android.os.Build;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowInsets;
 import android.widget.AbsListView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -81,33 +77,8 @@ public final class ReaderLibraryDialogs {
         final boolean[] scrubberDragging = new boolean[]{false};
         final int[] lastDraggedIndex = new int[]{-1};
         AlertDialog dialog = new AlertDialog.Builder(activity).setView(contentView).create();
-        contentView.setOnApplyWindowInsetsListener((view, windowInsets) -> {
-            int leftInset;
-            int topInset;
-            int rightInset;
-            int bottomInset;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                Insets systemBars = windowInsets.getInsets(WindowInsets.Type.systemBars());
-                Insets cutout = windowInsets.getInsets(WindowInsets.Type.displayCutout());
-                boolean landscape = view.getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
-                leftInset = landscape ? systemBars.left : Math.max(systemBars.left, cutout.left);
-                topInset = Math.max(systemBars.top, cutout.top);
-                rightInset = landscape ? systemBars.right : Math.max(systemBars.right, cutout.right);
-                bottomInset = Math.max(systemBars.bottom, cutout.bottom);
-            } else {
-                leftInset = windowInsets.getSystemWindowInsetLeft();
-                topInset = windowInsets.getSystemWindowInsetTop();
-                rightInset = windowInsets.getSystemWindowInsetRight();
-                bottomInset = windowInsets.getSystemWindowInsetBottom();
-            }
-            contentContainer.setPadding(
-                    ui.dp(20) + leftInset,
-                    ui.dp(18) + topInset,
-                    ui.dp(16) + rightInset,
-                    ui.dp(16) + bottomInset
-            );
-            return windowInsets;
-        });
+        dialogSupport.applyTocStyleFullscreenInsets(contentView, contentContainer);
+        dialogSupport.addAlignedCloseButton(contentView, R.id.toc_title, contentContainer, dialog);
         listView.setOnItemClickListener((parent, view, position, id) -> {
             dialog.dismiss();
             navigation.openChapterFromStart(position, true, position >= state.currentChapterIndex ? 1 : -1);
