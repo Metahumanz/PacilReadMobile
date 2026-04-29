@@ -21,6 +21,7 @@ import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedActivity;
+import com.metahumanz.pacilread.ui.LaunchSourceTransition;
 import com.metahumanz.pacilread.util.FileAssetHelper;
 
 import java.io.File;
@@ -229,7 +230,7 @@ public class BookshelfActivity extends ThemedActivity {
             }
             BookRecord book = gridAdapter.getItem(position);
             if (book != null) {
-                openBook(book.id);
+                openBook(book.id, view);
             }
         });
         gridBooks.setOnItemLongClickListener((parent, view, position, id) -> {
@@ -250,7 +251,7 @@ public class BookshelfActivity extends ThemedActivity {
                 openPicker();
                 return;
             }
-            openBook(listAdapter.getItem(position).id);
+            openBook(listAdapter.getItem(position).id, view);
         });
         listBooks.setOnItemLongClickListener((parent, view, position, id) -> {
             if (position >= listAdapter.getCount()) {
@@ -538,8 +539,13 @@ public class BookshelfActivity extends ThemedActivity {
     }
 
     private void openBook(long bookId) {
+        openBook(bookId, null);
+    }
+
+    private void openBook(long bookId, View sourceView) {
         Intent intent = new Intent(this, ReaderActivity.class);
         intent.putExtra("book_id", bookId);
+        LaunchSourceTransition.attach(intent, sourceView);
         startActivity(intent);
     }
 
