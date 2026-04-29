@@ -70,6 +70,7 @@ public final class ReaderContentController {
     private int pendingReflowChapterIndex = -1;
     private int pendingReflowAnchorOffset = 0;
     private int reflowGeneration = 0;
+    private boolean initialReflowPending = false;
     private Boolean lastAppliedDoublePageActive = null;
 
     public ReaderContentController(
@@ -126,7 +127,7 @@ public final class ReaderContentController {
             state.sessionStartOffset = initialAnchorOffset;
             style.applyReaderSettings();
             activity.onReaderBookLoaded();
-            scheduleReflowAfterLayout(targetChapterIndex, initialAnchorOffset);
+            scheduleInitialReflowAfterLayout(targetChapterIndex, initialAnchorOffset);
             return;
         }
 
@@ -138,7 +139,7 @@ public final class ReaderContentController {
                 activity.runOnUiThread(() -> {
                     if (loadedBook == null || loadedChapters.isEmpty()) {
                         ui.showToast("书籍不存在或内容为空");
-                        activity.finish();
+                        activity.finishReaderActivity();
                         return;
                     }
 
@@ -177,14 +178,14 @@ public final class ReaderContentController {
                     state.sessionStartOffset = initialAnchorOffset;
                     style.applyReaderSettings();
                     activity.onReaderBookLoaded();
-                    scheduleReflowAfterLayout(targetChapterIndex, initialAnchorOffset);
+                    scheduleInitialReflowAfterLayout(targetChapterIndex, initialAnchorOffset);
                     runtime.mainHandler.postDelayed(() -> syncFromWebDav(true), 2000L);
                 });
             } catch (Exception error) {
                 Log.e(TAG, "Failed to load reader state", error);
                 activity.runOnUiThread(() -> {
                     ui.showToast("打开书籍失败: " + readableError(error));
-                    activity.finish();
+                    activity.finishReaderActivity();
                 });
             }
         });
@@ -201,16 +202,17 @@ public final class ReaderContentController {
         state.book.progressIndex = chapterOrderIndex;
         state.book.progressOffset = offset;
         state.book.lastReadAt = persistedAt;
-        runtime.executor.execute(() -> {
-            runtime.databaseHelper.updateProgress(state.book.id, chapterOrderIndex, offset);
-            if (runtime.settingsStore.isWebDavEnabled()) {
+        // 数据库更新必须在主线程同步完成，防止 onDestroy 中 executor.shutdownNow() 中断写入
+        runtime.databaseHelper.updateProgress(state.book.id, chapterOrderIndex, offset);
+        if (runtime.settingsStore.isWebDavEnabled()) {
+            runtime.executor.execute(() -> {
                 try {
                     runtime.webDavClient.ensureProgressDirectory();
                     runtime.webDavClient.uploadProgress(state.book, chapter, offset);
                 } catch (Exception ignore) {
                 }
-            }
-        });
+            });
+        }
     }
 
     public void scheduleProgressSave() {
@@ -542,6 +544,21 @@ public final class ReaderContentController {
         if (state.book == null || state.chapters.isEmpty()) {
             return;
         }
+        if (initialReflowPending) {
+            reflowGeneration++;
+            runtime.mainHandler.removeCallbacks(scheduledReflowRunnable);
+            runtime.mainHandler.postDelayed(scheduledReflowRunnable, REFLOW_DEBOUNCE_MS);
+            return;
+        }
+        scheduleReflowAfterLayoutInternal(chapterIndex, anchorOffset);
+    }
+
+    private void scheduleInitialReflowAfterLayout(int chapterIndex, int anchorOffset) {
+        initialReflowPending = true;
+        scheduleReflowAfterLayoutInternal(chapterIndex, anchorOffset);
+    }
+
+    private void scheduleReflowAfterLayoutInternal(int chapterIndex, int anchorOffset) {
         if (state.restoredChapterIndex >= 0 && state.restoredProgressOffset >= 0) {
             pendingReflowChapterIndex = ui.clamp(state.restoredChapterIndex, 0, state.chapters.size() - 1);
             pendingReflowAnchorOffset = Math.max(state.restoredProgressOffset, 0);
@@ -562,6 +579,7 @@ public final class ReaderContentController {
     }
 
     public void cancelPendingReflow() {
+        initialReflowPending = false;
         reflowGeneration++;
         runtime.mainHandler.removeCallbacks(scheduledReflowRunnable);
     }
@@ -692,6 +710,7 @@ public final class ReaderContentController {
         final int chapterIndex = ui.clamp(pendingReflowChapterIndex, 0, state.chapters.size() - 1);
         final int anchorOffset = Math.max(pendingReflowAnchorOffset, 0);
         final boolean shouldResetInitialPosition = hasInitialPositionRequest();
+        final boolean completingInitialReflow = initialReflowPending;
         final Boolean previousDoublePageActive = lastAppliedDoublePageActive;
         style.applyReaderSettings();
         final boolean nextDoublePageActive = isDoublePageActive();
@@ -709,6 +728,9 @@ public final class ReaderContentController {
             navigation.openChapter(chapterIndex, anchorOffset, false, 0);
             if (shouldResetInitialPosition) {
                 resetInitialPositionRequest();
+            }
+            if (completingInitialReflow) {
+                initialReflowPending = false;
             }
             lastAppliedDoublePageActive = isDoublePageActive();
         });

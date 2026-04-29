@@ -19,7 +19,11 @@ import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
 import com.metahumanz.pacilread.sync.WebDavClient;
 import com.metahumanz.pacilread.theme.ThemedActivity;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
+import com.metahumanz.pacilread.ui.ActivityTransitionCompat;
 import com.metahumanz.pacilread.ui.BookCoverViewHelper;
+import com.metahumanz.pacilread.ui.LaunchSourceTransition;
+import com.metahumanz.pacilread.ui.PredictiveBackScaleController;
+import com.metahumanz.pacilread.ui.TransitionMotionModeHelper;
 
 import java.text.DateFormat;
 import java.util.Date;
@@ -56,6 +60,8 @@ public class ReadingStatsActivity extends ThemedActivity {
 
     private String selectedPeriod = ReadingStatsUtils.PERIOD_TODAY;
     private long bookId = -1L;
+    private LaunchSourceTransition.Source launchSource;
+    private boolean finishingWithSource;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -67,9 +73,11 @@ public class ReadingStatsActivity extends ThemedActivity {
         readingStatsSyncManager = new ReadingStatsSyncManager(this, databaseHelper, settingsStore, new WebDavClient(settingsStore));
 
         bookId = getIntent().getLongExtra("book_id", -1L);
+        launchSource = LaunchSourceTransition.fromIntentSource(getIntent());
 
         bindViews();
         setupControls();
+        installPredictiveBack();
         updatePeriodButtons();
         renderModeShell();
     }
@@ -108,10 +116,87 @@ public class ReadingStatsActivity extends ThemedActivity {
 
     private void setupControls() {
         ImageButton backButton = findViewById(R.id.button_back);
-        backButton.setOnClickListener(v -> onBackPressed());
+        backButton.setOnClickListener(v -> getOnBackPressedDispatcher().onBackPressed());
         periodTodayButton.setOnClickListener(v -> selectPeriod(ReadingStatsUtils.PERIOD_TODAY));
         periodWeekButton.setOnClickListener(v -> selectPeriod(ReadingStatsUtils.PERIOD_WEEK));
         periodYearButton.setOnClickListener(v -> selectPeriod(ReadingStatsUtils.PERIOD_YEAR));
+    }
+
+    private void installPredictiveBack() {
+        if (!TransitionMotionModeHelper.isFluidMode(settingsStore)) {
+            return;
+        }
+        View root = findViewById(R.id.reading_stats_root);
+        if (root == null) {
+            return;
+        }
+        PredictiveBackScaleController.install(this, root, PredictiveBackScaleController.Profile.standard(),
+                new PredictiveBackScaleController.Delegate() {
+                    @Override
+                    public boolean shouldAnimateBack() {
+                        return true;
+                    }
+
+                    @Override
+                    public boolean consumeBack() {
+                        return false;
+                    }
+
+                    @Override
+                    public void commitBack() {
+                        finishWithSourceTransition();
+                    }
+
+                    @Override
+                    public boolean commitBackFromGesture() {
+                        return true;
+                    }
+                });
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (!TransitionMotionModeHelper.isFluidMode(settingsStore)) {
+            finishWithSourceTransition();
+            return;
+        }
+        super.onBackPressed();
+    }
+
+    private void finishWithSourceTransition() {
+        if (finishingWithSource) {
+            return;
+        }
+        finishingWithSource = true;
+        View root = findViewById(R.id.reading_stats_root);
+        if (TransitionMotionModeHelper.isFluidMode(settingsStore)
+                && LaunchSourceTransition.animateExitToSource(root, launchSource, 240L, this::finishNow)) {
+            return;
+        }
+        animateExitToCenter(root);
+    }
+
+    private void animateExitToCenter(View root) {
+        if (root == null) {
+            finishNow();
+            return;
+        }
+        root.animate().cancel();
+        root.animate()
+                .scaleX(PredictiveBackScaleController.STANDARD_MIN_SCALE)
+                .scaleY(PredictiveBackScaleController.STANDARD_MIN_SCALE)
+                .alpha(0f)
+                .translationX(0f)
+                .translationY(0f)
+                .setDuration(160L)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                .withEndAction(this::finishNow)
+                .start();
+    }
+
+    private void finishNow() {
+        finish();
+        ActivityTransitionCompat.overrideClose(this, 0, 0);
     }
 
     private void renderModeShell() {
@@ -245,6 +330,7 @@ public class ReadingStatsActivity extends ThemedActivity {
                 row.setOnClickListener(v -> {
                     android.content.Intent intent = new android.content.Intent(this, ReadingStatsActivity.class);
                     intent.putExtra("book_id", record.localBookId);
+                    LaunchSourceTransition.attach(intent, v);
                     startActivity(intent);
                 });
             } else {

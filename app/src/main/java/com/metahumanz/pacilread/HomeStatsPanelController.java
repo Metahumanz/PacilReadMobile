@@ -12,6 +12,8 @@ import com.metahumanz.pacilread.model.ReadingBookStatRecord;
 import com.metahumanz.pacilread.stats.ReadingStatsUtils;
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
+import com.metahumanz.pacilread.ui.LaunchSourceTransition;
+import com.metahumanz.pacilread.ui.TransitionMotionModeHelper;
 
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -130,6 +132,9 @@ public final class HomeStatsPanelController {
                 row.setOnClickListener(v -> {
                     Intent intent = new Intent(activity, ReadingStatsActivity.class);
                     intent.putExtra("book_id", record.localBookId);
+                    if (TransitionMotionModeHelper.isFluidMode(settingsStore)) {
+                        LaunchSourceTransition.attach(intent, v);
+                    }
                     activity.startActivity(intent);
                 });
             } else {

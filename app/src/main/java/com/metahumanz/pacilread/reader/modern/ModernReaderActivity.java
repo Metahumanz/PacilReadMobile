@@ -1,5 +1,6 @@
 package com.metahumanz.pacilread.reader.modern;
 
+import android.animation.ValueAnimator;
 import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -47,6 +48,9 @@ import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderStyleController;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedReaderActivity;
+import com.metahumanz.pacilread.ui.ActivityTransitionCompat;
+import com.metahumanz.pacilread.ui.LaunchSourceTransition;
+import com.metahumanz.pacilread.ui.PredictiveBackScaleController;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,6 +59,10 @@ import java.util.UUID;
 
 public class ModernReaderActivity extends ThemedReaderActivity {
     private static final int REQUEST_PICK_BACKGROUND = 2001;
+    private static final long ENTER_TRANSITION_DURATION_MS = 280L;
+    private static final long ENTER_TEXT_FADE_DURATION_MS = 90L;
+    private static final long EXIT_TRANSITION_DURATION_MS = 245L;
+    private static final long EXIT_TEXT_FADE_DURATION_MS = 70L;
 
     private ReaderRuntime runtime;
     private ReaderViewRefs views;
@@ -77,6 +85,13 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private BroadcastReceiver sysMetricsReceiver;
     private PopupWindow readerPopupWindow;
     private boolean readerPopupDismissingByCode;
+    private boolean readerExitFinishing;
+    private boolean readerExitProgressPersisted;
+    private boolean readerEnterAnimationStarted;
+    private boolean readerExitFromBackGesture;
+    private ValueAnimator readerForegroundAnimator;
+    private Runnable readerEnterForegroundFadeRunnable;
+    private LaunchSourceTransition.Source launchSource;
     private long lastScrollPageTurnTime;
 
     @Override
@@ -91,6 +106,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         readingStatsTracker = new ReaderReadingStatsTracker(runtime, state);
         state.pagingTouchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
         state.bookId = getIntent().getLongExtra("book_id", -1L);
+        launchSource = LaunchSourceTransition.fromIntentSource(getIntent());
         state.requestedChapterOrderIndex = getIntent().getIntExtra("bookmark_chapter_order_index", -1);
         state.requestedChapterOffset = getIntent().getIntExtra("bookmark_chapter_offset", -1);
         if (savedInstanceState != null) {
@@ -105,8 +121,39 @@ public class ModernReaderActivity extends ThemedReaderActivity {
 
         chrome.configureReaderWindow();
         chrome.applyEdgeToEdgeInsets();
+        style.applyReaderSettings();
         setupGestures();
         setupControls();
+        installPredictiveBack();
+
+        if (hasLaunchSource() && com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(runtime.settingsStore)) {
+            ActivityTransitionCompat.overrideOpen(this, 0, 0);
+            views.readerRoot.setAlpha(1f);
+            views.readerRoot.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+                @Override
+                public boolean onPreDraw() {
+                    views.readerRoot.getViewTreeObserver().removeOnPreDrawListener(this);
+                    if (readerExitFinishing || readerEnterAnimationStarted) return true;
+                    readerEnterAnimationStarted = true;
+                    setReaderTransitionForegroundAlpha(0f);
+                    boolean started = LaunchSourceTransition.animateEnterFromSource(
+                            views.readerRoot,
+                            launchSource,
+                            LaunchSourceTransition.Options.defaults()
+                                    .withDuration(ENTER_TRANSITION_DURATION_MS)
+                                    .withEnterSnapshotOverlay(false)
+                                    .withEnterContentFade(false),
+                            ModernReaderActivity.this::finishReaderEnterForegroundFade
+                    );
+                    if (started) {
+                        scheduleReaderEnterForegroundFade();
+                    } else {
+                        finishReaderEnterForegroundFade();
+                    }
+                    return true;
+                }
+            });
+        }
 
         state.sessionStartTime = System.currentTimeMillis();
         state.sessionStartOffset = 0;
@@ -157,13 +204,14 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             readingStatsTracker.pause();
         }
         chrome.cancelAutoHide();
+        if (!readerExitProgressPersisted) {
+            persistReaderProgress(readerExitFinishing);
+        }
         paging.cancelInteractiveAnimator();
         paging.cancelInteractivePaging();
         autoPage.stopAutoPage();
         tts.stopTts();
-        content.cancelPendingProgressSave();
         content.cancelPendingReflow();
-        content.persistProgress();
         state.pendingTapPagingDelta = 0;
         paging.removeWarmupCallbacks();
     }
@@ -171,6 +219,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        cancelReaderForegroundTransition();
         if (sysMetricsReceiver != null) {
             unregisterReceiver(sysMetricsReceiver);
         }
@@ -180,20 +229,6 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         runtime.shutdown();
         paging.cancelInteractiveAnimator();
         paging.recyclePagingSnapshots();
-    }
-
-    @Override
-    public void onBackPressed() {
-        if (selection != null && selection.hasSelection()) {
-            selection.clearSelection();
-            return;
-        }
-        if (state.controlsVisible) {
-            chrome.setControlsVisible(false);
-            return;
-        }
-        content.persistProgress();
-        super.onBackPressed();
     }
 
     @Override
@@ -254,6 +289,133 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         }
     }
 
+    private boolean hasLaunchSource() {
+        return launchSource != null && launchSource.bounds() != null;
+    }
+
+    private void scheduleReaderEnterForegroundFade() {
+        cancelScheduledReaderEnterForegroundFade();
+        if (runtime == null || runtime.mainHandler == null) {
+            finishReaderEnterForegroundFade();
+            return;
+        }
+        long delayMs = Math.max(0L, ENTER_TRANSITION_DURATION_MS - ENTER_TEXT_FADE_DURATION_MS - 18L);
+        readerEnterForegroundFadeRunnable = this::startReaderEnterForegroundFade;
+        runtime.mainHandler.postDelayed(readerEnterForegroundFadeRunnable, delayMs);
+    }
+
+    private void startReaderEnterForegroundFade() {
+        readerEnterForegroundFadeRunnable = null;
+        animateReaderTransitionForegroundToAlpha(1f, ENTER_TEXT_FADE_DURATION_MS, null);
+    }
+
+    private void finishReaderEnterForegroundFade() {
+        cancelScheduledReaderEnterForegroundFade();
+        animateReaderTransitionForegroundToAlpha(1f, 60L, null);
+    }
+
+    private void fadeReaderForegroundForExit(Runnable onComplete) {
+        cancelScheduledReaderEnterForegroundFade();
+        animateReaderTransitionForegroundToAlpha(0f, EXIT_TEXT_FADE_DURATION_MS, onComplete);
+    }
+
+    private void cancelReaderForegroundTransition() {
+        cancelScheduledReaderEnterForegroundFade();
+        if (readerForegroundAnimator != null) {
+            readerForegroundAnimator.cancel();
+            readerForegroundAnimator = null;
+        }
+    }
+
+    private void cancelScheduledReaderEnterForegroundFade() {
+        if (readerEnterForegroundFadeRunnable != null && runtime != null && runtime.mainHandler != null) {
+            runtime.mainHandler.removeCallbacks(readerEnterForegroundFadeRunnable);
+        }
+        readerEnterForegroundFadeRunnable = null;
+    }
+
+    private void animateReaderTransitionForegroundToAlpha(float targetAlpha, long durationMs, Runnable onComplete) {
+        if (readerForegroundAnimator != null) {
+            readerForegroundAnimator.cancel();
+            readerForegroundAnimator = null;
+        }
+        View[] layers = readerTransitionForegroundLayers();
+        View firstLayer = firstAvailableLayer(layers);
+        if (firstLayer == null) {
+            if (onComplete != null) {
+                onComplete.run();
+            }
+            return;
+        }
+        float startAlpha = firstLayer.getAlpha();
+        if (durationMs <= 0L || Math.abs(startAlpha - targetAlpha) < 0.01f) {
+            setReaderTransitionForegroundAlpha(targetAlpha);
+            if (onComplete != null) {
+                onComplete.run();
+            }
+            return;
+        }
+        ValueAnimator animator = ValueAnimator.ofFloat(startAlpha, targetAlpha);
+        readerForegroundAnimator = animator;
+        animator.setDuration(durationMs);
+        animator.setInterpolator(new android.view.animation.DecelerateInterpolator());
+        animator.addUpdateListener(animation ->
+                setReaderTransitionForegroundAlpha((float) animation.getAnimatedValue()));
+        animator.addListener(new android.animation.AnimatorListenerAdapter() {
+            private boolean canceled;
+
+            @Override
+            public void onAnimationCancel(android.animation.Animator animation) {
+                canceled = true;
+            }
+
+            @Override
+            public void onAnimationEnd(android.animation.Animator animation) {
+                if (readerForegroundAnimator == animation) {
+                    readerForegroundAnimator = null;
+                }
+                if (!canceled) {
+                    setReaderTransitionForegroundAlpha(targetAlpha);
+                    if (onComplete != null) {
+                        onComplete.run();
+                    }
+                }
+            }
+        });
+        animator.start();
+    }
+
+    private void setReaderTransitionForegroundAlpha(float alpha) {
+        for (View layer : readerTransitionForegroundLayers()) {
+            if (layer != null) {
+                layer.setAlpha(alpha);
+            }
+        }
+    }
+
+    private View firstAvailableLayer(View[] layers) {
+        for (View layer : layers) {
+            if (layer != null) {
+                return layer;
+            }
+        }
+        return null;
+    }
+
+    private View[] readerTransitionForegroundLayers() {
+        if (views == null) {
+            return new View[0];
+        }
+        return new View[]{
+                views.pageStage,
+                views.hudTopContainer,
+                views.hudBottomContainer,
+                views.menuTopPanel,
+                views.menuInfoPanel,
+                views.menuBottomPanel
+        };
+    }
+
     private void initializeControllers() {
         dialogSupport = new ReaderDialogSupport(this, runtime, ui);
         chrome = new ReaderChromeController(this, runtime, views, state, ui);
@@ -297,24 +459,46 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         filter.addAction(Intent.ACTION_BATTERY_CHANGED);
         registerReceiver(sysMetricsReceiver, filter);
 
-        findViewById(R.id.button_back).setOnClickListener(v -> finish());
+        findViewById(R.id.button_back).setOnClickListener(v -> finishReaderActivity());
         findViewById(R.id.button_prev_chapter).setOnClickListener(v -> navigation.openChapterFromStart(state.currentChapterIndex - 1, true, -1));
         findViewById(R.id.button_next_chapter).setOnClickListener(v -> navigation.openChapterFromStart(state.currentChapterIndex + 1, true, 1));
-        findViewById(R.id.button_toc).setOnClickListener(v -> libraryDialogs.showTocDialog());
-        findViewById(R.id.button_search).setOnClickListener(v -> libraryDialogs.showSearchDialog());
-        findViewById(R.id.button_bookmark).setOnClickListener(v -> showBookmarkDialog());
-        findViewById(R.id.button_rules).setOnClickListener(v -> libraryDialogs.showRulesDialog());
-        findViewById(R.id.button_style).setOnClickListener(v -> styleDialogs.showStyleDialog(REQUEST_PICK_BACKGROUND));
-        findViewById(R.id.button_reader_options).setOnClickListener(v -> optionsDialogs.showReaderOptionsDialog());
+        findViewById(R.id.button_toc).setOnClickListener(v -> {
+            dialogSupport.setNextDismissSource(v);
+            libraryDialogs.showTocDialog();
+        });
+        findViewById(R.id.button_search).setOnClickListener(v -> {
+            dialogSupport.setNextDismissSource(v);
+            libraryDialogs.showSearchDialog();
+        });
+        findViewById(R.id.button_bookmark).setOnClickListener(v -> {
+            dialogSupport.setNextDismissSource(v);
+            showBookmarkDialog();
+        });
+        findViewById(R.id.button_rules).setOnClickListener(v -> {
+            dialogSupport.setNextDismissSource(v);
+            libraryDialogs.showRulesDialog();
+        });
+        findViewById(R.id.button_style).setOnClickListener(v -> {
+            dialogSupport.setNextDismissSource(v);
+            styleDialogs.showStyleDialog(REQUEST_PICK_BACKGROUND);
+        });
+        findViewById(R.id.button_reader_options).setOnClickListener(v -> {
+            dialogSupport.setNextDismissSource(v);
+            optionsDialogs.showReaderOptionsDialog();
+        });
         views.themeToggleButton.setOnClickListener(v -> chrome.toggleReaderUiTheme());
         views.ttsButton.setOnClickListener(v -> {
             if (state.ttsActive || state.ttsPaused) {
                 tts.toggleTts();
             } else {
+                dialogSupport.setNextDismissSource(v);
                 tts.showTtsDialog();
             }
         });
-        views.autoPageButton.setOnClickListener(v -> autoPage.showAutoPageDialog());
+        views.autoPageButton.setOnClickListener(v -> {
+            dialogSupport.setNextDismissSource(v);
+            autoPage.showAutoPageDialog();
+        });
         views.moreButton.setOnClickListener(v -> {
             if (readerPopupWindow != null && readerPopupWindow.isShowing()) {
                 PopupWindow pw = readerPopupWindow;
@@ -381,33 +565,12 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                     btn.setPadding(btnPadH, btnPadV, btnPadH, btnPadV);
                     chrome.styleReaderMenuButton(btn, false);
                     btn.setOnClickListener(itemView -> {
-                        readerPopupDismissingByCode = true;
-                        popupWindow.dismiss();
-                        views.moreButton.animate().rotation(0f).setDuration(200).start();
-                        switch (item) {
-                            case "搜索":
-                                libraryDialogs.showSearchDialog();
-                                break;
-                            case "替换":
-                                libraryDialogs.showRulesDialog();
-                                break;
-                            case "排版":
-                                styleDialogs.showStyleDialog(REQUEST_PICK_BACKGROUND);
-                                break;
-                            case "翻页":
-                                autoPage.showAutoPageDialog();
-                                break;
-                            case "听书":
-                                if (state.ttsActive || state.ttsPaused) {
-                                    tts.toggleTts();
-                                } else {
-                                    tts.showTtsDialog();
-                                }
-                                break;
-                            case "书签":
-                                showBookmarkDialog();
-                                break;
-                        }
+                        LaunchSourceTransition.Source itemSource = LaunchSourceTransition.captureSource(itemView);
+                        animatePopupWaterfallClose(popupWindow, () -> {
+                            readerPopupDismissingByCode = true;
+                            popupWindow.dismiss();
+                            handleReaderPopupAction(item, itemSource);
+                        });
                     });
 
                     LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
@@ -420,9 +583,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             }
 
             popupWindow.showAsDropDown(views.moreButton, 0, 0, Gravity.END);
-            animatePopupWaterfallOpen(rowLayouts, rowHeight);
+            animatePopupWaterfallOpen(popupContent, rowLayouts, rowHeight);
         });
-        views.readerTitle.setOnClickListener(v -> openReadingStatsForCurrentBook());
+        views.readerTitle.setOnClickListener(v -> openReadingStatsForCurrentBook(v));
         views.pageStage.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
             int width = right - left;
             int height = bottom - top;
@@ -472,6 +635,179 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 navigation.showPage(state.currentChapterIndex, seekBar.getProgress(), true, direction);
             }
         });
+    }
+
+    private void installPredictiveBack() {
+        if (!com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(runtime.settingsStore)) {
+            return;
+        }
+        PredictiveBackScaleController.install(this, views.readerRoot, PredictiveBackScaleController.Profile.reader(),
+                new PredictiveBackScaleController.Delegate() {
+                    @Override
+                    public boolean shouldAnimateBack() {
+                        return !hasReaderBackConsumer();
+                    }
+
+                    @Override
+                    public boolean consumeBack() {
+                        return consumeReaderBack();
+                    }
+
+                    @Override
+                    public void commitBack() {
+                        finishReaderActivity();
+                    }
+
+                    @Override
+                    public boolean commitBackFromGesture() {
+                        readerExitFromBackGesture = true;
+                        return true;
+                    }
+                });
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (!com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(runtime.settingsStore)) {
+            if (consumeReaderBack()) return;
+            finishReaderActivity();
+            return;
+        }
+        super.onBackPressed();
+    }
+
+    private boolean hasReaderBackConsumer() {
+        return (selection != null && selection.hasSelection()) || (state != null && state.controlsVisible);
+    }
+
+    private boolean consumeReaderBack() {
+        if (selection != null && selection.hasSelection()) {
+            selection.clearSelection();
+            return true;
+        }
+        if (state != null && state.controlsVisible) {
+            chrome.setControlsVisible(false);
+            return true;
+        }
+        return false;
+    }
+
+    public void finishReaderActivity() {
+        if (readerExitFinishing) {
+            return;
+        }
+        readerExitFinishing = true;
+        readerExitProgressPersisted = persistReaderProgress(true);
+        animateReaderExitToSource();
+    }
+
+    private void animateReaderExitToSource() {
+        if (views == null || views.readerRoot == null) {
+            finishReaderActivityNow();
+            return;
+        }
+        fadeReaderForegroundForExit(this::runReaderExitToSource);
+    }
+
+    private void runReaderExitToSource() {
+        if (views == null || views.readerRoot == null) {
+            finishReaderActivityNow();
+            return;
+        }
+        // 非流动模式直接走居中缩放淡出
+        if (!com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(runtime.settingsStore)) {
+            animateReaderExitToCenter();
+            return;
+        }
+        LaunchSourceTransition.Options options = LaunchSourceTransition.Options.defaults()
+                .withDuration(EXIT_TRANSITION_DURATION_MS)
+                .withSnapshotFadeStartFraction(0.72f);
+        if (readerExitFromBackGesture && LaunchSourceTransition.animateExitToSourceWithClip(
+                views.readerRoot,
+                launchSource,
+                options,
+                this::finishReaderActivityNow
+        )) {
+            return;
+        }
+        if (LaunchSourceTransition.animateExitToSource(
+                views.readerRoot,
+                launchSource,
+                options,
+                this::finishReaderActivityNow
+        )) {
+            return;
+        }
+        animateReaderExitToCenter();
+    }
+
+    private void animateReaderExitToCenter() {
+        float minScale = PredictiveBackScaleController.READER_MIN_SCALE;
+        views.readerRoot.animate().cancel();
+        views.readerRoot.animate()
+                .scaleX(minScale)
+                .scaleY(minScale)
+                .alpha(0f)
+                .translationX(0f)
+                .translationY(0f)
+                .setDuration(160L)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                .withEndAction(this::finishReaderActivityNow)
+                .start();
+    }
+
+    private void finishReaderActivityNow() {
+        if (!readerExitProgressPersisted) {
+            readerExitProgressPersisted = persistReaderProgress(false);
+        }
+        finish();
+        ActivityTransitionCompat.overrideClose(this, 0, 0);
+    }
+
+    private boolean persistReaderProgress(boolean settlePaging) {
+        if (content == null) {
+            return false;
+        }
+        if (settlePaging && paging != null) {
+            paging.settleInterruptedPagingAnimation();
+        }
+        content.cancelPendingProgressSave();
+        content.persistProgress();
+        return true;
+    }
+
+    private void handleReaderPopupAction(String item, LaunchSourceTransition.Source source) {
+        views.moreButton.animate().rotation(0f).setDuration(200).start();
+        switch (item) {
+            case "搜索":
+                dialogSupport.setNextDismissSource(source);
+                libraryDialogs.showSearchDialog();
+                break;
+            case "替换":
+                dialogSupport.setNextDismissSource(source);
+                libraryDialogs.showRulesDialog();
+                break;
+            case "排版":
+                dialogSupport.setNextDismissSource(source);
+                styleDialogs.showStyleDialog(REQUEST_PICK_BACKGROUND);
+                break;
+            case "翻页":
+                dialogSupport.setNextDismissSource(source);
+                autoPage.showAutoPageDialog();
+                break;
+            case "听书":
+                if (state.ttsActive || state.ttsPaused) {
+                    tts.toggleTts();
+                } else {
+                    dialogSupport.setNextDismissSource(source);
+                    tts.showTtsDialog();
+                }
+                break;
+            case "书签":
+                dialogSupport.setNextDismissSource(source);
+                showBookmarkDialog();
+                break;
+        }
     }
 
     private void setupGestures() {
@@ -556,12 +892,20 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         }
     }
 
+    public void onReaderPageReadyForLaunchPreview() {
+    }
+
     public void openReadingStatsForCurrentBook() {
+        openReadingStatsForCurrentBook(views.readerTitle);
+    }
+
+    public void openReadingStatsForCurrentBook(View sourceView) {
         if (!runtime.settingsStore.isReadingTimeTrackingEnabled() || state.book == null) {
             return;
         }
         Intent intent = new Intent(this, ReadingStatsActivity.class);
         intent.putExtra("book_id", state.book.id);
+        LaunchSourceTransition.attach(intent, sourceView);
         startActivity(intent);
     }
 
@@ -606,7 +950,19 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         }
     }
 
-    private void animatePopupWaterfallOpen(List<LinearLayout> rows, int rowHeight) {
+    private void animatePopupWaterfallOpen(View popupRoot, List<LinearLayout> rows, int rowHeight) {
+        if (popupRoot != null) {
+            popupRoot.setScaleX(PredictiveBackScaleController.READER_MIN_SCALE);
+            popupRoot.setScaleY(PredictiveBackScaleController.READER_MIN_SCALE);
+            popupRoot.setAlpha(0f);
+            popupRoot.animate()
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .alpha(1f)
+                    .setDuration(180)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                    .start();
+        }
         int staggerMs = 20;
         int dropDistance = rowHeight + ui.dp(8);
         for (int i = 0; i < rows.size(); i++) {
@@ -638,6 +994,13 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             if (onComplete != null) onComplete.run();
             return;
         }
+        popupContent.animate()
+                .scaleX(PredictiveBackScaleController.READER_MIN_SCALE)
+                .scaleY(PredictiveBackScaleController.READER_MIN_SCALE)
+                .alpha(0f)
+                .setDuration(130)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                .start();
         int staggerMs = 18;
         int riseDistance = ui.dp(40) + ui.dp(8);
         for (int i = 0; i < childCount; i++) {
@@ -736,7 +1099,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             dialog.dismiss();
             showAddBookmarkDialog();
         });
-        dialog.show();
+        dialogSupport.showStyledDialog(dialog);
     }
 
     private View createReaderBookmarkRow(BookmarkRecord bookmark, Runnable onClick) {
@@ -813,16 +1176,17 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 LinearLayout.LayoutParams.WRAP_CONTENT
         ));
 
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("添加书签")
                 .setView(wrapper)
                 .setNegativeButton("取消", null)
-                .setPositiveButton("保存", (dialog, which) -> saveBookmark(
+                .setPositiveButton("保存", (unusedDialog, which) -> saveBookmark(
                         chapterIndex,
                         chapterOffset,
                         editText.getText() == null ? "" : editText.getText().toString()
                 ))
-                .show();
+                .create();
+        dialogSupport.showStyledDialog(dialog);
     }
 
     private void saveBookmark(int chapterIndex, int chapterOffset, String summary) {

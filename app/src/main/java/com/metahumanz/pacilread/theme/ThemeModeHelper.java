@@ -105,7 +105,7 @@ public final class ThemeModeHelper {
 
     @StyleRes
     public static int resolveReaderThemeResId(Context context) {
-        return resolveThemeResId(getResolvedReaderBucket(context), getResolvedReaderStyleVariant(context));
+        return resolveReaderThemeResId(getResolvedReaderBucket(context), getResolvedReaderStyleVariant(context));
     }
 
     public static String getResolvedAppAppearanceLabel(Context context) {
@@ -201,6 +201,18 @@ public final class ThemeModeHelper {
         return LIGHT_STYLE_YAOBAI.equals(styleVariant)
                 ? R.style.PacilReadTheme_Yaobai
                 : R.style.PacilReadTheme_Yunbai;
+    }
+
+    @StyleRes
+    private static int resolveReaderThemeResId(String bucket, String styleVariant) {
+        if (MODE_DARK.equals(bucket)) {
+            return DARK_STYLE_JIYE.equals(styleVariant)
+                    ? R.style.PacilReadTheme_ReaderJiye
+                    : R.style.PacilReadTheme_ReaderYemu;
+        }
+        return LIGHT_STYLE_YAOBAI.equals(styleVariant)
+                ? R.style.PacilReadTheme_ReaderYaobai
+                : R.style.PacilReadTheme_ReaderYunbai;
     }
 
     private static SharedPreferences preferences(Context context) {

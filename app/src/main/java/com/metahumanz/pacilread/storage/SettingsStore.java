@@ -2,6 +2,7 @@ package com.metahumanz.pacilread.storage;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Build;
 
 import org.json.JSONObject;
 
@@ -100,6 +101,7 @@ public class SettingsStore {
     private static final String KEY_HOME_SIDEBAR_PRESENTATION = "home_sidebar_presentation";
     private static final String KEY_HOME_FIXED_SIDEBAR_STYLE = "home_fixed_sidebar_style";
     private static final String KEY_READER_ORIENTATION_MODE = "reader_orientation_mode";
+    private static final String KEY_TRANSITION_MOTION_MODE = "transition_motion_mode";
 
     private static final Set<String> ANDROID_PRIVATE_SYNC_KEYS = new HashSet<>(Arrays.asList(
             KEY_AUTO_OPEN,
@@ -162,7 +164,8 @@ public class SettingsStore {
             KEY_HOME_NAV_LANDSCAPE_MODE,
             KEY_HOME_SIDEBAR_PRESENTATION,
             KEY_HOME_FIXED_SIDEBAR_STYLE,
-            KEY_READER_ORIENTATION_MODE
+            KEY_READER_ORIENTATION_MODE,
+            KEY_TRANSITION_MOTION_MODE
     ));
 
     private static final Set<String> FLOAT_SYNC_KEYS = new HashSet<>(Arrays.asList(
@@ -654,6 +657,20 @@ public class SettingsStore {
 
     public void setReaderOrientationMode(String value) {
         preferences.edit().putString(KEY_READER_ORIENTATION_MODE, normalizeReaderOrientationMode(value)).apply();
+    }
+
+    public String getTransitionMotionMode() {
+        String defaultMode = Build.VERSION.SDK_INT >= 34 ? "fluid" : "simple";
+        String value = preferences.getString(KEY_TRANSITION_MOTION_MODE, defaultMode);
+        if (Build.VERSION.SDK_INT < 34) {
+            return "simple";
+        }
+        return "simple".equals(value) ? "simple" : "fluid";
+    }
+
+    public void setTransitionMotionMode(String value) {
+        String mode = Build.VERSION.SDK_INT < 34 || "simple".equals(value) ? "simple" : "fluid";
+        preferences.edit().putString(KEY_TRANSITION_MOTION_MODE, mode).apply();
     }
 
     public String getHomeSidebarPresentation() {

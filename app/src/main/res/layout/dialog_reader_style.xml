@@ -24,6 +24,7 @@
         android:paddingBottom="16dp">
 
         <TextView
+            android:id="@+id/style_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="阅读样式"

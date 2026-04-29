@@ -279,6 +279,46 @@
         <item name="themeTextSizeButton">15sp</item>
     </style>
 
+    <style name="PacilReadTheme.ReaderYunbai" parent="PacilReadTheme.Yunbai">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowDisablePreview">true</item>
+    </style>
+
+    <style name="PacilReadTheme.ReaderYaobai" parent="PacilReadTheme.Yaobai">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowDisablePreview">true</item>
+    </style>
+
+    <style name="PacilReadTheme.ReaderYemu" parent="PacilReadTheme.Yemu">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowDisablePreview">true</item>
+    </style>
+
+    <style name="PacilReadTheme.ReaderJiye" parent="PacilReadTheme.Jiye">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowDisablePreview">true</item>
+    </style>
+
     <style name="PacilReadTheme.Yemu" parent="PacilReadTheme.Base">
         <item name="themeColorSurface">#0D131B</item>
         <item name="themeColorSurfaceVariant">#161E29</item>
@@ -569,8 +609,8 @@
     </style>
 
     <style name="ReaderFullscreenDialogAnimation">
-        <item name="android:windowEnterAnimation">@anim/activity_slide_forward</item>
-        <item name="android:windowExitAnimation">@anim/activity_slide_backward</item>
+        <item name="android:windowEnterAnimation">@anim/dialog_reader_fullscreen_enter</item>
+        <item name="android:windowExitAnimation">@anim/dialog_reader_fullscreen_exit</item>
     </style>
 
     <style name="ReaderPopDialogAnimation">

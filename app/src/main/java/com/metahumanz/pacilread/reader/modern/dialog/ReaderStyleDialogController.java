@@ -311,6 +311,7 @@ public final class ReaderStyleDialogController {
         }));
 
         AlertDialog dialog = new AlertDialog.Builder(activity).setView(contentView).create();
+        dialogSupport.addAlignedCloseButton(contentView, R.id.style_title, refs.contentContainer, dialog);
         contentView.findViewById(R.id.style_button_pick_background).setOnClickListener(v -> style.openBackgroundPicker(backgroundPickerRequestCode));
         contentView.findViewById(R.id.style_button_clear_background).setOnClickListener(v -> {
             FileAssetHelper.deleteIfExists(runtime.settingsStore.getReaderBackgroundPath());
@@ -433,11 +434,11 @@ public final class ReaderStyleDialogController {
     private void promptSaveTheme(Runnable onSaved) {
         EditText input = new EditText(activity);
         input.setHint("主题名称");
-        new AlertDialog.Builder(activity)
+        AlertDialog dialog = new AlertDialog.Builder(activity)
                 .setTitle("保存当前主题")
                 .setView(input)
                 .setNegativeButton("取消", null)
-                .setPositiveButton("保存", (dialog, which) -> {
+                .setPositiveButton("保存", (unusedDialog, which) -> {
                     String name = input.getText().toString().trim();
                     if (name.isEmpty()) {
                         ui.showToast("请输入主题名称");
@@ -448,7 +449,8 @@ public final class ReaderStyleDialogController {
                         activity.runOnUiThread(onSaved);
                     });
                 })
-                .show();
+                .create();
+        dialogSupport.showStyledDialog(dialog);
     }
 
     private String effectiveReaderThemeForDialog(String selectedReaderTheme) {

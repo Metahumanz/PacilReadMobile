@@ -3,17 +3,23 @@ package com.metahumanz.pacilread;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.GridView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
+import android.widget.PopupWindow;
 import android.widget.TextView;
 
 import com.metahumanz.pacilread.importer.BookImportService;
@@ -21,6 +27,8 @@ import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedActivity;
+import com.metahumanz.pacilread.theme.ThemeModeHelper;
+import com.metahumanz.pacilread.ui.LaunchSourceTransition;
 import com.metahumanz.pacilread.util.FileAssetHelper;
 
 import java.io.File;
@@ -35,6 +43,8 @@ public class BookshelfActivity extends ThemedActivity {
     private static final int REQUEST_PICK_BOOK = 1001;
     private static final int REQUEST_PICK_COVER = 1002;
     private static final String VIEW_MODE_CARD = "card";
+    public static final String EXTRA_AUTO_OPEN_BOOK_ID =
+            "com.metahumanz.pacilread.EXTRA_AUTO_OPEN_BOOK_ID";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final List<BookRecord> allBooks = new ArrayList<>();
@@ -70,6 +80,8 @@ public class BookshelfActivity extends ThemedActivity {
     private long pendingCoverBookId = -1L;
     private boolean booksLoaded = false;
     private boolean booksLoading = false;
+    private boolean autoOpenConsumed;
+    private PopupWindow bookActionsPopup;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -84,10 +96,14 @@ public class BookshelfActivity extends ThemedActivity {
         setupAdapters();
         setupInteractions();
         setupHomeControllers();
-        showBookshelfLoadingState();
-
-        if (savedInstanceState == null && settingsStore.isAutoOpenLastBook()) {
-            maybeAutoOpenLastBook();
+        long autoOpenBookId = getIntent().getLongExtra(EXTRA_AUTO_OPEN_BOOK_ID, -1L);
+        if (savedInstanceState == null && autoOpenBookId > 0) {
+            performAutoOpenFastPath(autoOpenBookId);
+        } else {
+            showBookshelfLoadingState();
+            if (savedInstanceState == null && settingsStore.isAutoOpenLastBook()) {
+                maybeAutoOpenLastBook();
+            }
         }
     }
 
@@ -98,12 +114,15 @@ public class BookshelfActivity extends ThemedActivity {
         if (homeNavigationController != null) {
             homeNavigationController.refreshFromSettings();
         }
-        refreshBooks();
+        if (!autoOpenConsumed) {
+            refreshBooks();
+        }
         refreshCurrentHomePage(true);
     }
 
     @Override
     protected void onPause() {
+        dismissBookActionsPopup();
         if (homeSettingsController != null) {
             homeSettingsController.onPause();
         }
@@ -229,7 +248,7 @@ public class BookshelfActivity extends ThemedActivity {
             }
             BookRecord book = gridAdapter.getItem(position);
             if (book != null) {
-                openBook(book.id);
+                openBook(book.id, view);
             }
         });
         gridBooks.setOnItemLongClickListener((parent, view, position, id) -> {
@@ -239,7 +258,7 @@ public class BookshelfActivity extends ThemedActivity {
             }
             BookRecord book = gridAdapter.getItem(position);
             if (book != null) {
-                showBookActions(book);
+                showBookActions(book, view);
                 return true;
             }
             return false;
@@ -250,13 +269,13 @@ public class BookshelfActivity extends ThemedActivity {
                 openPicker();
                 return;
             }
-            openBook(listAdapter.getItem(position).id);
+            openBook(listAdapter.getItem(position).id, view);
         });
         listBooks.setOnItemLongClickListener((parent, view, position, id) -> {
             if (position >= listAdapter.getCount()) {
                 return true;
             }
-            showBookActions(listAdapter.getItem(position));
+            showBookActions(listAdapter.getItem(position), view);
             return true;
         });
 
@@ -538,12 +557,50 @@ public class BookshelfActivity extends ThemedActivity {
     }
 
     private void openBook(long bookId) {
+        openBook(bookId, null);
+    }
+
+    private void openBook(long bookId, View sourceView) {
         Intent intent = new Intent(this, ReaderActivity.class);
         intent.putExtra("book_id", bookId);
+        if (com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(settingsStore)) {
+            LaunchSourceTransition.attachBoundsOnly(intent, sourceView);
+        }
         startActivity(intent);
     }
 
-    private void showBookActions(BookRecord book) {
+    private void showBookActions(BookRecord book, View sourceView) {
+        dismissBookActionsPopup();
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundResource(R.drawable.bg_app_dialog);
+        panel.setPadding(dp(12), dp(12), dp(12), dp(12));
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            panel.setElevation(dp(10));
+        }
+
+        TextView title = new TextView(this);
+        title.setText(book.title == null || book.title.isBlank() ? "未命名书籍" : book.title);
+        title.setTextColor(ThemeModeHelper.resolveColor(this, R.color.app_text_primary));
+        title.setTextSize(15f);
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        title.setSingleLine(true);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        panel.addView(title, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+
+        View divider = new View(this);
+        divider.setBackgroundColor(ThemeModeHelper.resolveColor(this, R.color.app_border));
+        LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                Math.max(1, dp(1))
+        );
+        dividerParams.topMargin = dp(10);
+        dividerParams.bottomMargin = dp(6);
+        panel.addView(divider, dividerParams);
+
         List<String> itemList = new ArrayList<>();
         itemList.add("打开");
         itemList.add(book.pinned ? "取消置顶" : "置顶到顶部");
@@ -552,27 +609,72 @@ public class BookshelfActivity extends ThemedActivity {
             itemList.add("移除封面");
         }
         itemList.add("删除");
-        String[] items = itemList.toArray(new String[0]);
-        new AlertDialog.Builder(this)
-                .setTitle(book.title)
-                .setItems(items, (dialog, which) -> {
-                    String selected = items[which];
-                    if ("打开".equals(selected)) {
-                        openBook(book.id);
-                    } else if ("设置自定义封面".equals(selected)) {
-                        openCoverPicker(book.id);
-                    } else if ("移除封面".equals(selected)) {
-                        removeCover(book);
-                    } else if ("删除".equals(selected)) {
-                        confirmDelete(book);
-                    } else {
-                        executor.execute(() -> {
-                            databaseHelper.setPinned(book.id, !book.pinned);
-                            runOnUiThread(this::refreshBooks);
-                        });
-                    }
-                })
-                .show();
+        for (String item : itemList) {
+            panel.addView(createBookActionRow(item, "删除".equals(item), () -> {
+                dismissBookActionsPopup();
+                if ("打开".equals(item)) {
+                    openBook(book.id, sourceView);
+                } else if ("设置自定义封面".equals(item)) {
+                    openCoverPicker(book.id);
+                } else if ("移除封面".equals(item)) {
+                    removeCover(book);
+                } else if ("删除".equals(item)) {
+                    confirmDelete(book);
+                } else {
+                    executor.execute(() -> {
+                        databaseHelper.setPinned(book.id, !book.pinned);
+                        runOnUiThread(this::refreshBooks);
+                    });
+                }
+            }));
+        }
+
+        int popupWidth = Math.min(dp(300), Math.max(dp(232), getResources().getDisplayMetrics().widthPixels - dp(32)));
+        bookActionsPopup = new PopupWindow(panel, popupWidth, ViewGroup.LayoutParams.WRAP_CONTENT, true);
+        bookActionsPopup.setBackgroundDrawable(new ColorDrawable(android.graphics.Color.TRANSPARENT));
+        bookActionsPopup.setOutsideTouchable(true);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            bookActionsPopup.setElevation(dp(10));
+        }
+        if (sourceView != null) {
+            bookActionsPopup.showAsDropDown(sourceView, 0, -sourceView.getHeight(), Gravity.END);
+        } else {
+            View root = findViewById(android.R.id.content);
+            bookActionsPopup.showAtLocation(root, Gravity.CENTER, 0, 0);
+        }
+    }
+
+    private TextView createBookActionRow(String text, boolean danger, Runnable action) {
+        TextView row = new TextView(this);
+        row.setText(text);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setMinHeight(dp(44));
+        row.setPadding(dp(12), dp(9), dp(12), dp(9));
+        row.setTextSize(14f);
+        row.setTextColor(ThemeModeHelper.resolveColor(
+                this,
+                danger ? R.color.app_danger : R.color.app_text_primary
+        ));
+        row.setBackgroundResource(R.drawable.bg_app_soft_button);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        params.topMargin = dp(6);
+        row.setLayoutParams(params);
+        row.setOnClickListener(v -> action.run());
+        return row;
+    }
+
+    private int dp(int value) {
+        return Math.round(getResources().getDisplayMetrics().density * value);
+    }
+
+    private void dismissBookActionsPopup() {
+        if (bookActionsPopup != null && bookActionsPopup.isShowing()) {
+            bookActionsPopup.dismiss();
+        }
+        bookActionsPopup = null;
     }
 
     private void attachCover(long bookId, Uri uri) {
@@ -613,18 +715,24 @@ public class BookshelfActivity extends ThemedActivity {
     }
 
     private void confirmDelete(BookRecord book) {
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("删除书籍")
                 .setMessage("确定要删除《" + book.title + "》吗？")
                 .setNegativeButton("取消", null)
-                .setPositiveButton("删除", (dialog, which) -> executor.execute(() -> {
+                .setPositiveButton("删除", (ignoredDialog, which) -> executor.execute(() -> {
                     databaseHelper.deleteBook(book.id);
                     runOnUiThread(() -> {
                         refreshBooks();
                         showToast("已删除");
                     });
                 }))
-                .show();
+                .create();
+        dialog.setOnShowListener(unused -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawableResource(R.drawable.bg_app_dialog);
+            }
+        });
+        dialog.show();
     }
 
     private void maybeAutoOpenLastBook() {
@@ -636,6 +744,92 @@ public class BookshelfActivity extends ThemedActivity {
                 }
             } catch (Exception ignored) {}
         });
+    }
+
+    private void performAutoOpenFastPath(long bookId) {
+        autoOpenConsumed = true;
+        executor.execute(() -> {
+            try {
+                BookRecord book = databaseHelper.getBook(bookId);
+                if (book == null) {
+                    runOnUiThread(() -> {
+                        autoOpenConsumed = false;
+                        showBookshelfLoadingState();
+                        refreshBooks();
+                    });
+                    return;
+                }
+                runOnUiThread(() -> {
+                    List<BookRecord> single = new ArrayList<>();
+                    single.add(book);
+                    listAdapter.setItems(single);
+                    gridAdapter.setItems(single);
+                    updateAddEntryVisibility();
+                    updateStats(single);
+                    booksLoaded = true;
+                    booksLoading = false;
+                    applyBookshelfMode();
+
+                    View container = isCardMode() ? (View) gridBooks : (View) listBooks;
+                    container.post(() -> {
+                        View sourceView = null;
+                        if (isCardMode() && gridBooks.getChildCount() > 0) {
+                            sourceView = gridBooks.getChildAt(0);
+                        } else if (!isCardMode() && listBooks.getChildCount() > 0) {
+                            sourceView = listBooks.getChildAt(0);
+                        }
+                        openBook(book.id, sourceView);
+                        autoOpenConsumed = false;
+
+                        // 在阅读器背后异步加载完整书架
+                        executor.execute(() -> {
+                            try {
+                                List<BookRecord> books = databaseHelper.getBooks();
+                                runOnUiThread(() -> {
+                                    booksLoading = false;
+                                    booksLoaded = true;
+                                    allBooks.clear();
+                                    allBooks.addAll(books);
+                                    applyFilter(currentQuery());
+                                    scrollToBook(bookId);
+                                });
+                            } catch (Exception error) {
+                                runOnUiThread(() -> {
+                                    booksLoading = false;
+                                    applyFilter(currentQuery());
+                                });
+                            }
+                        });
+                    });
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    autoOpenConsumed = false;
+                    showBookshelfLoadingState();
+                    refreshBooks();
+                });
+            }
+        });
+    }
+
+    private void scrollToBook(long bookId) {
+        if (isCardMode()) {
+            for (int i = 0; i < gridAdapter.getCount(); i++) {
+                BookRecord item = gridAdapter.getItem(i);
+                if (item != null && item.id == bookId) {
+                    gridBooks.setSelection(i);
+                    return;
+                }
+            }
+        } else {
+            for (int i = 0; i < listAdapter.getCount(); i++) {
+                BookRecord item = listAdapter.getItem(i);
+                if (item != null && item.id == bookId) {
+                    listBooks.setSelection(i);
+                    return;
+                }
+            }
+        }
     }
 
     // ==================== UI Helpers ====================

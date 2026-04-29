@@ -75,6 +75,7 @@ public final class ReaderOptionsDialogController {
 
         final String[] sliderMode = new String[]{runtime.settingsStore.getReaderSliderMode()};
         AlertDialog dialog = new AlertDialog.Builder(activity).setView(contentView).create();
+        dialogSupport.addAlignedCloseButton(contentView, R.id.options_title, refs.contentContainer, dialog);
         chrome.styleThemeButton(refs.sliderBookButton, "book".equals(sliderMode[0]));
         chrome.styleThemeButton(refs.sliderChapterButton, "chapter".equals(sliderMode[0]));
 

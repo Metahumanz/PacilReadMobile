@@ -13,6 +13,9 @@ import com.metahumanz.pacilread.model.BookmarkRecord;
 import com.metahumanz.pacilread.stats.ReadingStatsUtils;
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
+import com.metahumanz.pacilread.storage.SettingsStore;
+import com.metahumanz.pacilread.ui.LaunchSourceTransition;
+import com.metahumanz.pacilread.ui.TransitionMotionModeHelper;
 
 import java.util.List;
 import java.util.Locale;
@@ -76,7 +79,7 @@ public final class HomeBookmarksPanelController {
         row.setLayoutParams(rowParams);
         row.setClickable(true);
         row.setFocusable(true);
-        row.setOnClickListener(v -> openBookmark(bookmark));
+        row.setOnClickListener(v -> openBookmark(bookmark, v));
 
         LinearLayout texts = new LinearLayout(activity);
         texts.setOrientation(LinearLayout.VERTICAL);
@@ -129,7 +132,7 @@ public final class HomeBookmarksPanelController {
         return row;
     }
 
-    private void openBookmark(BookmarkRecord bookmark) {
+    private void openBookmark(BookmarkRecord bookmark, View sourceView) {
         executor.execute(() -> {
             BookRecord book = bookmark.bookId > 0L ? databaseHelper.getBook(bookmark.bookId) : null;
             if (book == null) {
@@ -145,6 +148,9 @@ public final class HomeBookmarksPanelController {
                 intent.putExtra("book_id", finalBook.id);
                 intent.putExtra("bookmark_chapter_order_index", bookmark.chapterOrderIndex);
                 intent.putExtra("bookmark_chapter_offset", bookmark.chapterOffset);
+                if (TransitionMotionModeHelper.isFluidMode(new SettingsStore(activity))) {
+                    LaunchSourceTransition.attachBoundsOnly(intent, sourceView);
+                }
                 activity.startActivity(intent);
             });
         });
