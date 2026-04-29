@@ -424,6 +424,17 @@
         </LinearLayout>
 
         <TextView
+            android:id="@+id/text_transition_motion_description"
+            style="@style/AppChromeBody"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:lineSpacingExtra="2dp"
+            android:text="流动会使用来源贴合和预测返回动画；简洁使用更稳定的基础转场。"
+            android:textColor="?attr/themeColorAppTextSecondary"
+            android:textSize="12sp" />
+
+        <TextView
             style="@style/AppChromeBody"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

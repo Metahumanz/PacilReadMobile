@@ -24,6 +24,7 @@ import com.metahumanz.pacilread.sync.WebDavClient;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.tts.MimoTtsClient;
 import com.metahumanz.pacilread.tts.SystemTtsClient;
+import com.metahumanz.pacilread.ui.TransitionMotionModeHelper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -110,13 +111,14 @@ final class SettingsScreenController {
     private View ttsMimoKeyLayout;
     private Button transitionFluidButton;
     private Button transitionSimpleButton;
+    private TextView transitionMotionDescriptionText;
 
     private boolean bindingSettingsValues = false;
     private boolean settingsBusy = false;
     private String selectedLightStyleVariant = ThemeModeHelper.LIGHT_STYLE_YUNBAI;
     private String selectedDarkStyleVariant = ThemeModeHelper.DARK_STYLE_YEMU;
     private String selectedReaderOrientationMode = READER_ORIENTATION_SYSTEM;
-    private String selectedTransitionMotionMode = "fluid";
+    private String selectedTransitionMotionMode = TransitionMotionModeHelper.MODE_FLUID;
 
     SettingsScreenController(Activity activity, Host host) {
         this.activity = activity;
@@ -161,7 +163,7 @@ final class SettingsScreenController {
         selectedReaderOrientationMode = settingsStore.getReaderOrientationMode();
         updateStyleVariantButtons();
         updateReaderOrientationButtons();
-        selectedTransitionMotionMode = settingsStore.getTransitionMotionMode();
+        selectedTransitionMotionMode = TransitionMotionModeHelper.resolveMode(settingsStore);
         updateTransitionMotionButtons();
         if (homeNavigationSettingsController != null) {
             homeNavigationSettingsController.bindValues();
@@ -207,7 +209,9 @@ final class SettingsScreenController {
         settingsStore.setAppLightStyleVariant(selectedLightStyleVariant);
         settingsStore.setAppDarkStyleVariant(selectedDarkStyleVariant);
         settingsStore.setReaderOrientationMode(selectedReaderOrientationMode);
-        settingsStore.setTransitionMotionMode(selectedTransitionMotionMode);
+        settingsStore.setTransitionMotionMode(TransitionMotionModeHelper.isFluidAvailable()
+                ? selectedTransitionMotionMode
+                : TransitionMotionModeHelper.MODE_SIMPLE);
         if (homeNavigationSettingsController != null) {
             homeNavigationSettingsController.saveValues();
         }
@@ -295,6 +299,7 @@ final class SettingsScreenController {
         volumeKeyDownActionSpinner = activity.findViewById(R.id.spinner_volume_key_down_action);
         transitionFluidButton = activity.findViewById(R.id.button_transition_fluid);
         transitionSimpleButton = activity.findViewById(R.id.button_transition_simple);
+        transitionMotionDescriptionText = activity.findViewById(R.id.text_transition_motion_description);
         glassOpacitySeekBar = activity.findViewById(R.id.seek_glass_opacity);
         glassOpacityText = activity.findViewById(R.id.text_glass_opacity);
         statusText = activity.findViewById(R.id.text_status);
@@ -486,26 +491,41 @@ final class SettingsScreenController {
 
     private void setupTransitionMotionButtons() {
         if (transitionFluidButton != null) {
-            transitionFluidButton.setOnClickListener(v -> selectTransitionMotionMode("fluid"));
+            transitionFluidButton.setOnClickListener(v -> selectTransitionMotionMode(TransitionMotionModeHelper.MODE_FLUID));
         }
         if (transitionSimpleButton != null) {
-            transitionSimpleButton.setOnClickListener(v -> selectTransitionMotionMode("simple"));
+            transitionSimpleButton.setOnClickListener(v -> selectTransitionMotionMode(TransitionMotionModeHelper.MODE_SIMPLE));
         }
     }
 
     private void selectTransitionMotionMode(String mode) {
+        if (TransitionMotionModeHelper.MODE_FLUID.equals(mode)
+                && !TransitionMotionModeHelper.isFluidAvailable()) {
+            selectedTransitionMotionMode = TransitionMotionModeHelper.MODE_SIMPLE;
+            updateTransitionMotionButtons();
+            return;
+        }
         selectedTransitionMotionMode = mode;
         updateTransitionMotionButtons();
         handleSettingsChanged();
     }
 
     private void updateTransitionMotionButtons() {
-        boolean fluid = "fluid".equals(selectedTransitionMotionMode);
-        boolean fluidAvailable = com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidAvailable();
+        boolean fluidAvailable = TransitionMotionModeHelper.isFluidAvailable();
+        if (!fluidAvailable) {
+            selectedTransitionMotionMode = TransitionMotionModeHelper.MODE_SIMPLE;
+        }
+        boolean fluid = TransitionMotionModeHelper.MODE_FLUID.equals(selectedTransitionMotionMode);
         AppUiUtils.styleToggleButton(activity, transitionFluidButton, fluid);
         AppUiUtils.styleToggleButton(activity, transitionSimpleButton, !fluid);
         if (transitionFluidButton != null) {
             transitionFluidButton.setEnabled(fluidAvailable);
+            transitionFluidButton.setAlpha(fluidAvailable ? 1f : 0.55f);
+        }
+        if (transitionMotionDescriptionText != null) {
+            transitionMotionDescriptionText.setText(fluidAvailable
+                    ? "流动会使用来源贴合和预测返回动画；简洁使用更稳定的基础转场。"
+                    : "当前系统低于 Android 14，默认使用简洁转场；流动动效需要 Android 14 及以上的预测返回支持。");
         }
     }
 

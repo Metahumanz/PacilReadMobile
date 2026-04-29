@@ -2,6 +2,7 @@ package com.metahumanz.pacilread.storage;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Build;
 
 import org.json.JSONObject;
 
@@ -659,12 +660,17 @@ public class SettingsStore {
     }
 
     public String getTransitionMotionMode() {
-        String value = preferences.getString(KEY_TRANSITION_MOTION_MODE, "fluid");
+        String defaultMode = Build.VERSION.SDK_INT >= 34 ? "fluid" : "simple";
+        String value = preferences.getString(KEY_TRANSITION_MOTION_MODE, defaultMode);
+        if (Build.VERSION.SDK_INT < 34) {
+            return "simple";
+        }
         return "simple".equals(value) ? "simple" : "fluid";
     }
 
     public void setTransitionMotionMode(String value) {
-        preferences.edit().putString(KEY_TRANSITION_MOTION_MODE, "simple".equals(value) ? "simple" : "fluid").apply();
+        String mode = Build.VERSION.SDK_INT < 34 || "simple".equals(value) ? "simple" : "fluid";
+        preferences.edit().putString(KEY_TRANSITION_MOTION_MODE, mode).apply();
     }
 
     public String getHomeSidebarPresentation() {
