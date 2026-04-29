@@ -86,6 +86,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private PopupWindow readerPopupWindow;
     private boolean readerPopupDismissingByCode;
     private boolean readerExitFinishing;
+    private boolean readerExitProgressPersisted;
     private boolean readerEnterAnimationStarted;
     private boolean readerExitFromBackGesture;
     private ValueAnimator readerForegroundAnimator;
@@ -203,13 +204,14 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             readingStatsTracker.pause();
         }
         chrome.cancelAutoHide();
+        if (!readerExitProgressPersisted) {
+            persistReaderProgress(readerExitFinishing);
+        }
         paging.cancelInteractiveAnimator();
         paging.cancelInteractivePaging();
         autoPage.stopAutoPage();
         tts.stopTts();
-        content.cancelPendingProgressSave();
         content.cancelPendingReflow();
-        content.persistProgress();
         state.pendingTapPagingDelta = 0;
         paging.removeWarmupCallbacks();
     }
@@ -695,6 +697,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             return;
         }
         readerExitFinishing = true;
+        readerExitProgressPersisted = persistReaderProgress(true);
         animateReaderExitToSource();
     }
 
@@ -754,11 +757,23 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     }
 
     private void finishReaderActivityNow() {
-        if (content != null) {
-            content.persistProgress();
+        if (!readerExitProgressPersisted) {
+            readerExitProgressPersisted = persistReaderProgress(false);
         }
         finish();
         ActivityTransitionCompat.overrideClose(this, 0, 0);
+    }
+
+    private boolean persistReaderProgress(boolean settlePaging) {
+        if (content == null) {
+            return false;
+        }
+        if (settlePaging && paging != null) {
+            paging.settleInterruptedPagingAnimation();
+        }
+        content.cancelPendingProgressSave();
+        content.persistProgress();
+        return true;
     }
 
     private void handleReaderPopupAction(String item, LaunchSourceTransition.Source source) {
