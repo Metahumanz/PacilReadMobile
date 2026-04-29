@@ -13,7 +13,9 @@ import com.metahumanz.pacilread.model.BookmarkRecord;
 import com.metahumanz.pacilread.stats.ReadingStatsUtils;
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
+import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.ui.LaunchSourceTransition;
+import com.metahumanz.pacilread.ui.TransitionMotionModeHelper;
 
 import java.util.List;
 import java.util.Locale;
@@ -146,7 +148,9 @@ public final class HomeBookmarksPanelController {
                 intent.putExtra("book_id", finalBook.id);
                 intent.putExtra("bookmark_chapter_order_index", bookmark.chapterOrderIndex);
                 intent.putExtra("bookmark_chapter_offset", bookmark.chapterOffset);
-                LaunchSourceTransition.attachBoundsOnly(intent, sourceView);
+                if (TransitionMotionModeHelper.isFluidMode(new SettingsStore(activity))) {
+                    LaunchSourceTransition.attachBoundsOnly(intent, sourceView);
+                }
                 activity.startActivity(intent);
             });
         });

@@ -125,7 +125,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         setupControls();
         installPredictiveBack();
 
-        if (hasLaunchSource()) {
+        if (hasLaunchSource() && com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(runtime.settingsStore)) {
             ActivityTransitionCompat.overrideOpen(this, 0, 0);
             views.readerRoot.setAlpha(1f);
             views.readerRoot.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
@@ -636,6 +636,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     }
 
     private void installPredictiveBack() {
+        if (!com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(runtime.settingsStore)) {
+            return;
+        }
         PredictiveBackScaleController.install(this, views.readerRoot, PredictiveBackScaleController.Profile.reader(),
                 new PredictiveBackScaleController.Delegate() {
                     @Override
@@ -659,6 +662,16 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                         return true;
                     }
                 });
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (!com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(runtime.settingsStore)) {
+            if (consumeReaderBack()) return;
+            finishReaderActivity();
+            return;
+        }
+        super.onBackPressed();
     }
 
     private boolean hasReaderBackConsumer() {
@@ -696,6 +709,11 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private void runReaderExitToSource() {
         if (views == null || views.readerRoot == null) {
             finishReaderActivityNow();
+            return;
+        }
+        // 非流动模式直接走居中缩放淡出
+        if (!com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(runtime.settingsStore)) {
+            animateReaderExitToCenter();
             return;
         }
         LaunchSourceTransition.Options options = LaunchSourceTransition.Options.defaults()

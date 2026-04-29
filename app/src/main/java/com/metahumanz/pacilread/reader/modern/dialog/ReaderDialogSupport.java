@@ -242,6 +242,9 @@ public final class ReaderDialogSupport {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE || dialog == null || window == null) {
             return null;
         }
+        if (!com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(runtime.settingsStore)) {
+            return null;
+        }
         View target = window.getDecorView();
         ScreenCornerClipper.apply(target);
         target.post(() -> {

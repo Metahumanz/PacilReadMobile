@@ -5,9 +5,11 @@ import android.os.Bundle;
 import android.view.View;
 import android.widget.ImageButton;
 
+import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedActivity;
 import com.metahumanz.pacilread.ui.ActivityTransitionCompat;
 import com.metahumanz.pacilread.ui.PredictiveBackScaleController;
+import com.metahumanz.pacilread.ui.TransitionMotionModeHelper;
 
 public class SettingsActivity extends ThemedActivity {
     public static final String EXTRA_HOME_BOTTOM_NAVIGATION_TRANSITION =
@@ -58,6 +60,9 @@ public class SettingsActivity extends ThemedActivity {
     }
 
     private void installPredictiveBack() {
+        if (!TransitionMotionModeHelper.isFluidMode(new SettingsStore(this))) {
+            return;
+        }
         View root = findViewById(R.id.settings_root);
         if (root == null) {
             return;
@@ -79,6 +84,15 @@ public class SettingsActivity extends ThemedActivity {
                         finishWithSettingsTransition();
                     }
                 });
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (!TransitionMotionModeHelper.isFluidMode(new SettingsStore(this))) {
+            finishWithSettingsTransition();
+            return;
+        }
+        super.onBackPressed();
     }
 
     private void finishWithSettingsTransition() {

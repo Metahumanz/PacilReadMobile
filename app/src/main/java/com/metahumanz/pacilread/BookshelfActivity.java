@@ -563,7 +563,9 @@ public class BookshelfActivity extends ThemedActivity {
     private void openBook(long bookId, View sourceView) {
         Intent intent = new Intent(this, ReaderActivity.class);
         intent.putExtra("book_id", bookId);
-        LaunchSourceTransition.attachBoundsOnly(intent, sourceView);
+        if (com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(settingsStore)) {
+            LaunchSourceTransition.attachBoundsOnly(intent, sourceView);
+        }
         startActivity(intent);
     }
 

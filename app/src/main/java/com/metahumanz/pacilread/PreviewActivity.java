@@ -34,6 +34,7 @@ import com.metahumanz.pacilread.theme.ThemedActivity;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.ui.GlassUiHelper;
 import com.metahumanz.pacilread.ui.PredictiveBackScaleController;
+import com.metahumanz.pacilread.ui.TransitionMotionModeHelper;
 import com.metahumanz.pacilread.util.FileAssetHelper;
 
 import org.json.JSONObject;
@@ -150,6 +151,9 @@ public class PreviewActivity extends ThemedActivity {
     }
 
     private void installPredictiveBack() {
+        if (!TransitionMotionModeHelper.isFluidMode(settingsStore)) {
+            return;
+        }
         if (mainRoot == null) {
             return;
         }
@@ -170,6 +174,16 @@ public class PreviewActivity extends ThemedActivity {
                         finish();
                     }
                 });
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (!TransitionMotionModeHelper.isFluidMode(settingsStore)) {
+            if (drawerController != null && drawerController.onBackPressed()) return;
+            finish();
+            return;
+        }
+        super.onBackPressed();
     }
 
     private void bindViews() {

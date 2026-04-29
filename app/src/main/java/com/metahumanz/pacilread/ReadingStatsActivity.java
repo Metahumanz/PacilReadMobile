@@ -23,6 +23,7 @@ import com.metahumanz.pacilread.ui.ActivityTransitionCompat;
 import com.metahumanz.pacilread.ui.BookCoverViewHelper;
 import com.metahumanz.pacilread.ui.LaunchSourceTransition;
 import com.metahumanz.pacilread.ui.PredictiveBackScaleController;
+import com.metahumanz.pacilread.ui.TransitionMotionModeHelper;
 
 import java.text.DateFormat;
 import java.util.Date;
@@ -122,6 +123,9 @@ public class ReadingStatsActivity extends ThemedActivity {
     }
 
     private void installPredictiveBack() {
+        if (!TransitionMotionModeHelper.isFluidMode(settingsStore)) {
+            return;
+        }
         View root = findViewById(R.id.reading_stats_root);
         if (root == null) {
             return;
@@ -150,13 +154,23 @@ public class ReadingStatsActivity extends ThemedActivity {
                 });
     }
 
+    @Override
+    public void onBackPressed() {
+        if (!TransitionMotionModeHelper.isFluidMode(settingsStore)) {
+            finishWithSourceTransition();
+            return;
+        }
+        super.onBackPressed();
+    }
+
     private void finishWithSourceTransition() {
         if (finishingWithSource) {
             return;
         }
         finishingWithSource = true;
         View root = findViewById(R.id.reading_stats_root);
-        if (LaunchSourceTransition.animateExitToSource(root, launchSource, 240L, this::finishNow)) {
+        if (TransitionMotionModeHelper.isFluidMode(settingsStore)
+                && LaunchSourceTransition.animateExitToSource(root, launchSource, 240L, this::finishNow)) {
             return;
         }
         animateExitToCenter(root);

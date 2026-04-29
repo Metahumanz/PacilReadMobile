@@ -13,6 +13,7 @@ import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
 import com.metahumanz.pacilread.ui.LaunchSourceTransition;
+import com.metahumanz.pacilread.ui.TransitionMotionModeHelper;
 
 import java.util.concurrent.ExecutorService;
 
@@ -142,7 +143,9 @@ final class SettingsReadingStatsController {
         if (openReadingStatsButton != null) {
             openReadingStatsButton.setOnClickListener(v -> {
                 Intent intent = new Intent(activity, ReadingStatsActivity.class);
-                LaunchSourceTransition.attach(intent, v);
+                if (TransitionMotionModeHelper.isFluidMode(settingsStore)) {
+                    LaunchSourceTransition.attach(intent, v);
+                }
                 activity.startActivity(intent);
             });
         }
