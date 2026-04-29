@@ -332,8 +332,16 @@ public final class LaunchSourceTransition {
         float destinationCenterY = targetBounds.centerY() - targetLocation[1];
         float destTransX = destinationCenterX - pivotX;
         float destTransY = destinationCenterY - pivotY;
-        float finalClipWidth = Math.min(targetView.getWidth(), Math.max(1f, targetBounds.width() / startScaleX));
-        float finalClipHeight = Math.min(targetView.getHeight(), Math.max(1f, targetBounds.height() / startScaleY));
+
+        // 按需缩放：允许 X/Y 轴从手势缩小状态放大到卡片或列表尺寸
+        float baseScaleX = clampScale(targetBounds.width() / (float) targetView.getWidth());
+        float baseScaleY = clampScale(targetBounds.height() / (float) targetView.getHeight());
+        float endScaleX = Math.max(startScaleX, baseScaleX);
+        float endScaleY = Math.max(startScaleY, baseScaleY);
+
+        // 在最终缩放比例下计算裁切尺寸，使视觉尺寸恰好贴合目标
+        float finalClipWidth = Math.min(targetView.getWidth(), Math.max(1f, targetBounds.width() / endScaleX));
+        float finalClipHeight = Math.min(targetView.getHeight(), Math.max(1f, targetBounds.height() / endScaleY));
 
         Rect startClip = targetView.getClipBounds();
         if (startClip == null) {
@@ -347,6 +355,9 @@ public final class LaunchSourceTransition {
         );
         clampRectToView(endClip, targetView.getWidth(), targetView.getHeight());
 
+        // 分阶段：几何变换先完成，视觉贴合后再执行短淡出
+        float geoEndFraction = 0.72f;
+
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(options.durationMs);
         animator.setInterpolator(options.interpolator);
@@ -354,23 +365,23 @@ public final class LaunchSourceTransition {
         Rect finalStartClip = new Rect(startClip);
         animator.addUpdateListener(animation -> {
             float fraction = animation.getAnimatedFraction();
-            targetView.setScaleX(startScaleX);
-            targetView.setScaleY(startScaleY);
-            targetView.setTranslationX(lerp(startTransX, destTransX, fraction));
-            targetView.setTranslationY(lerp(startTransY, destTransY, fraction));
+            float geoFraction = Math.min(1f, fraction / geoEndFraction);
+            targetView.setScaleX(lerp(startScaleX, endScaleX, geoFraction));
+            targetView.setScaleY(lerp(startScaleY, endScaleY, geoFraction));
+            targetView.setTranslationX(lerp(startTransX, destTransX, geoFraction));
+            targetView.setTranslationY(lerp(startTransY, destTransY, geoFraction));
 
             animatedClip.set(
-                    Math.round(lerp(finalStartClip.left, endClip.left, fraction)),
-                    Math.round(lerp(finalStartClip.top, endClip.top, fraction)),
-                    Math.round(lerp(finalStartClip.right, endClip.right, fraction)),
-                    Math.round(lerp(finalStartClip.bottom, endClip.bottom, fraction))
+                    Math.round(lerp(finalStartClip.left, endClip.left, geoFraction)),
+                    Math.round(lerp(finalStartClip.top, endClip.top, geoFraction)),
+                    Math.round(lerp(finalStartClip.right, endClip.right, geoFraction)),
+                    Math.round(lerp(finalStartClip.bottom, endClip.bottom, geoFraction))
             );
             targetView.setClipBounds(animatedClip);
 
-            float fadeStart = Math.max(0f, Math.min(0.9f, options.snapshotFadeStartFraction));
-            float alpha = fraction < fadeStart
+            float alpha = fraction < geoEndFraction
                     ? startAlpha
-                    : lerp(startAlpha, 0f, (fraction - fadeStart) / Math.max(1f - fadeStart, 0.001f));
+                    : lerp(startAlpha, 0f, (fraction - geoEndFraction) / Math.max(1f - geoEndFraction, 0.001f));
             targetView.setAlpha(clampAlpha(alpha));
         });
         animator.addListener(new android.animation.AnimatorListenerAdapter() {
