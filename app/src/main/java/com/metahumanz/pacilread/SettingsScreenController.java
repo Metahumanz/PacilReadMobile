@@ -108,12 +108,15 @@ final class SettingsScreenController {
     private Button webDavSyncReadingStatsButton;
     private View webDavSyncOptionsLayout;
     private View ttsMimoKeyLayout;
+    private Button transitionFluidButton;
+    private Button transitionSimpleButton;
 
     private boolean bindingSettingsValues = false;
     private boolean settingsBusy = false;
     private String selectedLightStyleVariant = ThemeModeHelper.LIGHT_STYLE_YUNBAI;
     private String selectedDarkStyleVariant = ThemeModeHelper.DARK_STYLE_YEMU;
     private String selectedReaderOrientationMode = READER_ORIENTATION_SYSTEM;
+    private String selectedTransitionMotionMode = "fluid";
 
     SettingsScreenController(Activity activity, Host host) {
         this.activity = activity;
@@ -130,6 +133,7 @@ final class SettingsScreenController {
         setupThemeSpinners();
         setupStyleVariantButtons();
         setupReaderOrientationButtons();
+        setupTransitionMotionButtons();
         bindCurrentValues();
         setupGlassOpacityControl();
         setupAutoSaveListeners();
@@ -157,6 +161,8 @@ final class SettingsScreenController {
         selectedReaderOrientationMode = settingsStore.getReaderOrientationMode();
         updateStyleVariantButtons();
         updateReaderOrientationButtons();
+        selectedTransitionMotionMode = settingsStore.getTransitionMotionMode();
+        updateTransitionMotionButtons();
         if (homeNavigationSettingsController != null) {
             homeNavigationSettingsController.bindValues();
         }
@@ -201,6 +207,7 @@ final class SettingsScreenController {
         settingsStore.setAppLightStyleVariant(selectedLightStyleVariant);
         settingsStore.setAppDarkStyleVariant(selectedDarkStyleVariant);
         settingsStore.setReaderOrientationMode(selectedReaderOrientationMode);
+        settingsStore.setTransitionMotionMode(selectedTransitionMotionMode);
         if (homeNavigationSettingsController != null) {
             homeNavigationSettingsController.saveValues();
         }
@@ -286,6 +293,8 @@ final class SettingsScreenController {
         ttsEngineSpinner = activity.findViewById(R.id.spinner_tts_engine);
         volumeKeyUpActionSpinner = activity.findViewById(R.id.spinner_volume_key_up_action);
         volumeKeyDownActionSpinner = activity.findViewById(R.id.spinner_volume_key_down_action);
+        transitionFluidButton = activity.findViewById(R.id.button_transition_fluid);
+        transitionSimpleButton = activity.findViewById(R.id.button_transition_simple);
         glassOpacitySeekBar = activity.findViewById(R.id.seek_glass_opacity);
         glassOpacityText = activity.findViewById(R.id.text_glass_opacity);
         statusText = activity.findViewById(R.id.text_status);
@@ -472,6 +481,31 @@ final class SettingsScreenController {
         }
         if (readerOrientationLandscapeButton != null) {
             readerOrientationLandscapeButton.setOnClickListener(v -> selectReaderOrientationMode(READER_ORIENTATION_LANDSCAPE));
+        }
+    }
+
+    private void setupTransitionMotionButtons() {
+        if (transitionFluidButton != null) {
+            transitionFluidButton.setOnClickListener(v -> selectTransitionMotionMode("fluid"));
+        }
+        if (transitionSimpleButton != null) {
+            transitionSimpleButton.setOnClickListener(v -> selectTransitionMotionMode("simple"));
+        }
+    }
+
+    private void selectTransitionMotionMode(String mode) {
+        selectedTransitionMotionMode = mode;
+        updateTransitionMotionButtons();
+        handleSettingsChanged();
+    }
+
+    private void updateTransitionMotionButtons() {
+        boolean fluid = "fluid".equals(selectedTransitionMotionMode);
+        boolean fluidAvailable = com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidAvailable();
+        AppUiUtils.styleToggleButton(activity, transitionFluidButton, fluid);
+        AppUiUtils.styleToggleButton(activity, transitionSimpleButton, !fluid);
+        if (transitionFluidButton != null) {
+            transitionFluidButton.setEnabled(fluidAvailable);
         }
     }
 
