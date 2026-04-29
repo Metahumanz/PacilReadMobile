@@ -363,6 +363,8 @@ public final class LaunchSourceTransition {
         animator.setInterpolator(options.interpolator);
         Rect animatedClip = new Rect(startClip);
         Rect finalStartClip = new Rect(startClip);
+        targetView.setClipBounds(null);
+        ScreenCornerClipper.apply(targetView, animatedClip);
         animator.addUpdateListener(animation -> {
             float fraction = animation.getAnimatedFraction();
             float geoFraction = Math.min(1f, fraction / geoEndFraction);
@@ -377,7 +379,7 @@ public final class LaunchSourceTransition {
                     Math.round(lerp(finalStartClip.right, endClip.right, geoFraction)),
                     Math.round(lerp(finalStartClip.bottom, endClip.bottom, geoFraction))
             );
-            targetView.setClipBounds(animatedClip);
+            targetView.invalidateOutline();
 
             float alpha = fraction < geoEndFraction
                     ? startAlpha

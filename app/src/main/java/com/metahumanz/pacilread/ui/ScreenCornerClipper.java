@@ -1,6 +1,7 @@
 package com.metahumanz.pacilread.ui;
 
 import android.graphics.Outline;
+import android.graphics.Rect;
 import android.os.Build;
 import android.view.RoundedCorner;
 import android.view.View;
@@ -14,6 +15,10 @@ public final class ScreenCornerClipper {
     }
 
     public static void apply(View target) {
+        apply(target, null);
+    }
+
+    public static void apply(View target, Rect outlineBounds) {
         if (target == null) {
             return;
         }
@@ -25,11 +30,18 @@ public final class ScreenCornerClipper {
                     outline.setEmpty();
                     return;
                 }
+                Rect bounds = outlineBounds == null
+                        ? new Rect(0, 0, view.getWidth(), view.getHeight())
+                        : new Rect(outlineBounds);
+                if (!bounds.intersect(0, 0, view.getWidth(), view.getHeight()) || bounds.isEmpty()) {
+                    outline.setEmpty();
+                    return;
+                }
                 outline.setRoundRect(
-                        0,
-                        0,
-                        view.getWidth(),
-                        view.getHeight(),
+                        bounds.left,
+                        bounds.top,
+                        bounds.right,
+                        bounds.bottom,
                         screenCornerRadiusPx(view)
                 );
             }
