@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Insets;
+import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.view.View;
@@ -29,6 +30,7 @@ import com.metahumanz.pacilread.reader.modern.ReaderRuntime;
 import com.metahumanz.pacilread.reader.modern.ReaderUiUtils;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.ui.GlassUiHelper;
+import com.metahumanz.pacilread.ui.LaunchSourceTransition;
 import com.metahumanz.pacilread.ui.PredictiveBackScaleController;
 import com.metahumanz.pacilread.ui.ScreenCornerClipper;
 
@@ -38,6 +40,7 @@ public final class ReaderDialogSupport {
     private final ModernReaderActivity activity;
     private final ReaderRuntime runtime;
     private final ReaderUiUtils ui;
+    private LaunchSourceTransition.Source nextDismissSource;
 
     public ReaderDialogSupport(ModernReaderActivity activity, ReaderRuntime runtime, ReaderUiUtils ui) {
         this.activity = activity;
@@ -63,12 +66,24 @@ public final class ReaderDialogSupport {
         };
     }
 
+    public void setNextDismissSource(View sourceView) {
+        nextDismissSource = LaunchSourceTransition.captureSource(sourceView);
+    }
+
+    public void setNextDismissSource(Rect sourceBounds) {
+        nextDismissSource = sourceBounds == null ? null : LaunchSourceTransition.sourceFromBounds(sourceBounds);
+    }
+
+    public void setNextDismissSource(LaunchSourceTransition.Source source) {
+        nextDismissSource = source;
+    }
+
     public void showStyledDialog(AlertDialog dialog) {
         Window window = showDialogWithAnimation(dialog, R.style.ReaderPopDialogAnimation);
         if (window != null) {
             window.setBackgroundDrawableResource(android.R.color.transparent);
         }
-        OnBackInvokedCallback backCallback = installPredictiveDismiss(dialog, window);
+        OnBackInvokedCallback backCallback = installPredictiveDismiss(dialog, window, consumeNextDismissSource());
         dialog.setOnDismissListener(unused -> unregisterPredictiveDismiss(dialog, backCallback));
         GlassUiHelper.applyToHierarchy(activity, dialog.findViewById(android.R.id.content), runtime.settingsStore.getGlassOpacityPercent());
     }
@@ -79,7 +94,7 @@ public final class ReaderDialogSupport {
             window.setBackgroundDrawableResource(android.R.color.transparent);
             window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         }
-        OnBackInvokedCallback backCallback = installPredictiveDismiss(dialog, window);
+        OnBackInvokedCallback backCallback = installPredictiveDismiss(dialog, window, consumeNextDismissSource());
         dialog.setOnDismissListener(unused -> unregisterPredictiveDismiss(dialog, backCallback));
         GlassUiHelper.applyToHierarchy(activity, dialog.findViewById(android.R.id.content), runtime.settingsStore.getGlassOpacityPercent());
     }
@@ -126,7 +141,7 @@ public final class ReaderDialogSupport {
             configureEdgeToEdgeWindow(window);
             applySystemBarsVisibility(window, false);
         }
-        OnBackInvokedCallback backCallback = installPredictiveDismiss(dialog, window);
+        OnBackInvokedCallback backCallback = installPredictiveDismiss(dialog, window, consumeNextDismissSource());
         dialog.setOnDismissListener(unused -> {
             unregisterPredictiveDismiss(dialog, backCallback);
             applySystemBarsVisibility(activity.getWindow(), restoreShowSystemBars);
@@ -147,13 +162,23 @@ public final class ReaderDialogSupport {
         }
     }
 
+    private LaunchSourceTransition.Source consumeNextDismissSource() {
+        LaunchSourceTransition.Source source = nextDismissSource;
+        nextDismissSource = null;
+        return source;
+    }
+
     @SuppressLint("NewApi")
-    private OnBackInvokedCallback installPredictiveDismiss(AlertDialog dialog, Window window) {
+    private OnBackInvokedCallback installPredictiveDismiss(AlertDialog dialog, Window window, LaunchSourceTransition.Source dismissSource) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE || dialog == null || window == null) {
             return null;
         }
         View target = window.getDecorView();
         ScreenCornerClipper.apply(target);
+        target.post(() -> {
+            target.setPivotX(target.getWidth() / 2f);
+            target.setPivotY(target.getHeight() / 2f);
+        });
         OnBackAnimationCallback callback = new OnBackAnimationCallback() {
             private boolean dismissing;
 
@@ -195,17 +220,21 @@ public final class ReaderDialogSupport {
                 }
                 dismissing = true;
                 target.animate().cancel();
+                if (LaunchSourceTransition.animateExitToSource(
+                        target,
+                        dismissSource,
+                        230L,
+                        () -> dismissIfShowing(dialog)
+                )) {
+                    return;
+                }
                 target.animate()
                         .scaleX(PredictiveBackScaleController.READER_MIN_SCALE)
                         .scaleY(PredictiveBackScaleController.READER_MIN_SCALE)
                         .alpha(0f)
                         .setDuration(130L)
                         .setInterpolator(new android.view.animation.AccelerateInterpolator())
-                        .withEndAction(() -> {
-                            if (dialog.isShowing()) {
-                                dialog.dismiss();
-                            }
-                        })
+                        .withEndAction(() -> dismissIfShowing(dialog))
                         .start();
             }
         };
@@ -214,6 +243,12 @@ public final class ReaderDialogSupport {
                 callback
         );
         return callback;
+    }
+
+    private void dismissIfShowing(AlertDialog dialog) {
+        if (dialog.isShowing()) {
+            dialog.dismiss();
+        }
     }
 
     @SuppressLint("NewApi")

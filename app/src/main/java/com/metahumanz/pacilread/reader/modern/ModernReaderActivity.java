@@ -5,7 +5,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.graphics.Rect;
 import android.content.pm.ActivityInfo;
 import android.os.BatteryManager;
 import android.os.Bundle;
@@ -82,7 +81,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private PopupWindow readerPopupWindow;
     private boolean readerPopupDismissingByCode;
     private boolean readerExitFinishing;
-    private Rect launchSourceBounds;
+    private LaunchSourceTransition.Source launchSource;
     private long lastScrollPageTurnTime;
 
     @Override
@@ -97,7 +96,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         readingStatsTracker = new ReaderReadingStatsTracker(runtime, state);
         state.pagingTouchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
         state.bookId = getIntent().getLongExtra("book_id", -1L);
-        launchSourceBounds = LaunchSourceTransition.fromIntent(getIntent());
+        launchSource = LaunchSourceTransition.fromIntentSource(getIntent());
         state.requestedChapterOrderIndex = getIntent().getIntExtra("bookmark_chapter_order_index", -1);
         state.requestedChapterOffset = getIntent().getIntExtra("bookmark_chapter_offset", -1);
         if (savedInstanceState != null) {
@@ -294,21 +293,43 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         findViewById(R.id.button_back).setOnClickListener(v -> finishReaderActivity());
         findViewById(R.id.button_prev_chapter).setOnClickListener(v -> navigation.openChapterFromStart(state.currentChapterIndex - 1, true, -1));
         findViewById(R.id.button_next_chapter).setOnClickListener(v -> navigation.openChapterFromStart(state.currentChapterIndex + 1, true, 1));
-        findViewById(R.id.button_toc).setOnClickListener(v -> libraryDialogs.showTocDialog());
-        findViewById(R.id.button_search).setOnClickListener(v -> libraryDialogs.showSearchDialog());
-        findViewById(R.id.button_bookmark).setOnClickListener(v -> showBookmarkDialog());
-        findViewById(R.id.button_rules).setOnClickListener(v -> libraryDialogs.showRulesDialog());
-        findViewById(R.id.button_style).setOnClickListener(v -> styleDialogs.showStyleDialog(REQUEST_PICK_BACKGROUND));
-        findViewById(R.id.button_reader_options).setOnClickListener(v -> optionsDialogs.showReaderOptionsDialog());
+        findViewById(R.id.button_toc).setOnClickListener(v -> {
+            dialogSupport.setNextDismissSource(v);
+            libraryDialogs.showTocDialog();
+        });
+        findViewById(R.id.button_search).setOnClickListener(v -> {
+            dialogSupport.setNextDismissSource(v);
+            libraryDialogs.showSearchDialog();
+        });
+        findViewById(R.id.button_bookmark).setOnClickListener(v -> {
+            dialogSupport.setNextDismissSource(v);
+            showBookmarkDialog();
+        });
+        findViewById(R.id.button_rules).setOnClickListener(v -> {
+            dialogSupport.setNextDismissSource(v);
+            libraryDialogs.showRulesDialog();
+        });
+        findViewById(R.id.button_style).setOnClickListener(v -> {
+            dialogSupport.setNextDismissSource(v);
+            styleDialogs.showStyleDialog(REQUEST_PICK_BACKGROUND);
+        });
+        findViewById(R.id.button_reader_options).setOnClickListener(v -> {
+            dialogSupport.setNextDismissSource(v);
+            optionsDialogs.showReaderOptionsDialog();
+        });
         views.themeToggleButton.setOnClickListener(v -> chrome.toggleReaderUiTheme());
         views.ttsButton.setOnClickListener(v -> {
             if (state.ttsActive || state.ttsPaused) {
                 tts.toggleTts();
             } else {
+                dialogSupport.setNextDismissSource(v);
                 tts.showTtsDialog();
             }
         });
-        views.autoPageButton.setOnClickListener(v -> autoPage.showAutoPageDialog());
+        views.autoPageButton.setOnClickListener(v -> {
+            dialogSupport.setNextDismissSource(v);
+            autoPage.showAutoPageDialog();
+        });
         views.moreButton.setOnClickListener(v -> {
             if (readerPopupWindow != null && readerPopupWindow.isShowing()) {
                 PopupWindow pw = readerPopupWindow;
@@ -374,11 +395,14 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                     btn.setMinWidth(0);
                     btn.setPadding(btnPadH, btnPadV, btnPadH, btnPadV);
                     chrome.styleReaderMenuButton(btn, false);
-                    btn.setOnClickListener(itemView -> animatePopupWaterfallClose(popupWindow, () -> {
-                        readerPopupDismissingByCode = true;
-                        popupWindow.dismiss();
-                        handleReaderPopupAction(item);
-                    }));
+                    btn.setOnClickListener(itemView -> {
+                        LaunchSourceTransition.Source itemSource = LaunchSourceTransition.captureSource(itemView);
+                        animatePopupWaterfallClose(popupWindow, () -> {
+                            readerPopupDismissingByCode = true;
+                            popupWindow.dismiss();
+                            handleReaderPopupAction(item, itemSource);
+                        });
+                    });
 
                     LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
                             0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
@@ -392,7 +416,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             popupWindow.showAsDropDown(views.moreButton, 0, 0, Gravity.END);
             animatePopupWaterfallOpen(popupContent, rowLayouts, rowHeight);
         });
-        views.readerTitle.setOnClickListener(v -> openReadingStatsForCurrentBook());
+        views.readerTitle.setOnClickListener(v -> openReadingStatsForCurrentBook(v));
         views.pageStage.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
             int width = right - left;
             int height = bottom - top;
@@ -461,6 +485,11 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                     public void commitBack() {
                         finishReaderActivity();
                     }
+
+                    @Override
+                    public boolean commitBackFromGesture() {
+                        return true;
+                    }
                 });
     }
 
@@ -495,7 +524,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         }
         if (LaunchSourceTransition.animateExitToSource(
                 views.readerRoot,
-                launchSourceBounds,
+                launchSource,
                 260L,
                 this::finishReaderActivityNow
         )) {
@@ -510,7 +539,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         views.readerRoot.animate()
                 .scaleX(minScale)
                 .scaleY(minScale)
-                .alpha(0.96f)
+                .alpha(0f)
                 .translationX(0f)
                 .translationY(0f)
                 .setDuration(160L)
@@ -527,29 +556,35 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         ActivityTransitionCompat.overrideClose(this, 0, 0);
     }
 
-    private void handleReaderPopupAction(String item) {
+    private void handleReaderPopupAction(String item, LaunchSourceTransition.Source source) {
         views.moreButton.animate().rotation(0f).setDuration(200).start();
         switch (item) {
             case "搜索":
+                dialogSupport.setNextDismissSource(source);
                 libraryDialogs.showSearchDialog();
                 break;
             case "替换":
+                dialogSupport.setNextDismissSource(source);
                 libraryDialogs.showRulesDialog();
                 break;
             case "排版":
+                dialogSupport.setNextDismissSource(source);
                 styleDialogs.showStyleDialog(REQUEST_PICK_BACKGROUND);
                 break;
             case "翻页":
+                dialogSupport.setNextDismissSource(source);
                 autoPage.showAutoPageDialog();
                 break;
             case "听书":
                 if (state.ttsActive || state.ttsPaused) {
                     tts.toggleTts();
                 } else {
+                    dialogSupport.setNextDismissSource(source);
                     tts.showTtsDialog();
                 }
                 break;
             case "书签":
+                dialogSupport.setNextDismissSource(source);
                 showBookmarkDialog();
                 break;
         }
@@ -638,12 +673,16 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     }
 
     public void openReadingStatsForCurrentBook() {
+        openReadingStatsForCurrentBook(views.readerTitle);
+    }
+
+    public void openReadingStatsForCurrentBook(View sourceView) {
         if (!runtime.settingsStore.isReadingTimeTrackingEnabled() || state.book == null) {
             return;
         }
         Intent intent = new Intent(this, ReadingStatsActivity.class);
         intent.putExtra("book_id", state.book.id);
-        LaunchSourceTransition.attach(intent, views.moreButton);
+        LaunchSourceTransition.attach(intent, sourceView);
         startActivity(intent);
     }
 

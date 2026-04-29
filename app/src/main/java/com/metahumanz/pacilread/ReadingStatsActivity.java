@@ -1,7 +1,6 @@
 package com.metahumanz.pacilread;
 
 import android.os.Bundle;
-import android.graphics.Rect;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.Button;
@@ -60,7 +59,7 @@ public class ReadingStatsActivity extends ThemedActivity {
 
     private String selectedPeriod = ReadingStatsUtils.PERIOD_TODAY;
     private long bookId = -1L;
-    private Rect launchSourceBounds;
+    private LaunchSourceTransition.Source launchSource;
     private boolean finishingWithSource;
 
     @Override
@@ -73,7 +72,7 @@ public class ReadingStatsActivity extends ThemedActivity {
         readingStatsSyncManager = new ReadingStatsSyncManager(this, databaseHelper, settingsStore, new WebDavClient(settingsStore));
 
         bookId = getIntent().getLongExtra("book_id", -1L);
-        launchSourceBounds = LaunchSourceTransition.fromIntent(getIntent());
+        launchSource = LaunchSourceTransition.fromIntentSource(getIntent());
 
         bindViews();
         setupControls();
@@ -143,6 +142,11 @@ public class ReadingStatsActivity extends ThemedActivity {
                     public void commitBack() {
                         finishWithSourceTransition();
                     }
+
+                    @Override
+                    public boolean commitBackFromGesture() {
+                        return true;
+                    }
                 });
     }
 
@@ -152,10 +156,28 @@ public class ReadingStatsActivity extends ThemedActivity {
         }
         finishingWithSource = true;
         View root = findViewById(R.id.reading_stats_root);
-        if (LaunchSourceTransition.animateExitToSource(root, launchSourceBounds, 240L, this::finishNow)) {
+        if (LaunchSourceTransition.animateExitToSource(root, launchSource, 240L, this::finishNow)) {
             return;
         }
-        finishNow();
+        animateExitToCenter(root);
+    }
+
+    private void animateExitToCenter(View root) {
+        if (root == null) {
+            finishNow();
+            return;
+        }
+        root.animate().cancel();
+        root.animate()
+                .scaleX(PredictiveBackScaleController.STANDARD_MIN_SCALE)
+                .scaleY(PredictiveBackScaleController.STANDARD_MIN_SCALE)
+                .alpha(0f)
+                .translationX(0f)
+                .translationY(0f)
+                .setDuration(160L)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                .withEndAction(this::finishNow)
+                .start();
     }
 
     private void finishNow() {

@@ -18,6 +18,10 @@ public final class PredictiveBackScaleController {
         boolean shouldAnimateBack();
         boolean consumeBack();
         void commitBack();
+
+        default boolean commitBackFromGesture() {
+            return false;
+        }
     }
 
     public static final class Profile {
@@ -52,6 +56,10 @@ public final class PredictiveBackScaleController {
             Delegate delegate
     ) {
         ScreenCornerClipper.apply(targetView);
+        targetView.post(() -> {
+            targetView.setPivotX(targetView.getWidth() / 2f);
+            targetView.setPivotY(targetView.getHeight() / 2f);
+        });
         OnBackPressedCallback callback = new OnBackPressedCallback(true) {
             private final DecelerateInterpolator interpolator = new DecelerateInterpolator();
             private boolean gestureActive;
@@ -103,6 +111,11 @@ public final class PredictiveBackScaleController {
                 }
                 if (gestureActive && animatedDuringGesture) {
                     committing = true;
+                    if (delegate.commitBackFromGesture()) {
+                        finishGesture();
+                        delegate.commitBack();
+                        return;
+                    }
                     animateToCommit(delegate::commitBack);
                     return;
                 }
