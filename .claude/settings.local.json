@@ -2,6 +2,9 @@
   "permissions": {
     "additionalDirectories": [
       "c:\\VScodework\\PacilReadMobile"
+    ],
+    "allow": [
+      "Bash(powershell -Command \"& { .\\\\gradlew.bat assembleDebug --no-daemon --console=plain }\")"
     ]
   }
 }

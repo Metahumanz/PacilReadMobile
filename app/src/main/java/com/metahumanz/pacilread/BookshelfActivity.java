@@ -36,6 +36,8 @@ public class BookshelfActivity extends ThemedActivity {
     private static final int REQUEST_PICK_BOOK = 1001;
     private static final int REQUEST_PICK_COVER = 1002;
     private static final String VIEW_MODE_CARD = "card";
+    public static final String EXTRA_AUTO_OPEN_BOOK_ID =
+            "com.metahumanz.pacilread.EXTRA_AUTO_OPEN_BOOK_ID";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final List<BookRecord> allBooks = new ArrayList<>();
@@ -71,6 +73,7 @@ public class BookshelfActivity extends ThemedActivity {
     private long pendingCoverBookId = -1L;
     private boolean booksLoaded = false;
     private boolean booksLoading = false;
+    private boolean autoOpenConsumed;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -85,10 +88,14 @@ public class BookshelfActivity extends ThemedActivity {
         setupAdapters();
         setupInteractions();
         setupHomeControllers();
-        showBookshelfLoadingState();
-
-        if (savedInstanceState == null && settingsStore.isAutoOpenLastBook()) {
-            maybeAutoOpenLastBook();
+        long autoOpenBookId = getIntent().getLongExtra(EXTRA_AUTO_OPEN_BOOK_ID, -1L);
+        if (savedInstanceState == null && autoOpenBookId > 0) {
+            performAutoOpenFastPath(autoOpenBookId);
+        } else {
+            showBookshelfLoadingState();
+            if (savedInstanceState == null && settingsStore.isAutoOpenLastBook()) {
+                maybeAutoOpenLastBook();
+            }
         }
     }
 
@@ -99,7 +106,9 @@ public class BookshelfActivity extends ThemedActivity {
         if (homeNavigationController != null) {
             homeNavigationController.refreshFromSettings();
         }
-        refreshBooks();
+        if (!autoOpenConsumed) {
+            refreshBooks();
+        }
         refreshCurrentHomePage(true);
     }
 
@@ -642,6 +651,92 @@ public class BookshelfActivity extends ThemedActivity {
                 }
             } catch (Exception ignored) {}
         });
+    }
+
+    private void performAutoOpenFastPath(long bookId) {
+        autoOpenConsumed = true;
+        executor.execute(() -> {
+            try {
+                BookRecord book = databaseHelper.getBook(bookId);
+                if (book == null) {
+                    runOnUiThread(() -> {
+                        autoOpenConsumed = false;
+                        showBookshelfLoadingState();
+                        refreshBooks();
+                    });
+                    return;
+                }
+                runOnUiThread(() -> {
+                    List<BookRecord> single = new ArrayList<>();
+                    single.add(book);
+                    listAdapter.setItems(single);
+                    gridAdapter.setItems(single);
+                    updateAddEntryVisibility();
+                    updateStats(single);
+                    booksLoaded = true;
+                    booksLoading = false;
+                    applyBookshelfMode();
+
+                    View container = isCardMode() ? (View) gridBooks : (View) listBooks;
+                    container.post(() -> {
+                        View sourceView = null;
+                        if (isCardMode() && gridBooks.getChildCount() > 0) {
+                            sourceView = gridBooks.getChildAt(0);
+                        } else if (!isCardMode() && listBooks.getChildCount() > 0) {
+                            sourceView = listBooks.getChildAt(0);
+                        }
+                        openBook(book.id, sourceView);
+                        autoOpenConsumed = false;
+
+                        // 在阅读器背后异步加载完整书架
+                        executor.execute(() -> {
+                            try {
+                                List<BookRecord> books = databaseHelper.getBooks();
+                                runOnUiThread(() -> {
+                                    booksLoading = false;
+                                    booksLoaded = true;
+                                    allBooks.clear();
+                                    allBooks.addAll(books);
+                                    applyFilter(currentQuery());
+                                    scrollToBook(bookId);
+                                });
+                            } catch (Exception error) {
+                                runOnUiThread(() -> {
+                                    booksLoading = false;
+                                    applyFilter(currentQuery());
+                                });
+                            }
+                        });
+                    });
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    autoOpenConsumed = false;
+                    showBookshelfLoadingState();
+                    refreshBooks();
+                });
+            }
+        });
+    }
+
+    private void scrollToBook(long bookId) {
+        if (isCardMode()) {
+            for (int i = 0; i < gridAdapter.getCount(); i++) {
+                BookRecord item = gridAdapter.getItem(i);
+                if (item != null && item.id == bookId) {
+                    gridBooks.setSelection(i);
+                    return;
+                }
+            }
+        } else {
+            for (int i = 0; i < listAdapter.getCount(); i++) {
+                BookRecord item = listAdapter.getItem(i);
+                if (item != null && item.id == bookId) {
+                    listBooks.setSelection(i);
+                    return;
+                }
+            }
+        }
     }
 
     // ==================== UI Helpers ====================

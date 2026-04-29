@@ -1,13 +1,15 @@
 package com.metahumanz.pacilread.ui;
 
+import android.animation.ValueAnimator;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Rect;
-import android.view.ViewGroup;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.animation.DecelerateInterpolator;
+import android.view.animation.Interpolator;
 import android.widget.ImageView;
 
 import java.io.File;
@@ -40,7 +42,41 @@ public final class LaunchSourceTransition {
         public Rect bounds() {
             return bounds == null ? null : new Rect(bounds);
         }
+
+        public Bitmap snapshot() {
+            return snapshot;
+        }
     }
+
+    public static final class Options {
+        final long durationMs;
+        final float snapshotFadeStartFraction;
+        final Interpolator interpolator;
+
+        private Options(long durationMs, float snapshotFadeStartFraction, Interpolator interpolator) {
+            this.durationMs = durationMs;
+            this.snapshotFadeStartFraction = clampOption(snapshotFadeStartFraction, 0f, 1f);
+            this.interpolator = interpolator;
+        }
+
+        public static Options defaults() {
+            return new Options(260L, 0.5f, new DecelerateInterpolator());
+        }
+
+        public Options withDuration(long durationMs) {
+            return new Options(durationMs, snapshotFadeStartFraction, interpolator);
+        }
+
+        public Options withSnapshotFadeStartFraction(float fraction) {
+            return new Options(durationMs, fraction, interpolator);
+        }
+
+        private static float clampOption(float value, float min, float max) {
+            return Math.max(min, Math.min(max, value));
+        }
+    }
+
+    // ==================== public API ====================
 
     public static void attach(Intent intent, View sourceView) {
         Source source = captureSource(sourceView);
@@ -93,7 +129,6 @@ public final class LaunchSourceTransition {
         if (snapshotPath != null && !snapshotPath.isBlank()) {
             snapshot = BitmapFactory.decodeFile(snapshotPath);
             if (snapshot != null) {
-                // The bitmap is now held in memory for the return animation; the cache file is no longer needed.
                 new File(snapshotPath).delete();
             }
         }
@@ -120,19 +155,32 @@ public final class LaunchSourceTransition {
         return bounds.width() > 0 && bounds.height() > 0 ? bounds : null;
     }
 
+    // ==================== 退出动画（带延迟快照淡入） ====================
+
     public static boolean animateExitToSource(
             View targetView,
             Rect targetBounds,
             long durationMs,
             Runnable onComplete
     ) {
-        return animateExitToSource(targetView, new Source(targetBounds, null), durationMs, onComplete);
+        return animateExitToSource(targetView, new Source(targetBounds, null),
+                Options.defaults().withDuration(durationMs), onComplete);
     }
 
     public static boolean animateExitToSource(
             View targetView,
             Source source,
             long durationMs,
+            Runnable onComplete
+    ) {
+        return animateExitToSource(targetView, source,
+                Options.defaults().withDuration(durationMs), onComplete);
+    }
+
+    public static boolean animateExitToSource(
+            View targetView,
+            Source source,
+            Options options,
             Runnable onComplete
     ) {
         Rect targetBounds = source == null ? null : source.bounds;
@@ -142,41 +190,201 @@ public final class LaunchSourceTransition {
         if (targetView.getWidth() <= 0 || targetView.getHeight() <= 0) {
             return false;
         }
+
         ScreenCornerClipper.apply(targetView);
         targetView.animate().cancel();
-        targetView.setPivotX(targetView.getWidth() / 2f);
-        targetView.setPivotY(targetView.getHeight() / 2f);
+
+        float pivotX = targetView.getWidth() / 2f;
+        float pivotY = targetView.getHeight() / 2f;
+        targetView.setPivotX(pivotX);
+        targetView.setPivotY(pivotY);
+
         int[] targetLocation = untransformedLocationOnScreen(targetView);
         float destinationCenterX = targetBounds.centerX() - targetLocation[0];
         float destinationCenterY = targetBounds.centerY() - targetLocation[1];
-        float targetCenterX = targetView.getWidth() / 2f;
-        float targetCenterY = targetView.getHeight() / 2f;
-        float destinationScaleX = clampScale(targetBounds.width() / (float) targetView.getWidth());
-        float destinationScaleY = clampScale(targetBounds.height() / (float) targetView.getHeight());
-        ImageView snapshotView = createSnapshotView(targetView, source.snapshot, targetLocation);
+        float destScaleX = clampScale(targetBounds.width() / (float) targetView.getWidth());
+        float destScaleY = clampScale(targetBounds.height() / (float) targetView.getHeight());
+        float destTransX = destinationCenterX - pivotX;
+        float destTransY = destinationCenterY - pivotY;
 
-        targetView.animate()
-                .scaleX(destinationScaleX)
-                .scaleY(destinationScaleY)
-                .translationX(destinationCenterX - targetCenterX)
-                .translationY(destinationCenterY - targetCenterY)
-                .alpha(0f)
-                .setDuration(durationMs)
-                .setInterpolator(new DecelerateInterpolator())
-                .withEndAction(onComplete)
-                .start();
+        // 从当前视觉状态起始，避免手势松手后跳变
+        float startScaleX = targetView.getScaleX();
+        float startScaleY = targetView.getScaleY();
+        float startTransX = targetView.getTranslationX();
+        float startTransY = targetView.getTranslationY();
+        float startAlpha = targetView.getAlpha();
+
+        ImageView snapshotView = createSnapshotView(targetView, source.snapshot, targetLocation);
         if (snapshotView != null) {
-            snapshotView.animate()
-                    .scaleX(destinationScaleX)
-                    .scaleY(destinationScaleY)
-                    .translationX(destinationCenterX - targetCenterX)
-                    .translationY(destinationCenterY - targetCenterY)
-                    .alpha(1f)
-                    .setDuration(durationMs)
-                    .setInterpolator(new DecelerateInterpolator())
-                    .start();
+            snapshotView.setPivotX(pivotX);
+            snapshotView.setPivotY(pivotY);
         }
+
+        float fadeStart = options.snapshotFadeStartFraction;
+
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        animator.setDuration(options.durationMs);
+        animator.setInterpolator(options.interpolator);
+        animator.addUpdateListener(animation -> {
+            float fraction = animation.getAnimatedFraction();
+            targetView.setScaleX(lerp(startScaleX, destScaleX, fraction));
+            targetView.setScaleY(lerp(startScaleY, destScaleY, fraction));
+            targetView.setTranslationX(lerp(startTransX, destTransX, fraction));
+            targetView.setTranslationY(lerp(startTransY, destTransY, fraction));
+
+            // 原界面：前 fadeStart 保持当前透明度，之后淡出至 0
+            float originalAlpha = fraction < fadeStart
+                    ? startAlpha
+                    : lerp(startAlpha, 0f, (fraction - fadeStart) / Math.max(1f - fadeStart, 0.001f));
+            targetView.setAlpha(clampAlpha(originalAlpha));
+
+            if (snapshotView != null) {
+                // 目标快照：前 fadeStart 保持透明，之后淡入至 1
+                float snapshotAlpha = fraction < fadeStart
+                        ? 0f
+                        : (fraction - fadeStart) / Math.max(1f - fadeStart, 0.001f);
+                snapshotView.setScaleX(lerp(startScaleX, destScaleX, fraction));
+                snapshotView.setScaleY(lerp(startScaleY, destScaleY, fraction));
+                snapshotView.setTranslationX(targetView.getTranslationX());
+                snapshotView.setTranslationY(targetView.getTranslationY());
+                snapshotView.setAlpha(clampAlpha(snapshotAlpha));
+            }
+        });
+        animator.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(android.animation.Animator animation) {
+                if (snapshotView != null && snapshotView.getParent() instanceof ViewGroup) {
+                    ((ViewGroup) snapshotView.getParent()).getOverlay().remove(snapshotView);
+                }
+                if (onComplete != null) {
+                    onComplete.run();
+                }
+            }
+        });
+        animator.start();
         return true;
+    }
+
+    // ==================== 进入动画（从来源放大到全屏） ====================
+
+    public static boolean animateEnterFromSource(
+            View targetView,
+            Source source,
+            Options options,
+            Runnable onComplete
+    ) {
+        Rect sourceBounds = source == null ? null : source.bounds;
+        if (targetView == null || sourceBounds == null || sourceBounds.width() <= 0 || sourceBounds.height() <= 0) {
+            return false;
+        }
+        if (targetView.getWidth() <= 0 || targetView.getHeight() <= 0) {
+            return false;
+        }
+
+        targetView.animate().cancel();
+
+        float pivotX = targetView.getWidth() / 2f;
+        float pivotY = targetView.getHeight() / 2f;
+        targetView.setPivotX(pivotX);
+        targetView.setPivotY(pivotY);
+
+        int[] targetLocation = untransformedLocationOnScreen(targetView);
+        float sourceCenterX = sourceBounds.centerX() - targetLocation[0];
+        float sourceCenterY = sourceBounds.centerY() - targetLocation[1];
+        float sourceScaleX = clampScale(sourceBounds.width() / (float) targetView.getWidth());
+        float sourceScaleY = clampScale(sourceBounds.height() / (float) targetView.getHeight());
+        float startTranslationX = sourceCenterX - pivotX;
+        float startTranslationY = sourceCenterY - pivotY;
+
+        // 设置起始状态：从来源位置/尺寸开始，内容透明
+        targetView.setScaleX(sourceScaleX);
+        targetView.setScaleY(sourceScaleY);
+        targetView.setTranslationX(startTranslationX);
+        targetView.setTranslationY(startTranslationY);
+        targetView.setAlpha(0f);
+
+        // 来源快照覆盖层（初始在来源位置/大小，alpha=1）
+        ImageView snapshotView = createEnterSnapshotOverlay(
+                targetView, source, targetLocation, sourceScaleX, sourceScaleY,
+                startTranslationX, startTranslationY, pivotX, pivotY);
+
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        animator.setDuration(options.durationMs);
+        animator.setInterpolator(options.interpolator);
+        animator.addUpdateListener(animation -> {
+            float fraction = animation.getAnimatedFraction();
+            targetView.setScaleX(lerp(sourceScaleX, 1f, fraction));
+            targetView.setScaleY(lerp(sourceScaleY, 1f, fraction));
+            targetView.setTranslationX(lerp(startTranslationX, 0f, fraction));
+            targetView.setTranslationY(lerp(startTranslationY, 0f, fraction));
+            targetView.setAlpha(clampAlpha(fraction));
+
+            if (snapshotView != null) {
+                snapshotView.setScaleX(targetView.getScaleX());
+                snapshotView.setScaleY(targetView.getScaleY());
+                snapshotView.setTranslationX(targetView.getTranslationX());
+                snapshotView.setTranslationY(targetView.getTranslationY());
+                snapshotView.setAlpha(clampAlpha(1f - fraction));
+            }
+        });
+        animator.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(android.animation.Animator animation) {
+                if (snapshotView != null && snapshotView.getParent() instanceof ViewGroup) {
+                    ((ViewGroup) snapshotView.getParent()).getOverlay().remove(snapshotView);
+                }
+                if (onComplete != null) {
+                    onComplete.run();
+                }
+            }
+        });
+        animator.start();
+        return true;
+    }
+
+    public static boolean animateEnterFromSource(
+            View targetView,
+            Source source,
+            long durationMs,
+            Runnable onComplete
+    ) {
+        return animateEnterFromSource(targetView, source,
+                Options.defaults().withDuration(durationMs), onComplete);
+    }
+
+    // ==================== 内部工具方法 ====================
+
+    private static ImageView createEnterSnapshotOverlay(
+            View targetView, Source source, int[] targetLocation,
+            float sourceScaleX, float sourceScaleY,
+            float startTranslationX, float startTranslationY,
+            float pivotX, float pivotY
+    ) {
+        if (source.snapshot == null || !(targetView.getRootView() instanceof ViewGroup)) {
+            return null;
+        }
+        ViewGroup root = (ViewGroup) targetView.getRootView();
+        int[] rootLocation = new int[2];
+        root.getLocationOnScreen(rootLocation);
+        int left = targetLocation[0] - rootLocation[0];
+        int top = targetLocation[1] - rootLocation[1];
+        ImageView view = new ImageView(targetView.getContext());
+        view.setImageBitmap(source.snapshot);
+        view.setScaleType(ImageView.ScaleType.FIT_XY);
+        view.setAlpha(1f);
+        view.setPivotX(pivotX);
+        view.setPivotY(pivotY);
+        view.setScaleX(sourceScaleX);
+        view.setScaleY(sourceScaleY);
+        view.setTranslationX(startTranslationX);
+        view.setTranslationY(startTranslationY);
+        view.layout(left, top, left + targetView.getWidth(), top + targetView.getHeight());
+        view.measure(
+                View.MeasureSpec.makeMeasureSpec(targetView.getWidth(), View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(targetView.getHeight(), View.MeasureSpec.EXACTLY)
+        );
+        root.getOverlay().add(view);
+        return view;
     }
 
     private static ImageView createSnapshotView(View targetView, Bitmap snapshot, int[] targetLocation) {
@@ -264,5 +472,13 @@ public final class LaunchSourceTransition {
 
     private static float clampScale(float scale) {
         return Math.max(0.01f, Math.min(1f, scale));
+    }
+
+    private static float clampAlpha(float alpha) {
+        return Math.max(0f, Math.min(1f, alpha));
+    }
+
+    private static float lerp(float start, float end, float fraction) {
+        return start + (end - start) * fraction;
     }
 }

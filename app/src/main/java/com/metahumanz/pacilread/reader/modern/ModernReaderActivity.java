@@ -81,6 +81,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private PopupWindow readerPopupWindow;
     private boolean readerPopupDismissingByCode;
     private boolean readerExitFinishing;
+    private boolean readerEnterAnimationStarted;
     private LaunchSourceTransition.Source launchSource;
     private long lastScrollPageTurnTime;
 
@@ -114,6 +115,26 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         setupGestures();
         setupControls();
         installPredictiveBack();
+
+        if (launchSource != null && launchSource.bounds() != null) {
+            ActivityTransitionCompat.overrideOpen(this, 0, 0);
+            views.readerRoot.setAlpha(0f);
+            views.readerRoot.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+                @Override
+                public boolean onPreDraw() {
+                    views.readerRoot.getViewTreeObserver().removeOnPreDrawListener(this);
+                    if (readerExitFinishing || readerEnterAnimationStarted) return true;
+                    readerEnterAnimationStarted = true;
+                    LaunchSourceTransition.animateEnterFromSource(
+                            views.readerRoot,
+                            launchSource,
+                            280L,
+                            null
+                    );
+                    return true;
+                }
+            });
+        }
 
         state.sessionStartTime = System.currentTimeMillis();
         state.sessionStartOffset = 0;
@@ -522,10 +543,12 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             finishReaderActivityNow();
             return;
         }
+        LaunchSourceTransition.Options options = LaunchSourceTransition.Options.defaults()
+                .withDuration(260L);
         if (LaunchSourceTransition.animateExitToSource(
                 views.readerRoot,
                 launchSource,
-                260L,
+                options,
                 this::finishReaderActivityNow
         )) {
             return;
