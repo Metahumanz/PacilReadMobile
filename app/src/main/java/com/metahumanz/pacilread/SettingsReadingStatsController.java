@@ -12,6 +12,7 @@ import com.metahumanz.pacilread.stats.ReadingStatsUtils;
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
+import com.metahumanz.pacilread.ui.LaunchSourceTransition;
 
 import java.util.concurrent.ExecutorService;
 
@@ -139,7 +140,11 @@ final class SettingsReadingStatsController {
             statsPeriodYearButton.setOnClickListener(v -> selectPeriod(ReadingStatsUtils.PERIOD_YEAR));
         }
         if (openReadingStatsButton != null) {
-            openReadingStatsButton.setOnClickListener(v -> activity.startActivity(new Intent(activity, ReadingStatsActivity.class)));
+            openReadingStatsButton.setOnClickListener(v -> {
+                Intent intent = new Intent(activity, ReadingStatsActivity.class);
+                LaunchSourceTransition.attach(intent, v);
+                activity.startActivity(intent);
+            });
         }
         if (readingTimeTrackingCheck != null) {
             readingTimeTrackingCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleTrackingToggle(isChecked));
