@@ -2,9 +2,12 @@ package com.metahumanz.pacilread;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.View;
 import android.widget.ImageButton;
 
 import com.metahumanz.pacilread.theme.ThemedActivity;
+import com.metahumanz.pacilread.ui.ActivityTransitionCompat;
+import com.metahumanz.pacilread.ui.PredictiveBackScaleController;
 
 public class SettingsActivity extends ThemedActivity {
     public static final String EXTRA_HOME_BOTTOM_NAVIGATION_TRANSITION =
@@ -17,9 +20,9 @@ public class SettingsActivity extends ThemedActivity {
     protected void onCreate(Bundle savedInstanceState) {
         homeBottomNavigationTransition = getIntent().getBooleanExtra(EXTRA_HOME_BOTTOM_NAVIGATION_TRANSITION, false);
         if (homeBottomNavigationTransition) {
-            overridePendingTransition(R.anim.activity_home_settings_enter, R.anim.activity_home_settings_under_exit);
+            ActivityTransitionCompat.overrideOpen(this, R.anim.activity_home_settings_enter, R.anim.activity_home_settings_under_exit);
         } else {
-            overridePendingTransition(R.anim.activity_slide_forward, R.anim.activity_recede);
+            ActivityTransitionCompat.overrideOpen(this, R.anim.activity_slide_forward, R.anim.activity_recede);
         }
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_settings);
@@ -49,20 +52,44 @@ public class SettingsActivity extends ThemedActivity {
 
         ImageButton backButton = findViewById(R.id.button_back);
         if (backButton != null) {
-            backButton.setOnClickListener(v -> onBackPressed());
+            backButton.setOnClickListener(v -> getOnBackPressedDispatcher().onBackPressed());
         }
+        installPredictiveBack();
     }
 
-    @Override
-    public void onBackPressed() {
+    private void installPredictiveBack() {
+        View root = findViewById(R.id.settings_root);
+        if (root == null) {
+            return;
+        }
+        PredictiveBackScaleController.install(this, root, PredictiveBackScaleController.Profile.standard(),
+                new PredictiveBackScaleController.Delegate() {
+                    @Override
+                    public boolean shouldAnimateBack() {
+                        return true;
+                    }
+
+                    @Override
+                    public boolean consumeBack() {
+                        return false;
+                    }
+
+                    @Override
+                    public void commitBack() {
+                        finishWithSettingsTransition();
+                    }
+                });
+    }
+
+    private void finishWithSettingsTransition() {
         if (settingsController != null) {
             settingsController.saveSettings();
         }
-        super.onBackPressed();
+        finish();
         if (homeBottomNavigationTransition) {
-            overridePendingTransition(R.anim.activity_home_settings_under_enter, R.anim.activity_home_settings_exit);
+            ActivityTransitionCompat.overrideClose(this, R.anim.activity_home_settings_under_enter, R.anim.activity_home_settings_exit);
         } else {
-            overridePendingTransition(R.anim.activity_return_from_recede, R.anim.activity_slide_backward);
+            ActivityTransitionCompat.overrideClose(this, R.anim.activity_return_from_recede, R.anim.activity_slide_backward);
         }
     }
 

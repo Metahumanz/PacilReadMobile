@@ -33,6 +33,7 @@ import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedActivity;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.ui.GlassUiHelper;
+import com.metahumanz.pacilread.ui.PredictiveBackScaleController;
 import com.metahumanz.pacilread.util.FileAssetHelper;
 
 import org.json.JSONObject;
@@ -111,23 +112,13 @@ public class PreviewActivity extends ThemedActivity {
         bindViews();
         setupPreviewStyleSection();
         configureDrawer();
+        installPredictiveBack();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         updatePreviewPanels();
-    }
-
-    @Override
-    public void finish() {
-        super.finish();
-    }
-
-    @Override
-    public void onBackPressed() {
-        if (drawerController != null && drawerController.onBackPressed()) return;
-        super.onBackPressed();
     }
 
     @Override
@@ -156,6 +147,29 @@ public class PreviewActivity extends ThemedActivity {
     protected void onDestroy() {
         super.onDestroy();
         executor.shutdownNow();
+    }
+
+    private void installPredictiveBack() {
+        if (mainRoot == null) {
+            return;
+        }
+        PredictiveBackScaleController.install(this, mainRoot, PredictiveBackScaleController.Profile.standard(),
+                new PredictiveBackScaleController.Delegate() {
+                    @Override
+                    public boolean shouldAnimateBack() {
+                        return drawerController == null || !drawerController.isDrawerVisible();
+                    }
+
+                    @Override
+                    public boolean consumeBack() {
+                        return drawerController != null && drawerController.onBackPressed();
+                    }
+
+                    @Override
+                    public void commitBack() {
+                        finish();
+                    }
+                });
     }
 
     private void bindViews() {
