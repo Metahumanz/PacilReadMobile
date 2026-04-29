@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Rect;
 import android.content.pm.ActivityInfo;
 import android.os.BatteryManager;
 import android.os.Bundle;
@@ -47,6 +48,9 @@ import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderStyleController;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedReaderActivity;
+import com.metahumanz.pacilread.ui.ActivityTransitionCompat;
+import com.metahumanz.pacilread.ui.LaunchSourceTransition;
+import com.metahumanz.pacilread.ui.PredictiveBackScaleController;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -77,6 +81,8 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private BroadcastReceiver sysMetricsReceiver;
     private PopupWindow readerPopupWindow;
     private boolean readerPopupDismissingByCode;
+    private boolean readerExitFinishing;
+    private Rect launchSourceBounds;
     private long lastScrollPageTurnTime;
 
     @Override
@@ -91,6 +97,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         readingStatsTracker = new ReaderReadingStatsTracker(runtime, state);
         state.pagingTouchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
         state.bookId = getIntent().getLongExtra("book_id", -1L);
+        launchSourceBounds = LaunchSourceTransition.fromIntent(getIntent());
         state.requestedChapterOrderIndex = getIntent().getIntExtra("bookmark_chapter_order_index", -1);
         state.requestedChapterOffset = getIntent().getIntExtra("bookmark_chapter_offset", -1);
         if (savedInstanceState != null) {
@@ -107,6 +114,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         chrome.applyEdgeToEdgeInsets();
         setupGestures();
         setupControls();
+        installPredictiveBack();
 
         state.sessionStartTime = System.currentTimeMillis();
         state.sessionStartOffset = 0;
@@ -180,20 +188,6 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         runtime.shutdown();
         paging.cancelInteractiveAnimator();
         paging.recyclePagingSnapshots();
-    }
-
-    @Override
-    public void onBackPressed() {
-        if (selection != null && selection.hasSelection()) {
-            selection.clearSelection();
-            return;
-        }
-        if (state.controlsVisible) {
-            chrome.setControlsVisible(false);
-            return;
-        }
-        content.persistProgress();
-        super.onBackPressed();
     }
 
     @Override
@@ -297,7 +291,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         filter.addAction(Intent.ACTION_BATTERY_CHANGED);
         registerReceiver(sysMetricsReceiver, filter);
 
-        findViewById(R.id.button_back).setOnClickListener(v -> finish());
+        findViewById(R.id.button_back).setOnClickListener(v -> finishReaderActivity());
         findViewById(R.id.button_prev_chapter).setOnClickListener(v -> navigation.openChapterFromStart(state.currentChapterIndex - 1, true, -1));
         findViewById(R.id.button_next_chapter).setOnClickListener(v -> navigation.openChapterFromStart(state.currentChapterIndex + 1, true, 1));
         findViewById(R.id.button_toc).setOnClickListener(v -> libraryDialogs.showTocDialog());
@@ -380,35 +374,11 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                     btn.setMinWidth(0);
                     btn.setPadding(btnPadH, btnPadV, btnPadH, btnPadV);
                     chrome.styleReaderMenuButton(btn, false);
-                    btn.setOnClickListener(itemView -> {
+                    btn.setOnClickListener(itemView -> animatePopupWaterfallClose(popupWindow, () -> {
                         readerPopupDismissingByCode = true;
                         popupWindow.dismiss();
-                        views.moreButton.animate().rotation(0f).setDuration(200).start();
-                        switch (item) {
-                            case "搜索":
-                                libraryDialogs.showSearchDialog();
-                                break;
-                            case "替换":
-                                libraryDialogs.showRulesDialog();
-                                break;
-                            case "排版":
-                                styleDialogs.showStyleDialog(REQUEST_PICK_BACKGROUND);
-                                break;
-                            case "翻页":
-                                autoPage.showAutoPageDialog();
-                                break;
-                            case "听书":
-                                if (state.ttsActive || state.ttsPaused) {
-                                    tts.toggleTts();
-                                } else {
-                                    tts.showTtsDialog();
-                                }
-                                break;
-                            case "书签":
-                                showBookmarkDialog();
-                                break;
-                        }
-                    });
+                        handleReaderPopupAction(item);
+                    }));
 
                     LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
                             0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
@@ -420,7 +390,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             }
 
             popupWindow.showAsDropDown(views.moreButton, 0, 0, Gravity.END);
-            animatePopupWaterfallOpen(rowLayouts, rowHeight);
+            animatePopupWaterfallOpen(popupContent, rowLayouts, rowHeight);
         });
         views.readerTitle.setOnClickListener(v -> openReadingStatsForCurrentBook());
         views.pageStage.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
@@ -472,6 +442,117 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 navigation.showPage(state.currentChapterIndex, seekBar.getProgress(), true, direction);
             }
         });
+    }
+
+    private void installPredictiveBack() {
+        PredictiveBackScaleController.install(this, views.readerRoot, PredictiveBackScaleController.Profile.reader(),
+                new PredictiveBackScaleController.Delegate() {
+                    @Override
+                    public boolean shouldAnimateBack() {
+                        return !hasReaderBackConsumer();
+                    }
+
+                    @Override
+                    public boolean consumeBack() {
+                        return consumeReaderBack();
+                    }
+
+                    @Override
+                    public void commitBack() {
+                        finishReaderActivity();
+                    }
+                });
+    }
+
+    private boolean hasReaderBackConsumer() {
+        return (selection != null && selection.hasSelection()) || (state != null && state.controlsVisible);
+    }
+
+    private boolean consumeReaderBack() {
+        if (selection != null && selection.hasSelection()) {
+            selection.clearSelection();
+            return true;
+        }
+        if (state != null && state.controlsVisible) {
+            chrome.setControlsVisible(false);
+            return true;
+        }
+        return false;
+    }
+
+    public void finishReaderActivity() {
+        if (readerExitFinishing) {
+            return;
+        }
+        readerExitFinishing = true;
+        animateReaderExitToSource();
+    }
+
+    private void animateReaderExitToSource() {
+        if (views == null || views.readerRoot == null) {
+            finishReaderActivityNow();
+            return;
+        }
+        if (LaunchSourceTransition.animateExitToSource(
+                views.readerRoot,
+                launchSourceBounds,
+                260L,
+                this::finishReaderActivityNow
+        )) {
+            return;
+        }
+        animateReaderExitToCenter();
+    }
+
+    private void animateReaderExitToCenter() {
+        float minScale = PredictiveBackScaleController.READER_MIN_SCALE;
+        views.readerRoot.animate().cancel();
+        views.readerRoot.animate()
+                .scaleX(minScale)
+                .scaleY(minScale)
+                .alpha(0.96f)
+                .translationX(0f)
+                .translationY(0f)
+                .setDuration(160L)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                .withEndAction(this::finishReaderActivityNow)
+                .start();
+    }
+
+    private void finishReaderActivityNow() {
+        if (content != null) {
+            content.persistProgress();
+        }
+        finish();
+        ActivityTransitionCompat.overrideClose(this, 0, 0);
+    }
+
+    private void handleReaderPopupAction(String item) {
+        views.moreButton.animate().rotation(0f).setDuration(200).start();
+        switch (item) {
+            case "搜索":
+                libraryDialogs.showSearchDialog();
+                break;
+            case "替换":
+                libraryDialogs.showRulesDialog();
+                break;
+            case "排版":
+                styleDialogs.showStyleDialog(REQUEST_PICK_BACKGROUND);
+                break;
+            case "翻页":
+                autoPage.showAutoPageDialog();
+                break;
+            case "听书":
+                if (state.ttsActive || state.ttsPaused) {
+                    tts.toggleTts();
+                } else {
+                    tts.showTtsDialog();
+                }
+                break;
+            case "书签":
+                showBookmarkDialog();
+                break;
+        }
     }
 
     private void setupGestures() {
@@ -562,6 +643,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         }
         Intent intent = new Intent(this, ReadingStatsActivity.class);
         intent.putExtra("book_id", state.book.id);
+        LaunchSourceTransition.attach(intent, views.moreButton);
         startActivity(intent);
     }
 
@@ -606,7 +688,19 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         }
     }
 
-    private void animatePopupWaterfallOpen(List<LinearLayout> rows, int rowHeight) {
+    private void animatePopupWaterfallOpen(View popupRoot, List<LinearLayout> rows, int rowHeight) {
+        if (popupRoot != null) {
+            popupRoot.setScaleX(PredictiveBackScaleController.READER_MIN_SCALE);
+            popupRoot.setScaleY(PredictiveBackScaleController.READER_MIN_SCALE);
+            popupRoot.setAlpha(0f);
+            popupRoot.animate()
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .alpha(1f)
+                    .setDuration(180)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                    .start();
+        }
         int staggerMs = 20;
         int dropDistance = rowHeight + ui.dp(8);
         for (int i = 0; i < rows.size(); i++) {
@@ -638,6 +732,13 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             if (onComplete != null) onComplete.run();
             return;
         }
+        popupContent.animate()
+                .scaleX(PredictiveBackScaleController.READER_MIN_SCALE)
+                .scaleY(PredictiveBackScaleController.READER_MIN_SCALE)
+                .alpha(0f)
+                .setDuration(130)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                .start();
         int staggerMs = 18;
         int riseDistance = ui.dp(40) + ui.dp(8);
         for (int i = 0; i < childCount; i++) {
@@ -736,7 +837,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             dialog.dismiss();
             showAddBookmarkDialog();
         });
-        dialog.show();
+        dialogSupport.showStyledDialog(dialog);
     }
 
     private View createReaderBookmarkRow(BookmarkRecord bookmark, Runnable onClick) {
@@ -813,16 +914,17 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 LinearLayout.LayoutParams.WRAP_CONTENT
         ));
 
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("添加书签")
                 .setView(wrapper)
                 .setNegativeButton("取消", null)
-                .setPositiveButton("保存", (dialog, which) -> saveBookmark(
+                .setPositiveButton("保存", (unusedDialog, which) -> saveBookmark(
                         chapterIndex,
                         chapterOffset,
                         editText.getText() == null ? "" : editText.getText().toString()
                 ))
-                .show();
+                .create();
+        dialogSupport.showStyledDialog(dialog);
     }
 
     private void saveBookmark(int chapterIndex, int chapterOffset, String summary) {

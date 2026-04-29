@@ -138,7 +138,7 @@ public final class ReaderContentController {
                 activity.runOnUiThread(() -> {
                     if (loadedBook == null || loadedChapters.isEmpty()) {
                         ui.showToast("书籍不存在或内容为空");
-                        activity.finish();
+                        activity.finishReaderActivity();
                         return;
                     }
 
@@ -184,7 +184,7 @@ public final class ReaderContentController {
                 Log.e(TAG, "Failed to load reader state", error);
                 activity.runOnUiThread(() -> {
                     ui.showToast("打开书籍失败: " + readableError(error));
-                    activity.finish();
+                    activity.finishReaderActivity();
                 });
             }
         });

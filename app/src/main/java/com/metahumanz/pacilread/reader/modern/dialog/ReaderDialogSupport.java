@@ -1,5 +1,6 @@
 package com.metahumanz.pacilread.reader.modern.dialog;
 
+import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.res.Configuration;
 import android.graphics.Color;
@@ -15,6 +16,10 @@ import android.view.WindowManager;
 import android.widget.ArrayAdapter;
 import android.widget.SeekBar;
 import android.widget.TextView;
+import android.window.BackEvent;
+import android.window.OnBackAnimationCallback;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
 
 import androidx.core.view.WindowCompat;
 
@@ -24,6 +29,8 @@ import com.metahumanz.pacilread.reader.modern.ReaderRuntime;
 import com.metahumanz.pacilread.reader.modern.ReaderUiUtils;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.ui.GlassUiHelper;
+import com.metahumanz.pacilread.ui.PredictiveBackScaleController;
+import com.metahumanz.pacilread.ui.ScreenCornerClipper;
 
 import java.util.List;
 
@@ -61,6 +68,8 @@ public final class ReaderDialogSupport {
         if (window != null) {
             window.setBackgroundDrawableResource(android.R.color.transparent);
         }
+        OnBackInvokedCallback backCallback = installPredictiveDismiss(dialog, window);
+        dialog.setOnDismissListener(unused -> unregisterPredictiveDismiss(dialog, backCallback));
         GlassUiHelper.applyToHierarchy(activity, dialog.findViewById(android.R.id.content), runtime.settingsStore.getGlassOpacityPercent());
     }
 
@@ -70,6 +79,8 @@ public final class ReaderDialogSupport {
             window.setBackgroundDrawableResource(android.R.color.transparent);
             window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         }
+        OnBackInvokedCallback backCallback = installPredictiveDismiss(dialog, window);
+        dialog.setOnDismissListener(unused -> unregisterPredictiveDismiss(dialog, backCallback));
         GlassUiHelper.applyToHierarchy(activity, dialog.findViewById(android.R.id.content), runtime.settingsStore.getGlassOpacityPercent());
     }
 
@@ -115,7 +126,11 @@ public final class ReaderDialogSupport {
             configureEdgeToEdgeWindow(window);
             applySystemBarsVisibility(window, false);
         }
-        dialog.setOnDismissListener(unused -> applySystemBarsVisibility(activity.getWindow(), restoreShowSystemBars));
+        OnBackInvokedCallback backCallback = installPredictiveDismiss(dialog, window);
+        dialog.setOnDismissListener(unused -> {
+            unregisterPredictiveDismiss(dialog, backCallback);
+            applySystemBarsVisibility(activity.getWindow(), restoreShowSystemBars);
+        });
     }
 
     private Window showDialogWithAnimation(AlertDialog dialog, int animationStyleResId) {
@@ -130,6 +145,95 @@ public final class ReaderDialogSupport {
         if (window != null) {
             window.setWindowAnimations(animationStyleResId);
         }
+    }
+
+    @SuppressLint("NewApi")
+    private OnBackInvokedCallback installPredictiveDismiss(AlertDialog dialog, Window window) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE || dialog == null || window == null) {
+            return null;
+        }
+        View target = window.getDecorView();
+        ScreenCornerClipper.apply(target);
+        OnBackAnimationCallback callback = new OnBackAnimationCallback() {
+            private boolean dismissing;
+
+            @Override
+            public void onBackStarted(BackEvent backEvent) {
+                if (dismissing) {
+                    return;
+                }
+                target.animate().cancel();
+                applyBackProgress(target, backEvent.getProgress());
+            }
+
+            @Override
+            public void onBackProgressed(BackEvent backEvent) {
+                if (dismissing) {
+                    return;
+                }
+                applyBackProgress(target, backEvent.getProgress());
+            }
+
+            @Override
+            public void onBackCancelled() {
+                if (dismissing) {
+                    return;
+                }
+                target.animate()
+                        .scaleX(1f)
+                        .scaleY(1f)
+                        .alpha(1f)
+                        .setDuration(180L)
+                        .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                        .start();
+            }
+
+            @Override
+            public void onBackInvoked() {
+                if (dismissing) {
+                    return;
+                }
+                dismissing = true;
+                target.animate().cancel();
+                target.animate()
+                        .scaleX(PredictiveBackScaleController.READER_MIN_SCALE)
+                        .scaleY(PredictiveBackScaleController.READER_MIN_SCALE)
+                        .alpha(0f)
+                        .setDuration(130L)
+                        .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                        .withEndAction(() -> {
+                            if (dialog.isShowing()) {
+                                dialog.dismiss();
+                            }
+                        })
+                        .start();
+            }
+        };
+        dialog.getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                callback
+        );
+        return callback;
+    }
+
+    @SuppressLint("NewApi")
+    private void unregisterPredictiveDismiss(AlertDialog dialog, OnBackInvokedCallback callback) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE || dialog == null || callback == null) {
+            return;
+        }
+        try {
+            dialog.getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(callback);
+        } catch (IllegalArgumentException ignored) {
+        }
+    }
+
+    private void applyBackProgress(View target, float progress) {
+        float safeProgress = Math.max(0f, Math.min(1f, progress));
+        float eased = 1f - ((1f - safeProgress) * (1f - safeProgress));
+        float scale = 1f + (PredictiveBackScaleController.READER_MIN_SCALE - 1f) * eased;
+        target.setScaleX(scale);
+        target.setScaleY(scale);
+        target.setAlpha(1f - (0.04f * eased));
     }
 
     private void configureEdgeToEdgeWindow(Window window) {

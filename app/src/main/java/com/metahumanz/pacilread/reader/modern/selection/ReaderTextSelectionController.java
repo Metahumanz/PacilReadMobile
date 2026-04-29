@@ -27,6 +27,7 @@ import com.metahumanz.pacilread.reader.modern.ReaderViewRefs;
 import com.metahumanz.pacilread.reader.modern.content.ReaderContentController;
 import com.metahumanz.pacilread.reader.modern.dialog.ReaderLibraryDialogs;
 import com.metahumanz.pacilread.reader.modern.tts.ReaderTtsController;
+import com.metahumanz.pacilread.ui.PredictiveBackScaleController;
 
 import java.text.BreakIterator;
 import java.util.List;
@@ -50,6 +51,7 @@ public final class ReaderTextSelectionController {
     private ReaderLibraryDialogs libraryDialogs;
     private ReaderTtsController tts;
     private PopupWindow popupWindow;
+    private boolean popupAnimatingDismiss;
     private Target pendingTarget;
     private Target activeTarget;
     private boolean longPressPending;
@@ -437,10 +439,17 @@ public final class ReaderTextSelectionController {
         if (root == null || root.getWidth() <= 0 || root.getHeight() <= 0) {
             return;
         }
-        if (!popupWindow.isShowing()) {
+        boolean wasShowing = popupWindow.isShowing();
+        boolean shouldAnimateOpen = !wasShowing || popupAnimatingDismiss;
+        if (!wasShowing) {
+            popupAnimatingDismiss = false;
             popupWindow.showAtLocation(root, Gravity.NO_GRAVITY, 0, 0);
         }
         View popupContent = popupWindow.getContentView();
+        if (shouldAnimateOpen) {
+            popupContent.animate().cancel();
+            popupAnimatingDismiss = false;
+        }
         popupContent.measure(
                 View.MeasureSpec.makeMeasureSpec(root.getWidth(), View.MeasureSpec.AT_MOST),
                 View.MeasureSpec.makeMeasureSpec(root.getHeight(), View.MeasureSpec.AT_MOST)
@@ -454,6 +463,20 @@ public final class ReaderTextSelectionController {
         x = ui.clamp(x, ui.dp(8), Math.max(ui.dp(8), root.getWidth() - popupWidth - ui.dp(8)));
         y = ui.clamp(y, ui.dp(8), Math.max(ui.dp(8), root.getHeight() - popupHeight - ui.dp(8)));
         popupWindow.update(x, y, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        if (shouldAnimateOpen) {
+            popupContent.setPivotX(popupWidth / 2f);
+            popupContent.setPivotY(popupHeight / 2f);
+            popupContent.setScaleX(PredictiveBackScaleController.READER_MIN_SCALE);
+            popupContent.setScaleY(PredictiveBackScaleController.READER_MIN_SCALE);
+            popupContent.setAlpha(0f);
+            popupContent.animate()
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .alpha(1f)
+                    .setDuration(180)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                    .start();
+        }
     }
 
     private void ensurePopupWindow() {
@@ -600,7 +623,25 @@ public final class ReaderTextSelectionController {
 
     private void dismissPopup() {
         if (popupWindow != null && popupWindow.isShowing()) {
-            popupWindow.dismiss();
+            if (popupAnimatingDismiss) {
+                return;
+            }
+            popupAnimatingDismiss = true;
+            View popupContent = popupWindow.getContentView();
+            popupContent.animate().cancel();
+            popupContent.animate()
+                    .scaleX(PredictiveBackScaleController.READER_MIN_SCALE)
+                    .scaleY(PredictiveBackScaleController.READER_MIN_SCALE)
+                    .alpha(0f)
+                    .setDuration(130)
+                    .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                    .withEndAction(() -> {
+                        popupAnimatingDismiss = false;
+                        if (popupWindow != null && popupWindow.isShowing()) {
+                            popupWindow.dismiss();
+                        }
+                    })
+                    .start();
         }
     }
 
