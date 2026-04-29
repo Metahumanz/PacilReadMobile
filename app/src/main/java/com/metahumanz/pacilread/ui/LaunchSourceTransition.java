@@ -105,14 +105,19 @@ public final class LaunchSourceTransition {
         if (intent == null || source == null || source.bounds == null) {
             return;
         }
-        intent.putExtra(EXTRA_LEFT, source.bounds.left);
-        intent.putExtra(EXTRA_TOP, source.bounds.top);
-        intent.putExtra(EXTRA_RIGHT, source.bounds.right);
-        intent.putExtra(EXTRA_BOTTOM, source.bounds.bottom);
+        putBounds(intent, source.bounds);
         String snapshotPath = persistSnapshot(sourceView, source.snapshot);
         if (snapshotPath != null) {
             intent.putExtra(EXTRA_SNAPSHOT_PATH, snapshotPath);
         }
+    }
+
+    public static void attachBoundsOnly(Intent intent, View sourceView) {
+        Rect bounds = captureBounds(sourceView);
+        if (intent == null || bounds == null) {
+            return;
+        }
+        putBounds(intent, bounds);
     }
 
     public static Source captureSource(View sourceView) {
@@ -175,6 +180,13 @@ public final class LaunchSourceTransition {
                 intent.getIntExtra(bottomKey, 0)
         );
         return bounds.width() > 0 && bounds.height() > 0 ? bounds : null;
+    }
+
+    private static void putBounds(Intent intent, Rect bounds) {
+        intent.putExtra(EXTRA_LEFT, bounds.left);
+        intent.putExtra(EXTRA_TOP, bounds.top);
+        intent.putExtra(EXTRA_RIGHT, bounds.right);
+        intent.putExtra(EXTRA_BOTTOM, bounds.bottom);
     }
 
     // ==================== 退出动画（带延迟快照淡入） ====================
@@ -355,7 +367,7 @@ public final class LaunchSourceTransition {
             );
             targetView.setClipBounds(animatedClip);
 
-            float fadeStart = Math.min(0.55f, options.snapshotFadeStartFraction);
+            float fadeStart = Math.max(0f, Math.min(0.9f, options.snapshotFadeStartFraction));
             float alpha = fraction < fadeStart
                     ? startAlpha
                     : lerp(startAlpha, 0f, (fraction - fadeStart) / Math.max(1f - fadeStart, 0.001f));

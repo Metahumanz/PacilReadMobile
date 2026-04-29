@@ -563,7 +563,7 @@ public class BookshelfActivity extends ThemedActivity {
     private void openBook(long bookId, View sourceView) {
         Intent intent = new Intent(this, ReaderActivity.class);
         intent.putExtra("book_id", bookId);
-        LaunchSourceTransition.attach(intent, sourceView);
+        LaunchSourceTransition.attachBoundsOnly(intent, sourceView);
         startActivity(intent);
     }
 

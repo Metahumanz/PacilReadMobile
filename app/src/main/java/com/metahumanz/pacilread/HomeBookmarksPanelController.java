@@ -146,7 +146,7 @@ public final class HomeBookmarksPanelController {
                 intent.putExtra("book_id", finalBook.id);
                 intent.putExtra("bookmark_chapter_order_index", bookmark.chapterOrderIndex);
                 intent.putExtra("bookmark_chapter_offset", bookmark.chapterOffset);
-                LaunchSourceTransition.attach(intent, sourceView);
+                LaunchSourceTransition.attachBoundsOnly(intent, sourceView);
                 activity.startActivity(intent);
             });
         });
