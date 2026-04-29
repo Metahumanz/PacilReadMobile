@@ -76,6 +76,4 @@ public final class ReaderSessionState {
     public long suppressInsetReflowUntilUptimeMs = 0L;
     public long sessionStartTime = 0L;
     public int sessionStartOffset = 0;
-    public boolean deferSystemBarsForTransition = false;
-    public boolean deferredSystemBarsVisible = false;
 }
