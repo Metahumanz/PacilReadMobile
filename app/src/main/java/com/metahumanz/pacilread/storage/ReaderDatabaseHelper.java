@@ -20,24 +20,35 @@ import com.metahumanz.pacilread.stats.ReadingStatsUtils;
 import com.metahumanz.pacilread.util.CoverImageStore;
 import com.metahumanz.pacilread.util.HtmlUtils;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     private static final String TAG = "ReaderDatabaseHelper";
     private static final String DATABASE_NAME = "reader.db";
-    private static final int DATABASE_VERSION = 6;
+    private static final int DATABASE_VERSION = 7;
     private static final String MAINTENANCE_PREFS_NAME = "reader_database_maintenance";
     private static final String KEY_MAINTENANCE_PHASE_CLEANUP_BODY_HTML = "phase_cleanup_body_html";
+    private static final String KEY_MAINTENANCE_PHASE_EXPORT_BODY_TEXT = "phase_export_body_text";
     private static final String KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT = "phase_wal_checkpoint";
     private static final String KEY_MAINTENANCE_PHASE_VACUUM = "phase_vacuum";
     private static final String KEY_MAINTENANCE_PHASE_RECOMPRESS_COVERS = "phase_recompress_covers";
+    private static final String STORAGE_DB = "db";
+    private static final String STORAGE_FILE_GZIP = "file_gzip";
+    private static final String CHAPTER_TEXT_DIR = "chapter_text";
     // 旧版本维护标记（用于升级迁移）
     private static final String KEY_VACUUM_AFTER_BODY_HTML_CLEANUP_LEGACY = "vacuum_after_body_html_cleanup";
     private static final String KEY_RECOMPRESS_COVERS_AFTER_BODY_HTML_CLEANUP_LEGACY = "recompress_covers_after_body_html_cleanup";
@@ -79,6 +90,12 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
             // 避免首次打开应用时阻塞数据库升级。
             markStorageSlimmingMaintenancePending();
         }
+        if (oldVersion < 7) {
+            // v7 新增：标记 body_text 外置导出维护阶段
+            maintenancePrefs().edit()
+                    .putBoolean(KEY_MAINTENANCE_PHASE_EXPORT_BODY_TEXT, true)
+                    .apply();
+        }
     }
 
     @Override
@@ -110,8 +127,11 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 "book_id INTEGER NOT NULL," +
                 "title TEXT NOT NULL," +
                 "body_html TEXT NOT NULL DEFAULT ''," +
-                "body_text TEXT NOT NULL," +
+                "body_text TEXT NOT NULL DEFAULT ''," +
                 "order_index INTEGER NOT NULL," +
+                "body_text_path TEXT," +
+                "body_text_storage TEXT NOT NULL DEFAULT 'db'," +
+                "body_text_size INTEGER NOT NULL DEFAULT 0," +
                 "FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE" +
                 ")");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_chapters_book_order ON chapters(book_id, order_index)");
@@ -169,6 +189,9 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         ensureColumn(db, "chapters", "body_html", "body_html TEXT NOT NULL DEFAULT ''");
         ensureColumn(db, "chapters", "body_text", "body_text TEXT NOT NULL DEFAULT ''");
         ensureColumn(db, "chapters", "order_index", "order_index INTEGER NOT NULL DEFAULT 0");
+        ensureColumn(db, "chapters", "body_text_path", "body_text_path TEXT");
+        ensureColumn(db, "chapters", "body_text_storage", "body_text_storage TEXT NOT NULL DEFAULT 'db'");
+        ensureColumn(db, "chapters", "body_text_size", "body_text_size INTEGER NOT NULL DEFAULT 0");
         repairLegacyChapterBodyColumns(db);
 
         ensureColumn(db, "replacement_rules", "scope", "scope TEXT NOT NULL DEFAULT 'global'");
@@ -248,14 +271,138 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         }
     }
 
+    // region 章节外置正文文件 I/O
+
+    private File getChapterTextDir() {
+        return new File(appContext.getFilesDir(), CHAPTER_TEXT_DIR);
+    }
+
+    private File getChapterTextDir(long bookId) {
+        return new File(getChapterTextDir(), "book_" + bookId);
+    }
+
+    private File getChapterTextFile(long bookId, long chapterId) {
+        return new File(getChapterTextDir(bookId), "chapter_" + chapterId + ".txt.gz");
+    }
+
+    private String buildChapterTextRelativePath(long bookId, long chapterId) {
+        return "book_" + bookId + "/chapter_" + chapterId + ".txt.gz";
+    }
+
+    private void writeChapterTextToFile(long bookId, long chapterId, String text) throws IOException {
+        File dir = getChapterTextDir(bookId);
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw new IOException("无法创建章节正文目录: " + dir.getAbsolutePath());
+        }
+        File file = getChapterTextFile(bookId, chapterId);
+        try (FileOutputStream fos = new FileOutputStream(file);
+             GZIPOutputStream gzos = new GZIPOutputStream(fos);
+             BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(gzos, StandardCharsets.UTF_8))) {
+            writer.write(text);
+        }
+    }
+
+    private String readChapterTextFromFile(long bookId, long chapterId) throws IOException {
+        File file = getChapterTextFile(bookId, chapterId);
+        if (!file.exists()) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder((int) Math.min(file.length() * 4, Integer.MAX_VALUE));
+        try (FileInputStream fis = new FileInputStream(file);
+             GZIPInputStream gzis = new GZIPInputStream(fis);
+             BufferedReader reader = new BufferedReader(new InputStreamReader(gzis, StandardCharsets.UTF_8))) {
+            char[] buf = new char[8192];
+            int n;
+            while ((n = reader.read(buf)) != -1) {
+                sb.append(buf, 0, n);
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 解析章节正文：优先从外置 .txt.gz 文件读取，缺失则回退到数据库 body_text 列。
+     * bodyTextFromDb 可以为 null（调用方未从 cursor 预读大正文），此时自动分块读取。
+     */
+    private String resolveChapterText(long bookId, long chapterId, String bodyTextFromDb,
+                                       String bodyTextPath, String bodyTextStorage) {
+        if (STORAGE_FILE_GZIP.equals(bodyTextStorage) && bodyTextPath != null && !bodyTextPath.isBlank()) {
+            try {
+                String text = readChapterTextFromFile(bookId, chapterId);
+                if (text != null) {
+                    return text;
+                }
+            } catch (IOException e) {
+                Log.w(TAG, "读取章节外置正文失败 chapter " + chapterId + ", 回退数据库正文", e);
+            }
+        }
+        if (bodyTextFromDb != null) {
+            return bodyTextFromDb;
+        }
+        // 未从 cursor 预读（避免 CursorWindow 溢出），分块读取数据库正文
+        return readBodyTextChunked(getReadableDatabase(), chapterId);
+    }
+
+    private void deleteChapterTextDir(long bookId) {
+        File dir = getChapterTextDir(bookId);
+        if (dir.exists() && dir.isDirectory()) {
+            File[] files = dir.listFiles();
+            if (files != null) {
+                for (File f : files) {
+                    f.delete();
+                }
+            }
+            dir.delete();
+        }
+    }
+
+    /**
+     * 返回指定书籍的所有外置存储章节（body_text_storage='file_gzip'）。
+     * 供 WebDAV 备份/恢复使用。
+     */
+    public synchronized List<ChapterRecord> getChaptersWithExternalStorage(long bookId) {
+        List<ChapterRecord> chapters = new ArrayList<>();
+        try (Cursor cursor = getReadableDatabase().query(
+                "chapters",
+                new String[]{"id", "book_id", "body_text_path"},
+                "book_id=? AND body_text_storage=? AND body_text_path IS NOT NULL AND TRIM(body_text_path) <> ''",
+                new String[]{String.valueOf(bookId), STORAGE_FILE_GZIP},
+                null,
+                null,
+                "order_index ASC"
+        )) {
+            while (cursor.moveToNext()) {
+                ChapterRecord chapter = new ChapterRecord();
+                chapter.id = cursor.getLong(cursor.getColumnIndexOrThrow("id"));
+                chapter.bookId = cursor.getLong(cursor.getColumnIndexOrThrow("book_id"));
+                chapter.bodyTextPath = cursor.getString(cursor.getColumnIndexOrThrow("body_text_path"));
+                chapters.add(chapter);
+            }
+        }
+        return chapters;
+    }
+
+    /**
+     * 根据 body_text_path 相对路径解析为完整的本地文件。
+     */
+    public File resolveChapterTextFile(String bodyTextPath) {
+        if (bodyTextPath == null || bodyTextPath.isBlank()) {
+            return null;
+        }
+        return new File(getChapterTextDir(), bodyTextPath);
+    }
+
+    // endregion
+
     private void repairLegacyChapterBodyColumns(SQLiteDatabase db) {
         if (!hasColumn(db, "chapters", "body")) {
             return;
         }
         db.execSQL("UPDATE chapters SET body_html = body WHERE body_html IS NULL OR TRIM(body_html) = ''");
+        // 只查 ID，不把 body/body_text 放进 CursorWindow
         try (Cursor cursor = db.query(
                 "chapters",
-                new String[]{"id", "body", "body_text"},
+                new String[]{"id"},
                 "body IS NOT NULL AND TRIM(body) <> '' AND (body_text IS NULL OR TRIM(body_text) = '')",
                 null,
                 null,
@@ -264,7 +411,8 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         )) {
             while (cursor.moveToNext()) {
                 long id = cursor.getLong(0);
-                String legacyBody = cursor.getString(1);
+                String legacyBody = readColumnChunked(db, "chapters", "body", id);
+                if (legacyBody == null || legacyBody.isEmpty()) continue;
                 ContentValues values = new ContentValues();
                 values.put("body_text", HtmlUtils.stripHtml(legacyBody));
                 db.update("chapters", values, "id=?", new String[]{String.valueOf(id)});
@@ -315,9 +463,28 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 chapterValues.put("book_id", bookId);
                 chapterValues.put("title", seed.title);
                 chapterValues.put("body_html", "");
-                chapterValues.put("body_text", seed.bodyText == null ? "" : seed.bodyText);
+                String bodyText = seed.bodyText == null ? "" : seed.bodyText;
+                chapterValues.put("body_text", "");
                 chapterValues.put("order_index", seed.orderIndex);
-                db.insertOrThrow("chapters", null, chapterValues);
+                chapterValues.put("body_text_storage", STORAGE_FILE_GZIP);
+                long chapterId = db.insertOrThrow("chapters", null, chapterValues);
+                if (!bodyText.isEmpty()) {
+                    try {
+                        writeChapterTextToFile(bookId, chapterId, bodyText);
+                        ContentValues updateValues = new ContentValues();
+                        updateValues.put("body_text_path", buildChapterTextRelativePath(bookId, chapterId));
+                        updateValues.put("body_text_size", bodyText.getBytes(StandardCharsets.UTF_8).length);
+                        db.update("chapters", updateValues, "id=?", new String[]{String.valueOf(chapterId)});
+                    } catch (IOException e) {
+                        Log.w(TAG, "写入章节外置正文失败, 回退数据库存储 chapter " + chapterId, e);
+                        ContentValues fallbackValues = new ContentValues();
+                        fallbackValues.put("body_text", bodyText);
+                        fallbackValues.put("body_text_storage", STORAGE_DB);
+                        fallbackValues.put("body_text_path", (String) null);
+                        fallbackValues.put("body_text_size", 0);
+                        db.update("chapters", fallbackValues, "id=?", new String[]{String.valueOf(chapterId)});
+                    }
+                }
             }
 
             db.setTransactionSuccessful();
@@ -371,7 +538,11 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
 
     public synchronized List<ChapterRecord> getChapters(long bookId, boolean includeContent) {
         List<ChapterRecord> chapters = new ArrayList<>();
-        String[] columns = includeContent ? null : new String[]{"id", "book_id", "title", "order_index"};
+        // includeContent=true 时也不读 body_text 列，避免超长正文超出 CursorWindow
+        String[] columns = includeContent
+                ? new String[]{"id", "book_id", "title", "order_index",
+                        "body_text_path", "body_text_storage", "body_text_size"}
+                : new String[]{"id", "book_id", "title", "order_index"};
         try (Cursor cursor = getReadableDatabase().query(
                 "chapters",
                 columns,
@@ -388,7 +559,9 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 chapter.title = cursor.getString(cursor.getColumnIndexOrThrow("title"));
                 if (includeContent) {
                     chapter.bodyHtml = "";
-                    chapter.bodyText = cursor.getString(cursor.getColumnIndexOrThrow("body_text"));
+                    readChapterStorageFields(cursor, chapter);
+                    chapter.bodyText = resolveChapterText(chapter.bookId, chapter.id,
+                            null, chapter.bodyTextPath, chapter.bodyTextStorage);
                 }
                 chapter.orderIndex = cursor.getInt(cursor.getColumnIndexOrThrow("order_index"));
                 chapters.add(chapter);
@@ -398,9 +571,10 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     }
 
     public synchronized ChapterRecord getChapterContent(long chapterId) {
+        // 不直接从 cursor 读 body_text——超长正文会超出 CursorWindow 限制
         try (Cursor cursor = getReadableDatabase().query(
                 "chapters",
-                new String[]{"body_text"},
+                new String[]{"book_id", "body_text_path", "body_text_storage", "body_text_size"},
                 "id=?",
                 new String[]{String.valueOf(chapterId)},
                 null,
@@ -411,12 +585,24 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
             if (cursor.moveToFirst()) {
                 ChapterRecord chapter = new ChapterRecord();
                 chapter.id = chapterId;
-                chapter.bodyText = cursor.getString(cursor.getColumnIndexOrThrow("body_text"));
+                chapter.bookId = cursor.getLong(cursor.getColumnIndexOrThrow("book_id"));
                 chapter.bodyHtml = "";
+                readChapterStorageFields(cursor, chapter);
+                chapter.bodyText = resolveChapterText(chapter.bookId, chapter.id,
+                        null, chapter.bodyTextPath, chapter.bodyTextStorage);
                 return chapter;
             }
         }
         return null;
+    }
+
+    private void readChapterStorageFields(Cursor cursor, ChapterRecord chapter) {
+        int pathIndex = cursor.getColumnIndex("body_text_path");
+        chapter.bodyTextPath = pathIndex >= 0 ? cursor.getString(pathIndex) : null;
+        int storageIndex = cursor.getColumnIndex("body_text_storage");
+        chapter.bodyTextStorage = storageIndex >= 0 ? cursor.getString(storageIndex) : STORAGE_DB;
+        int sizeIndex = cursor.getColumnIndex("body_text_size");
+        chapter.bodyTextSize = sizeIndex >= 0 ? cursor.getInt(sizeIndex) : 0;
     }
 
     public synchronized void updateBookInfo(long bookId, String title, String author) {
@@ -447,6 +633,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
             deleteFileIfExists(book.localPath);
             deleteFileIfExists(book.coverPath);
         }
+        deleteChapterTextDir(bookId);
     }
 
     public synchronized void setPinned(long bookId, boolean pinned) {
@@ -838,11 +1025,40 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         SharedPreferences prefs = maintenancePrefs();
         int pending = 0;
         if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_CLEANUP_BODY_HTML, false)) pending++;
-        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, false)) pending++;
-        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_VACUUM, false)) pending++;
         if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_RECOMPRESS_COVERS, false)) pending++;
+        // 正文导出：不依赖标记位，直接查数据库
+        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_EXPORT_BODY_TEXT, false)
+                || countChaptersNeedingExport() > 0) {
+            pending++;
+        }
+        // 数据库瘦身：不依赖标记位，直接看是否有空闲页需要回收
+        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, false)
+                || prefs.getBoolean(KEY_MAINTENANCE_PHASE_VACUUM, false)
+                || countFreePages() > 0) {
+            pending++;
+        }
         if (pending == 0) return "当前无需优化";
         return "待处理 " + pending + " 项维护任务";
+    }
+
+    private int countChaptersNeedingExport() {
+        try (Cursor cursor = getReadableDatabase().rawQuery(
+                "SELECT COUNT(*) FROM chapters WHERE body_text IS NOT NULL AND TRIM(body_text) <> ''" +
+                        " AND (body_text_storage IS NULL OR body_text_storage = ?" +
+                        " OR (body_text_storage = ? AND body_text_path IS NOT NULL))",
+                new String[]{STORAGE_DB, STORAGE_FILE_GZIP})) {
+            if (cursor.moveToFirst()) return cursor.getInt(0);
+        } catch (Exception ignored) {
+        }
+        return 0;
+    }
+
+    private int countFreePages() {
+        try (Cursor cursor = getReadableDatabase().rawQuery("PRAGMA freelist_count", null)) {
+            if (cursor.moveToFirst()) return cursor.getInt(0);
+        } catch (Exception ignored) {
+        }
+        return 0;
     }
 
     public void runStorageMaintenanceWithProgress(MaintenanceProgressListener listener) {
@@ -862,7 +1078,29 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
             }
         }
 
-        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, false)) {
+        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_EXPORT_BODY_TEXT, false)
+                || countChaptersNeedingExport() > 0) {
+            try {
+                if (listener != null) listener.onPhaseStart("导出章节正文");
+                exportBodyTextToFiles();
+                // 导出后 DB 有大片空闲页，必须重新跑 checkpoint + VACUUM 才能回收
+                prefs.edit()
+                        .putBoolean(KEY_MAINTENANCE_PHASE_EXPORT_BODY_TEXT, false)
+                        .putBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, true)
+                        .putBoolean(KEY_MAINTENANCE_PHASE_VACUUM, true)
+                        .apply();
+                if (listener != null) listener.onPhaseDone("导出章节正文");
+            } catch (Exception error) {
+                Log.w(TAG, "Body text export phase failed", error);
+                if (listener != null) listener.onError("导出章节正文失败: " + error.getMessage());
+                return;
+            }
+        }
+
+        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, false)
+                || prefs.getBoolean(KEY_MAINTENANCE_PHASE_VACUUM, false)
+                || countFreePages() > 0) {
+            // checkpoint：WAL 已空时可能报错，非致命，失败后直接继续 VACUUM
             try {
                 if (listener != null) listener.onPhaseStart("整理数据库日志");
                 synchronized (this) {
@@ -871,21 +1109,23 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 prefs.edit().putBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, false).apply();
                 if (listener != null) listener.onPhaseDone("整理数据库日志");
             } catch (Exception error) {
-                Log.w(TAG, "WAL checkpoint phase failed", error);
-                if (listener != null) listener.onError("整理数据库日志失败: " + error.getMessage());
-                return;
+                Log.w(TAG, "WAL checkpoint failed, continuing to VACUUM", error);
             }
-        }
 
-        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_VACUUM, false)) {
             try {
                 if (listener != null) listener.onPhaseStart("压缩数据库");
                 synchronized (this) {
                     SQLiteDatabase db = getWritableDatabase();
-                    db.execSQL("PRAGMA wal_checkpoint(TRUNCATE)");
+                    try {
+                        db.execSQL("PRAGMA wal_checkpoint(TRUNCATE)");
+                    } catch (Exception ignored) {
+                    }
                     db.execSQL("VACUUM");
                 }
-                prefs.edit().putBoolean(KEY_MAINTENANCE_PHASE_VACUUM, false).apply();
+                prefs.edit()
+                        .putBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, false)
+                        .putBoolean(KEY_MAINTENANCE_PHASE_VACUUM, false)
+                        .apply();
                 if (listener != null) listener.onPhaseDone("压缩数据库");
             } catch (Exception error) {
                 Log.w(TAG, "Vacuum phase failed", error);
@@ -936,6 +1176,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     private void markStorageSlimmingMaintenancePending() {
         maintenancePrefs().edit()
                 .putBoolean(KEY_MAINTENANCE_PHASE_CLEANUP_BODY_HTML, true)
+                .putBoolean(KEY_MAINTENANCE_PHASE_EXPORT_BODY_TEXT, true)
                 .putBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, true)
                 .putBoolean(KEY_MAINTENANCE_PHASE_VACUUM, true)
                 .putBoolean(KEY_MAINTENANCE_PHASE_RECOMPRESS_COVERS, true)
@@ -945,9 +1186,12 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     private void schedulePendingStorageMaintenance() {
         SharedPreferences prefs = maintenancePrefs();
         boolean hasWork = prefs.getBoolean(KEY_MAINTENANCE_PHASE_CLEANUP_BODY_HTML, false)
+                || prefs.getBoolean(KEY_MAINTENANCE_PHASE_EXPORT_BODY_TEXT, false)
                 || prefs.getBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, false)
                 || prefs.getBoolean(KEY_MAINTENANCE_PHASE_VACUUM, false)
-                || prefs.getBoolean(KEY_MAINTENANCE_PHASE_RECOMPRESS_COVERS, false);
+                || prefs.getBoolean(KEY_MAINTENANCE_PHASE_RECOMPRESS_COVERS, false)
+                || countChaptersNeedingExport() > 0
+                || countFreePages() > 0;
         if (!hasWork || storageMaintenanceRunning) {
             return;
         }
@@ -982,35 +1226,56 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
             }
         }
 
-        // 阶段2：WAL checkpoint + truncate，将 WAL 数据合并回主库并截断
-        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, false)) {
+        // 阶段2：导出 body_text 到外置 .txt.gz 文件，清空数据库正文（可安全重试）
+        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_EXPORT_BODY_TEXT, false)
+                || countChaptersNeedingExport() > 0) {
+            try {
+                exportBodyTextToFiles();
+                // 导出后 DB 有大量空闲页，必须重新跑 checkpoint + VACUUM
+                prefs.edit()
+                        .putBoolean(KEY_MAINTENANCE_PHASE_EXPORT_BODY_TEXT, false)
+                        .putBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, true)
+                        .putBoolean(KEY_MAINTENANCE_PHASE_VACUUM, true)
+                        .apply();
+            } catch (Exception error) {
+                Log.w(TAG, "Body text export phase failed", error);
+                return;
+            }
+        }
+
+        // 阶段4+5：checkpoint + VACUUM（合并为一个条件，任一需要即执行全部）
+        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, false)
+                || prefs.getBoolean(KEY_MAINTENANCE_PHASE_VACUUM, false)
+                || countFreePages() > 0) {
             try {
                 synchronized (this) {
                     getWritableDatabase().execSQL("PRAGMA wal_checkpoint(TRUNCATE)");
                 }
                 prefs.edit().putBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, false).apply();
             } catch (Exception error) {
-                Log.w(TAG, "WAL checkpoint phase failed", error);
-                return;
+                Log.w(TAG, "WAL checkpoint failed, continuing to VACUUM", error);
             }
-        }
 
-        // 阶段3：VACUUM 瘦身，前后均执行 checkpoint 确保空间释放可被系统感知
-        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_VACUUM, false)) {
             try {
                 synchronized (this) {
                     SQLiteDatabase db = getWritableDatabase();
-                    db.execSQL("PRAGMA wal_checkpoint(TRUNCATE)");
+                    try {
+                        db.execSQL("PRAGMA wal_checkpoint(TRUNCATE)");
+                    } catch (Exception ignored) {
+                    }
                     db.execSQL("VACUUM");
                 }
-                prefs.edit().putBoolean(KEY_MAINTENANCE_PHASE_VACUUM, false).apply();
+                prefs.edit()
+                        .putBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, false)
+                        .putBoolean(KEY_MAINTENANCE_PHASE_VACUUM, false)
+                        .apply();
             } catch (Exception error) {
                 Log.w(TAG, "Vacuum phase failed", error);
                 return;
             }
         }
 
-        // 阶段4：封面重压缩（与数据库瘦身解耦，仅对已有封面执行一次）
+        // 阶段6：封面重压缩（与数据库瘦身解耦，仅对已有封面执行一次）
         if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_RECOMPRESS_COVERS, false)) {
             try {
                 recompressExistingCovers();
@@ -1056,6 +1321,118 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         }
         long originalSize = sourceFile.length();
         return originalSize <= 0L || compressedFile.length() < originalSize;
+    }
+
+    /**
+     * 深度瘦身阶段：遍历所有 storage='db' 的章节，将 body_text 导出到 .txt.gz 文件并清空数据库正文。
+     * 已完成的章节（storage='file_gzip'）自动跳过，可安全中断后重试。
+     * 正文过长时使用 SUBSTR 分块读取，避免 CursorWindow 行大小限制。
+     */
+    private void exportBodyTextToFiles() {
+        SQLiteDatabase db = getWritableDatabase();
+        // 同时清空 body_html
+        clearDeprecatedChapterHtml(db);
+
+        // 包含两类：① storage='db' 待迁移  ② storage='file_gzip' 但 body_text 未清（上次中断残留）
+        String selection = "body_text IS NOT NULL AND TRIM(body_text) <> '' AND (" +
+                "body_text_storage IS NULL OR body_text_storage = ?" +
+                " OR (body_text_storage = ? AND body_text_path IS NOT NULL)" +
+                ")";
+        try (Cursor cursor = db.query(
+                "chapters",
+                new String[]{"id", "book_id", "body_text_path", "body_text_storage"},
+                selection,
+                new String[]{STORAGE_DB, STORAGE_FILE_GZIP},
+                null,
+                null,
+                "book_id ASC, order_index ASC"
+        )) {
+            while (cursor.moveToNext()) {
+                long chapterId = cursor.getLong(cursor.getColumnIndexOrThrow("id"));
+                long bookId = cursor.getLong(cursor.getColumnIndexOrThrow("book_id"));
+                String existingPath = cursor.getString(cursor.getColumnIndexOrThrow("body_text_path"));
+                String storage = cursor.getString(cursor.getColumnIndexOrThrow("body_text_storage"));
+
+                // 已是 file_gzip 且外置文件存在 → 只需清 body_text，不用重新导出
+                if (STORAGE_FILE_GZIP.equals(storage) && existingPath != null && !existingPath.isBlank()) {
+                    File gzFile = resolveChapterTextFile(existingPath);
+                    if (gzFile != null && gzFile.exists()) {
+                        ContentValues clearOnly = new ContentValues();
+                        clearOnly.put("body_text", "");
+                        db.update("chapters", clearOnly, "id=?", new String[]{String.valueOf(chapterId)});
+                        continue;
+                    }
+                }
+
+                String bodyText = readBodyTextChunked(db, chapterId);
+                if (bodyText == null || bodyText.isEmpty()) {
+                    ContentValues markEmpty = new ContentValues();
+                    markEmpty.put("body_text", "");
+                    markEmpty.put("body_text_storage", STORAGE_FILE_GZIP);
+                    markEmpty.put("body_text_path", buildChapterTextRelativePath(bookId, chapterId));
+                    markEmpty.put("body_text_size", 0);
+                    db.update("chapters", markEmpty, "id=?", new String[]{String.valueOf(chapterId)});
+                    continue;
+                }
+                byte[] rawBytes = bodyText.getBytes(StandardCharsets.UTF_8);
+                try {
+                    writeChapterTextToFile(bookId, chapterId, bodyText);
+                    String roundTripped = readChapterTextFromFile(bookId, chapterId);
+                    if (!bodyText.equals(roundTripped)) {
+                        Log.w(TAG, "章节正文校验失败 chapter " + chapterId + ", 保留数据库存储");
+                        continue;
+                    }
+                    ContentValues updateValues = new ContentValues();
+                    updateValues.put("body_text", "");
+                    updateValues.put("body_text_storage", STORAGE_FILE_GZIP);
+                    updateValues.put("body_text_path", buildChapterTextRelativePath(bookId, chapterId));
+                    updateValues.put("body_text_size", rawBytes.length);
+                    db.update("chapters", updateValues, "id=?", new String[]{String.valueOf(chapterId)});
+                } catch (IOException e) {
+                    Log.w(TAG, "导出章节正文失败 chapter " + chapterId + ", 跳过", e);
+                }
+            }
+        }
+    }
+
+    /**
+     * 分块读取单行某列的值，避免超长内容超出 CursorWindow 的 2MB 上限。
+     * 每次读 512KB，拼接后返回完整内容。
+     */
+    private String readColumnChunked(SQLiteDatabase db, String table, String column, long rowId) {
+        try (Cursor lenCursor = db.rawQuery(
+                "SELECT LENGTH(" + column + ") FROM " + table + " WHERE id=?",
+                new String[]{String.valueOf(rowId)})) {
+            if (!lenCursor.moveToFirst()) return "";
+            int totalLen = lenCursor.getInt(0);
+            if (totalLen <= 0) return "";
+
+            StringBuilder sb = new StringBuilder(totalLen);
+            int offset = 1; // SQLite SUBSTR 从 1 开始
+            final int chunkSize = 512 * 1024; // 512 KB
+
+            while (offset <= totalLen) {
+                try (Cursor chunkCursor = db.rawQuery(
+                        "SELECT SUBSTR(" + column + ", ?, ?) FROM " + table + " WHERE id=?",
+                        new String[]{String.valueOf(offset), String.valueOf(chunkSize), String.valueOf(rowId)})) {
+                    if (chunkCursor.moveToFirst()) {
+                        String chunk = chunkCursor.getString(0);
+                        if (chunk != null) {
+                            sb.append(chunk);
+                        }
+                    }
+                }
+                offset += chunkSize;
+            }
+            return sb.toString();
+        }
+    }
+
+    /**
+     * 分块读取 body_text，避免超长章节超出 CursorWindow 的 2MB 上限。
+     */
+    private String readBodyTextChunked(SQLiteDatabase db, long chapterId) {
+        return readColumnChunked(db, "chapters", "body_text", chapterId);
     }
 
     public synchronized File exportDatabase(File destination) throws IOException {
@@ -1284,11 +1661,114 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         long walSize = walFile.exists() ? walFile.length() : 0L;
         File shmFile = new File(dbFile.getAbsolutePath() + "-shm");
         long shmSize = shmFile.exists() ? shmFile.length() : 0L;
-        long total = dbSize + walSize + shmSize;
-        return "主库 " + formatFileSize(dbSize)
-                + " · WAL " + formatFileSize(walSize)
-                + " · SHM " + formatFileSize(shmSize)
-                + "\n合计 " + formatFileSize(total);
+        long dbTotal = dbSize + walSize + shmSize;
+
+        long chapterTextSize = dirSize(getChapterTextDir());
+        long coversSize = dirSize(new File(appContext.getFilesDir(), "covers"));
+        long booksSize = dirSize(new File(appContext.getFilesDir(), "books"));
+        long total = dbTotal + chapterTextSize + coversSize + booksSize;
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("主库 ").append(formatFileSize(dbSize))
+                .append(" · WAL ").append(formatFileSize(walSize))
+                .append(" · SHM ").append(formatFileSize(shmSize))
+                .append("\n章节正文 ").append(formatFileSize(chapterTextSize))
+                .append(" · 封面 ").append(formatFileSize(coversSize));
+        if (booksSize > 0) {
+            sb.append(" · 源文件 ").append(formatFileSize(booksSize));
+        }
+        sb.append("\n合计 ").append(formatFileSize(total));
+        sb.append("\n──────────────────");
+        sb.append(getDatabaseContentBreakdown());
+        return sb.toString();
+    }
+
+    /**
+     * 诊断：按表统计行数与正文占用，定位大体积来源。
+     */
+    private String getDatabaseContentBreakdown() {
+        StringBuilder sb = new StringBuilder();
+        try {
+            SQLiteDatabase db = getReadableDatabase();
+            // 表行数（快速估计）
+            sb.append("\ntables: ");
+            int[] counts = new int[5];
+            String[] tables = {"books", "chapters", "reading_stats", "bookmarks", "replacement_rules"};
+            for (int i = 0; i < tables.length; i++) {
+                try (Cursor c = db.rawQuery("SELECT COUNT(*) FROM " + tables[i], null)) {
+                    counts[i] = c.moveToFirst() ? c.getInt(0) : 0;
+                }
+            }
+            sb.append("books×").append(counts[0])
+                    .append(" ch×").append(counts[1])
+                    .append(" stats×").append(counts[2])
+                    .append(" bm×").append(counts[3])
+                    .append(" rules×").append(counts[4]);
+
+            // chapters 正文存储分布
+            try (Cursor c = db.rawQuery(
+                    "SELECT body_text_storage, COUNT(*), SUM(LENGTH(body_text)) " +
+                            "FROM chapters GROUP BY body_text_storage", null)) {
+                while (c.moveToNext()) {
+                    String mode = c.getString(0);
+                    int cnt = c.getInt(1);
+                    long sumBytes = c.getLong(2);
+                    sb.append("\n  storage=").append(mode == null ? "NULL" : mode)
+                            .append(" ×").append(cnt)
+                            .append(" body_text合计 ").append(formatFileSize(sumBytes));
+                }
+            }
+
+            // chapters 中 body_text 非空但 storage 非 file_gzip 的（漏网之鱼）
+            try (Cursor c = db.rawQuery(
+                    "SELECT COUNT(*), SUM(LENGTH(body_text)) FROM chapters " +
+                            "WHERE body_text IS NOT NULL AND TRIM(body_text) <> '' " +
+                            "AND (body_text_storage IS NULL OR body_text_storage <> 'file_gzip')", null)) {
+                if (c.moveToFirst() && c.getInt(0) > 0) {
+                    sb.append("\n  ⚠ 未导出: ×").append(c.getInt(0))
+                            .append(" 合计 ").append(formatFileSize(c.getLong(1)));
+                }
+            }
+
+            // 最大的几个 body_text
+            try (Cursor c = db.rawQuery(
+                    "SELECT id, book_id, LENGTH(body_text) FROM chapters " +
+                            "WHERE body_text IS NOT NULL AND LENGTH(body_text) > 0 " +
+                            "ORDER BY LENGTH(body_text) DESC LIMIT 3", null)) {
+                boolean first = true;
+                while (c.moveToNext()) {
+                    if (first) {
+                        sb.append("\n  TOP3 大正文:");
+                        first = false;
+                    }
+                    sb.append("\n    ch#").append(c.getLong(0))
+                            .append(" book#").append(c.getLong(1))
+                            .append(" ").append(formatFileSize(c.getLong(2)));
+                }
+            }
+        } catch (Exception e) {
+            sb.append("\n诊断失败: ").append(e.getMessage());
+        }
+        return sb.toString();
+    }
+
+    private long dirSize(File dir) {
+        if (dir == null || !dir.exists() || !dir.isDirectory()) {
+            return 0L;
+        }
+        long total = 0L;
+        File[] files = dir.listFiles();
+        if (files == null) {
+            return 0L;
+        }
+        for (File f : files) {
+            if (f.isFile()) {
+                total += f.length();
+            } else if (f.isDirectory()) {
+                total += dirSize(f);
+            }
+        }
+        return total;
     }
 
     private static String formatFileSize(long bytes) {
