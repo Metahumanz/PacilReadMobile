@@ -499,12 +499,8 @@ public final class ReaderPagingAnimator {
         applyPagingVisuals(runtime.settingsStore.getFlipMode(), state.interactiveDirection, state.interactiveProgress, touchY);
     }
 
-    private void updateInteractiveShadow(float edgeX, int direction, float alpha) {
-        updatePagingOverlay(views.pageShadow, edgeX, direction, alpha, 1f, 1f, 0f, 0.56f);
-    }
-
-    private void updateInteractiveFoldShadow(float edgeX, int direction, float alpha, float scaleX, float rotation) {
-        updatePagingOverlay(views.pageFoldShadow, edgeX, direction, alpha, 1f, scaleX, rotation, 0.8f);
+    private void hideInteractiveShadow() {
+        resetOverlayView(views.pageShadow);
     }
 
     private void updateInteractiveFoldHighlight(float edgeX, int direction, float alpha, float scaleX, float rotation) {
@@ -940,12 +936,6 @@ public final class ReaderPagingAnimator {
             incomingLayer.bringToFront();
             currentLayer.bringToFront();
         }
-        if (views.pageShadow != null) {
-            views.pageShadow.bringToFront();
-        }
-        if (views.pageFoldShadow != null) {
-            views.pageFoldShadow.bringToFront();
-        }
         if (views.pageFoldHighlight != null) {
             views.pageFoldHighlight.bringToFront();
         }
@@ -1000,8 +990,7 @@ public final class ReaderPagingAnimator {
             currentLayer.setTranslationX((direction > 0 ? -1f : 1f) * width * safeProgress);
             applyRevealedIncomingClip(incomingLayer, direction, revealWidth, widthPx, heightPx);
             incomingLayer.setAlpha(1f);
-            float edgeX = direction > 0 ? width + currentLayer.getTranslationX() : currentLayer.getTranslationX();
-            updateInteractiveShadow(edgeX, direction, 0.18f + 0.24f * safeProgress);
+            hideInteractiveShadow();
             return;
         }
 
@@ -1010,7 +999,7 @@ public final class ReaderPagingAnimator {
             currentLayer.setTranslationY(-offsetY);
             incomingLayer.setTranslationY((direction > 0 ? 1f : -1f) * height * (1f - safeProgress));
             incomingLayer.setAlpha(0.94f + 0.06f * safeProgress);
-            updateInteractiveShadow(width * 0.5f, direction, 0f);
+            hideInteractiveShadow();
             return;
         }
 
@@ -1020,10 +1009,10 @@ public final class ReaderPagingAnimator {
         incomingLayer.setAlpha(0.95f + 0.05f * safeProgress);
         if (direction > 0) {
             applyPageClip(incomingLayer, 0, Math.round(revealWidth), heightPx);
-            updateInteractiveShadow(width - revealWidth, direction, "none".equals(mode) ? 0f : 0.14f + 0.16f * safeProgress);
+            hideInteractiveShadow();
         } else {
             applyPageClip(incomingLayer, widthPx - Math.round(revealWidth), widthPx, heightPx);
-            updateInteractiveShadow(revealWidth, direction, "none".equals(mode) ? 0f : 0.14f + 0.16f * safeProgress);
+            hideInteractiveShadow();
         }
     }
 
