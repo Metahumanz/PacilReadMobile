@@ -2,7 +2,10 @@ package com.metahumanz.pacilread.sync;
 
 import android.content.Context;
 
+import android.util.Log;
+
 import com.metahumanz.pacilread.model.BookRecord;
+import com.metahumanz.pacilread.model.ChapterRecord;
 import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
 
@@ -30,6 +33,7 @@ public class WebDavBackupManager {
         ensureAnySyncScopeSelected();
         listener.onStatus("创建云端目录...");
         webDavClient.ensureBackupDirectories();
+        webDavClient.ensureChapterTextDirectory();
 
         if (shouldSyncDatabaseSnapshot()) {
             File tempDir = new File(context.getCacheDir(), "backup");
@@ -93,6 +97,9 @@ public class WebDavBackupManager {
             databaseHelper.stripPlatformSettingsTable(fullDb);
             databaseHelper.importDatabase(fullDb);
             databaseHelper.rebaseLocalAssetPaths();
+
+            listener.onStatus("恢复章节正文...");
+            restoreChapterTextFiles(listener);
         }
 
         restoreSettingsJsonIfPresent(listener);
@@ -202,6 +209,7 @@ public class WebDavBackupManager {
                         }
                     }
                 }
+                uploadChapterTextFiles(book.id, skipRemoteExisting, listener);
             }
         }
 
@@ -216,6 +224,55 @@ public class WebDavBackupManager {
                 if (!skipRemoteExisting || webDavClient.head(remotePath).code != 200) {
                     listener.onStatus("上传背景图片...");
                     webDavClient.uploadFile(backgroundFile, remotePath);
+                }
+            }
+        }
+    }
+
+    private void uploadChapterTextFiles(long bookId, boolean skipRemoteExisting, StatusListener listener) throws Exception {
+        List<ChapterRecord> chapters = databaseHelper.getChaptersWithExternalStorage(bookId);
+        for (ChapterRecord chapter : chapters) {
+            if (chapter.bodyTextPath == null || chapter.bodyTextPath.isBlank()) {
+                continue;
+            }
+            File localFile = databaseHelper.resolveChapterTextFile(chapter.bodyTextPath);
+            if (localFile == null || !localFile.exists()) {
+                continue;
+            }
+            String remotePath = webDavClient.backupBaseUrl() + "chapter_text/" + chapter.bodyTextPath;
+            if (!skipRemoteExisting || webDavClient.head(remotePath).code != 200) {
+                webDavClient.uploadFile(localFile, remotePath);
+            }
+        }
+    }
+
+    private void restoreChapterTextFiles(StatusListener listener) {
+        List<BookRecord> books = databaseHelper.getBooks();
+        int total = Math.max(books.size(), 1);
+        for (int i = 0; i < books.size(); i++) {
+            BookRecord book = books.get(i);
+            List<ChapterRecord> chapters = databaseHelper.getChaptersWithExternalStorage(book.id);
+            for (ChapterRecord chapter : chapters) {
+                if (chapter.bodyTextPath == null || chapter.bodyTextPath.isBlank()) {
+                    continue;
+                }
+                try {
+                    String remotePath = webDavClient.backupBaseUrl() + "chapter_text/" + chapter.bodyTextPath;
+                    if (webDavClient.head(remotePath).code != 200) {
+                        Log.w("WebDavBackup", "章节正文缺失 chapter " + chapter.id + ": " + chapter.bodyTextPath);
+                        continue;
+                    }
+                    listener.onStatus("恢复章节正文 " + (i + 1) + "/" + total + "...");
+                    File localFile = databaseHelper.resolveChapterTextFile(chapter.bodyTextPath);
+                    if (localFile != null) {
+                        File parent = localFile.getParentFile();
+                        if (parent != null && !parent.exists()) {
+                            parent.mkdirs();
+                        }
+                        webDavClient.downloadBinaryFile(remotePath, localFile);
+                    }
+                } catch (Exception e) {
+                    Log.w("WebDavBackup", "恢复章节正文失败 chapter " + chapter.id, e);
                 }
             }
         }

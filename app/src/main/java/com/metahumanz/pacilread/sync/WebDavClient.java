@@ -79,6 +79,11 @@ public class WebDavClient {
         ensureAndroidSettingsDirectory();
     }
 
+    public void ensureChapterTextDirectory() throws Exception {
+        String base = backupBaseUrl();
+        requireSuccessfulResponse(request(base + "chapter_text/", "MKCOL", null, null), "初始化章节正文备份目录", true);
+    }
+
     public void ensureReadingStatsDirectory() throws Exception {
         String base = backupBaseUrl();
         ensureDirectoryTree(requireConfiguredServerUrl(), settingsStore.getWebDavDir(), "初始化备份目录");
