@@ -2,9 +2,11 @@ package com.metahumanz.pacilread.storage;
 
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.util.Log;
 
 import com.metahumanz.pacilread.model.BookmarkRecord;
 import com.metahumanz.pacilread.model.BookRecord;
@@ -15,6 +17,7 @@ import com.metahumanz.pacilread.model.ReadingTimeEntryRecord;
 import com.metahumanz.pacilread.model.ReaderThemeRecord;
 import com.metahumanz.pacilread.model.ReplacementRuleRecord;
 import com.metahumanz.pacilread.stats.ReadingStatsUtils;
+import com.metahumanz.pacilread.util.CoverImageStore;
 import com.metahumanz.pacilread.util.HtmlUtils;
 
 import java.io.File;
@@ -27,8 +30,12 @@ import java.util.List;
 import java.util.Locale;
 
 public class ReaderDatabaseHelper extends SQLiteOpenHelper {
+    private static final String TAG = "ReaderDatabaseHelper";
     private static final String DATABASE_NAME = "reader.db";
-    private static final int DATABASE_VERSION = 5;
+    private static final int DATABASE_VERSION = 6;
+    private static final String MAINTENANCE_PREFS_NAME = "reader_database_maintenance";
+    private static final String KEY_VACUUM_AFTER_BODY_HTML_CLEANUP = "vacuum_after_body_html_cleanup";
+    private static final String KEY_RECOMPRESS_COVERS_AFTER_BODY_HTML_CLEANUP = "recompress_covers_after_body_html_cleanup";
 
     private static ReaderDatabaseHelper instance;
 
@@ -40,6 +47,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     }
 
     private final Context appContext;
+    private volatile boolean storageMaintenanceRunning = false;
 
     private ReaderDatabaseHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -61,12 +69,17 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         ensureSchema(db);
+        if (oldVersion < 6) {
+            clearDeprecatedChapterHtml(db);
+            markStorageSlimmingMaintenancePending();
+        }
     }
 
     @Override
     public void onOpen(SQLiteDatabase db) {
         super.onOpen(db);
         ensureSchema(db);
+        schedulePendingStorageMaintenance();
     }
 
     private void createAllTables(SQLiteDatabase db) {
@@ -88,7 +101,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 "id INTEGER PRIMARY KEY AUTOINCREMENT," +
                 "book_id INTEGER NOT NULL," +
                 "title TEXT NOT NULL," +
-                "body_html TEXT NOT NULL," +
+                "body_html TEXT NOT NULL DEFAULT ''," +
                 "body_text TEXT NOT NULL," +
                 "order_index INTEGER NOT NULL," +
                 "FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE" +
@@ -251,6 +264,13 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         }
     }
 
+    private void clearDeprecatedChapterHtml(SQLiteDatabase db) {
+        if (!hasColumn(db, "chapters", "body_html")) {
+            return;
+        }
+        db.execSQL("UPDATE chapters SET body_html = '' WHERE body_html IS NOT NULL AND body_html <> ''");
+    }
+
     private void repairLegacyBookLastReadColumn(SQLiteDatabase db) {
         if (!hasColumn(db, "books", "last_read")) {
             return;
@@ -267,6 +287,9 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
             bookValues.put("title", importedBook.title);
             bookValues.put("author", importedBook.author);
             bookValues.put("local_path", importedBook.storedPath);
+            if (importedBook.coverPath != null && !importedBook.coverPath.isBlank()) {
+                bookValues.put("cover_path", importedBook.coverPath);
+            }
             bookValues.put("book_type", importedBook.bookType == null ? "text" : importedBook.bookType);
             bookValues.put("reading_stats_key", buildReadingStatsKey(importedBook.title, importedBook.author));
             bookValues.put("progress_index", 0);
@@ -283,8 +306,8 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 ContentValues chapterValues = new ContentValues();
                 chapterValues.put("book_id", bookId);
                 chapterValues.put("title", seed.title);
-                chapterValues.put("body_html", seed.bodyHtml);
-                chapterValues.put("body_text", seed.bodyText);
+                chapterValues.put("body_html", "");
+                chapterValues.put("body_text", seed.bodyText == null ? "" : seed.bodyText);
                 chapterValues.put("order_index", seed.orderIndex);
                 db.insertOrThrow("chapters", null, chapterValues);
             }
@@ -356,7 +379,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 chapter.bookId = cursor.getLong(cursor.getColumnIndexOrThrow("book_id"));
                 chapter.title = cursor.getString(cursor.getColumnIndexOrThrow("title"));
                 if (includeContent) {
-                    chapter.bodyHtml = cursor.getString(cursor.getColumnIndexOrThrow("body_html"));
+                    chapter.bodyHtml = "";
                     chapter.bodyText = cursor.getString(cursor.getColumnIndexOrThrow("body_text"));
                 }
                 chapter.orderIndex = cursor.getInt(cursor.getColumnIndexOrThrow("order_index"));
@@ -369,7 +392,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     public synchronized ChapterRecord getChapterContent(long chapterId) {
         try (Cursor cursor = getReadableDatabase().query(
                 "chapters",
-                new String[]{"body_text", "body_html"},
+                new String[]{"body_text"},
                 "id=?",
                 new String[]{String.valueOf(chapterId)},
                 null,
@@ -381,7 +404,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 ChapterRecord chapter = new ChapterRecord();
                 chapter.id = chapterId;
                 chapter.bodyText = cursor.getString(cursor.getColumnIndexOrThrow("body_text"));
-                chapter.bodyHtml = cursor.getString(cursor.getColumnIndexOrThrow("body_html"));
+                chapter.bodyHtml = "";
                 return chapter;
             }
         }
@@ -783,6 +806,95 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         getWritableDatabase().delete("bookmarks", "id=?", new String[]{String.valueOf(bookmarkId)});
     }
 
+    private SharedPreferences maintenancePrefs() {
+        return appContext.getSharedPreferences(MAINTENANCE_PREFS_NAME, Context.MODE_PRIVATE);
+    }
+
+    private void markStorageSlimmingMaintenancePending() {
+        maintenancePrefs().edit()
+                .putBoolean(KEY_VACUUM_AFTER_BODY_HTML_CLEANUP, true)
+                .putBoolean(KEY_RECOMPRESS_COVERS_AFTER_BODY_HTML_CLEANUP, true)
+                .apply();
+    }
+
+    private void schedulePendingStorageMaintenance() {
+        SharedPreferences prefs = maintenancePrefs();
+        boolean hasWork = prefs.getBoolean(KEY_VACUUM_AFTER_BODY_HTML_CLEANUP, false)
+                || prefs.getBoolean(KEY_RECOMPRESS_COVERS_AFTER_BODY_HTML_CLEANUP, false);
+        if (!hasWork || storageMaintenanceRunning) {
+            return;
+        }
+        synchronized (this) {
+            if (storageMaintenanceRunning) {
+                return;
+            }
+            storageMaintenanceRunning = true;
+        }
+        Thread thread = new Thread(() -> {
+            try {
+                runPendingStorageMaintenance();
+            } finally {
+                storageMaintenanceRunning = false;
+            }
+        }, "PacilRead-storage-slimming");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private void runPendingStorageMaintenance() {
+        SharedPreferences prefs = maintenancePrefs();
+        if (prefs.getBoolean(KEY_RECOMPRESS_COVERS_AFTER_BODY_HTML_CLEANUP, false)) {
+            try {
+                recompressExistingCovers();
+                prefs.edit().putBoolean(KEY_RECOMPRESS_COVERS_AFTER_BODY_HTML_CLEANUP, false).apply();
+            } catch (Exception error) {
+                Log.w(TAG, "Cover recompression maintenance failed", error);
+            }
+        }
+        if (prefs.getBoolean(KEY_VACUUM_AFTER_BODY_HTML_CLEANUP, false)) {
+            try {
+                synchronized (this) {
+                    getWritableDatabase().execSQL("VACUUM");
+                }
+                prefs.edit().putBoolean(KEY_VACUUM_AFTER_BODY_HTML_CLEANUP, false).apply();
+            } catch (Exception error) {
+                Log.w(TAG, "Database vacuum maintenance failed", error);
+            }
+        }
+    }
+
+    private void recompressExistingCovers() {
+        List<BookRecord> books = getBooks();
+        for (BookRecord book : books) {
+            if (book.coverPath == null || book.coverPath.isBlank()) {
+                continue;
+            }
+            File sourceFile = new File(book.coverPath);
+            if (!sourceFile.exists() || !sourceFile.isFile()) {
+                continue;
+            }
+            try {
+                File compressedFile = CoverImageStore.saveCompressedCover(appContext, sourceFile, "cover_" + book.id);
+                if (shouldReplaceCover(sourceFile, compressedFile)) {
+                    setCoverPath(book.id, compressedFile.getAbsolutePath());
+                    deleteFileIfExists(sourceFile.getAbsolutePath());
+                } else {
+                    deleteFileIfExists(compressedFile.getAbsolutePath());
+                }
+            } catch (Exception error) {
+                Log.w(TAG, "Skipping cover recompression for book " + book.id, error);
+            }
+        }
+    }
+
+    private boolean shouldReplaceCover(File sourceFile, File compressedFile) {
+        if (compressedFile == null || !compressedFile.exists() || compressedFile.length() <= 0L) {
+            return false;
+        }
+        long originalSize = sourceFile.length();
+        return originalSize <= 0L || compressedFile.length() < originalSize;
+    }
+
     public synchronized File exportDatabase(File destination) throws IOException {
         close();
         copyFile(getDatabaseFile(), destination);
@@ -871,6 +983,9 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         copyFile(source, getDatabaseFile());
         SQLiteDatabase db = getWritableDatabase();
         dropPlatformSettingsTable(db);
+        clearDeprecatedChapterHtml(db);
+        markStorageSlimmingMaintenancePending();
+        schedulePendingStorageMaintenance();
     }
 
     public synchronized void stripPlatformSettingsTable(File databaseFile) {
