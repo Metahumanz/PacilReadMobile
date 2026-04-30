@@ -29,6 +29,7 @@ import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedActivity;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.ui.LaunchSourceTransition;
+import com.metahumanz.pacilread.util.CoverImageStore;
 import com.metahumanz.pacilread.util.FileAssetHelper;
 
 import java.io.File;
@@ -682,7 +683,7 @@ public class BookshelfActivity extends ThemedActivity {
         executor.execute(() -> {
             try {
                 BookRecord currentBook = databaseHelper.getBook(bookId);
-                File coverFile = FileAssetHelper.copyUriToFolder(this, uri, "covers", "cover_" + bookId);
+                File coverFile = CoverImageStore.saveCompressedCover(this, uri, "cover_" + bookId);
                 if (currentBook != null && currentBook.coverPath != null && !currentBook.coverPath.isBlank()) {
                     FileAssetHelper.deleteIfExists(currentBook.coverPath);
                 }
