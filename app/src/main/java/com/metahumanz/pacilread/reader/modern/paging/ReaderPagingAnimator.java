@@ -103,11 +103,16 @@ public final class ReaderPagingAnimator {
                     if (distanceSquare <= slop * slop) {
                         return false;
                     }
-                    if (Math.abs(deltaY) > Math.abs(deltaX)) {
+                    boolean simulationDiagonalStart = isSimulationFlipMode()
+                            && isSimulationDiagonalStartZone(state.pagingDownY);
+                    if (!simulationDiagonalStart && Math.abs(deltaY) > Math.abs(deltaX)) {
                         state.pagingGestureCandidate = false;
                         return false;
                     }
-                    if (Math.abs(deltaX) <= Math.abs(deltaY)) {
+                    float minHorizontalDelta = simulationDiagonalStart
+                            ? Math.max(1f, slop * 0.5f)
+                            : Math.abs(deltaY);
+                    if (Math.abs(deltaX) <= minHorizontalDelta) {
                         return false;
                     }
                     int direction = deltaX < 0f ? 1 : -1;
@@ -178,7 +183,7 @@ public final class ReaderPagingAnimator {
             return;
         }
         if ("simulation".equals(mode)) {
-            initializeSimulationAutoStart(direction, width, height);
+            initializeSimulationAutoStart(direction, height);
         } else {
             resetInteractiveTouchState();
         }
@@ -537,16 +542,20 @@ public final class ReaderPagingAnimator {
 
     private boolean shouldCommitInteractivePaging() {
         float directionalVelocity = state.interactiveDirection > 0 ? -state.pagingVelocityX : state.pagingVelocityX;
-        if (directionalVelocity > 1.05f) {
+        String mode = runtime.settingsStore.getFlipMode();
+        float progressThreshold = "cover".equals(mode) ? 0.18f
+                : ("simulation".equals(mode) ? 0.24f : ("scroll".equals(mode) ? 0.28f : 0.22f));
+        float velocityThreshold = "scroll".equals(mode) ? 0.7f : 0.85f;
+        if (state.interactiveProgress >= progressThreshold) {
             return true;
         }
-        if (directionalVelocity < -0.25f || state.interactiveCancel) {
+        if (directionalVelocity > velocityThreshold) {
+            return true;
+        }
+        if (directionalVelocity < -0.25f || (state.interactiveCancel && state.interactiveProgress < progressThreshold * 0.5f)) {
             return false;
         }
-        float directionalDrag = state.interactiveDirection > 0
-                ? state.pagingDownX - state.interactiveTouchX
-                : state.interactiveTouchX - state.pagingDownX;
-        return directionalDrag > Math.max(state.pagingTouchSlop, 1);
+        return false;
     }
 
     private void finishInteractivePaging(boolean commit) {
@@ -1045,6 +1054,10 @@ public final class ReaderPagingAnimator {
     }
 
     private void captureInteractiveStartPoint(float startX, float startY) {
+        if (isSimulationFlipMode() && state.interactiveDirection != 0) {
+            captureSimulationStartPoint(state.interactiveDirection, startY);
+            return;
+        }
         state.interactiveStartX = sanitizeStageTouchX(startX);
         state.interactiveStartY = sanitizeStageTouchY(startY);
         state.interactiveTouchX = state.interactiveStartX;
@@ -1056,28 +1069,46 @@ public final class ReaderPagingAnimator {
         state.interactiveTouchY = sanitizeStageTouchY(touchY);
     }
 
-    private void initializeSimulationAutoStart(int direction, float width, float height) {
-        float startX = direction > 0 ? width - 5f : 5f;
-        float startY;
+    private void initializeSimulationAutoStart(int direction, float height) {
+        state.interactiveDirection = direction;
         float tapY = state.lastTapY >= 0 ? state.lastTapY : height / 2f;
-        if (tapY < height / 3f) {
-            startY = 5f;
-        } else if (tapY > height * 2f / 3f) {
-            startY = height - 5f;
-        } else {
-            startY = height / 2f;
-        }
-        captureInteractiveStartPoint(startX, startY);
+        captureSimulationStartPoint(direction, tapY);
         state.lastTapY = -1f;
+    }
+
+    private void captureSimulationStartPoint(int direction, float startY) {
+        float width = Math.max(views.pageStage == null ? 0f : views.pageStage.getWidth(), ui.dp(240));
+        state.interactiveStartX = sanitizeStageTouchX(direction > 0 ? width - 5f : 5f);
+        state.interactiveStartY = sanitizeStageTouchY(resolveSimulationStartY(startY));
+        state.interactiveTouchX = state.interactiveStartX;
+        state.interactiveTouchY = state.interactiveStartY;
+    }
+
+    private float resolveSimulationStartY(float touchY) {
+        float height = Math.max(views.pageStage == null ? 0f : views.pageStage.getHeight(), ui.dp(320));
+        float safeTouchY = Math.max(0f, Math.min(height, touchY));
+        if (safeTouchY < height / 3f) {
+            return 5f;
+        }
+        if (safeTouchY > height * 2f / 3f) {
+            return height - 5f;
+        }
+        return height / 2f;
     }
 
     private float sanitizeStageTouchX(float value) {
         float width = Math.max(views.pageStage == null ? 0f : views.pageStage.getWidth(), 1f);
+        if ("simulation".equals(runtime.settingsStore.getFlipMode())) {
+            return Math.max(0.1f, Math.min(width - 0.1f, value));
+        }
         return Math.max(-width * 3f, Math.min(width * 4f, value));
     }
 
     private float sanitizeStageTouchY(float value) {
         float height = Math.max(views.pageStage == null ? 0f : views.pageStage.getHeight(), 1f);
+        if ("simulation".equals(runtime.settingsStore.getFlipMode())) {
+            return Math.max(0.1f, Math.min(height - 0.1f, value));
+        }
         return Math.max(-height * 3f, Math.min(height * 4f, value));
     }
 
@@ -1098,6 +1129,15 @@ public final class ReaderPagingAnimator {
         } else {
             return state.interactiveStartY;
         }
+    }
+
+    private boolean isSimulationDiagonalStartZone(float startY) {
+        float height = Math.max(views.pageStage == null ? 0f : views.pageStage.getHeight(), ui.dp(320));
+        return startY < height / 3f || startY > height * 2f / 3f;
+    }
+
+    private boolean isSimulationFlipMode() {
+        return "simulation".equals(runtime.settingsStore.getFlipMode());
     }
 
     private void resetInteractiveTouchState() {
