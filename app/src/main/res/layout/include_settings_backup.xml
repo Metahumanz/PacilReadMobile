@@ -19,6 +19,40 @@
         android:padding="18dp">
 
         <TextView
+            android:id="@+id/text_database_size"
+            style="@style/AppChromeCaption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:text="本地数据库大小：计算中..." />
+
+        <TextView
+            android:id="@+id/text_maintenance_summary"
+            style="@style/AppChromeCaption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="维护任务：检查中..." />
+
+        <Button
+            android:id="@+id/button_optimize_database"
+            style="@style/AppChromeCompactToggleButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="18dp"
+            android:minHeight="46dp"
+            android:background="@drawable/bg_app_positive_button"
+            android:text="优化数据库存储"
+            android:textAllCaps="false"
+            android:textColor="?attr/themeColorAppButtonPositiveText" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginBottom="14dp"
+            android:background="?attr/themeColorAppBorder" />
+
+        <TextView
             android:id="@+id/text_backup_full"
             style="@style/AppChromeCaption"
             android:layout_width="match_parent"

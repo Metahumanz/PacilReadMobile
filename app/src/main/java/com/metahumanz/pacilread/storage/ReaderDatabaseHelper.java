@@ -34,8 +34,13 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     private static final String DATABASE_NAME = "reader.db";
     private static final int DATABASE_VERSION = 6;
     private static final String MAINTENANCE_PREFS_NAME = "reader_database_maintenance";
-    private static final String KEY_VACUUM_AFTER_BODY_HTML_CLEANUP = "vacuum_after_body_html_cleanup";
-    private static final String KEY_RECOMPRESS_COVERS_AFTER_BODY_HTML_CLEANUP = "recompress_covers_after_body_html_cleanup";
+    private static final String KEY_MAINTENANCE_PHASE_CLEANUP_BODY_HTML = "phase_cleanup_body_html";
+    private static final String KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT = "phase_wal_checkpoint";
+    private static final String KEY_MAINTENANCE_PHASE_VACUUM = "phase_vacuum";
+    private static final String KEY_MAINTENANCE_PHASE_RECOMPRESS_COVERS = "phase_recompress_covers";
+    // 旧版本维护标记（用于升级迁移）
+    private static final String KEY_VACUUM_AFTER_BODY_HTML_CLEANUP_LEGACY = "vacuum_after_body_html_cleanup";
+    private static final String KEY_RECOMPRESS_COVERS_AFTER_BODY_HTML_CLEANUP_LEGACY = "recompress_covers_after_body_html_cleanup";
 
     private static ReaderDatabaseHelper instance;
 
@@ -70,7 +75,8 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         ensureSchema(db);
         if (oldVersion < 6) {
-            clearDeprecatedChapterHtml(db);
+            // 不再在升级事务中同步清空 body_html，改为标记给后台维护阶段执行，
+            // 避免首次打开应用时阻塞数据库升级。
             markStorageSlimmingMaintenancePending();
         }
     }
@@ -79,7 +85,9 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     public void onOpen(SQLiteDatabase db) {
         super.onOpen(db);
         ensureSchema(db);
-        schedulePendingStorageMaintenance();
+        migrateMaintenancePrefsIfNeeded();
+        // 维护任务由外部 triggerStorageMaintenance() 延迟触发，
+        // 避免在数据库首次打开时抢占 I/O 导致首页加载变慢。
     }
 
     private void createAllTables(SQLiteDatabase db) {
@@ -810,17 +818,136 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         return appContext.getSharedPreferences(MAINTENANCE_PREFS_NAME, Context.MODE_PRIVATE);
     }
 
+    /**
+     * 由外部（如 BookshelfActivity）在首屏加载完成后调用，延迟触发维护任务。
+     * 可安全重复调用——如果没有待处理任务或维护已在运行则为空操作。
+     */
+    public void triggerStorageMaintenance() {
+        migrateMaintenancePrefsIfNeeded();
+        schedulePendingStorageMaintenance();
+    }
+
+    public interface MaintenanceProgressListener {
+        void onPhaseStart(String phaseName);
+        void onPhaseDone(String phaseName);
+        void onAllDone();
+        void onError(String errorMessage);
+    }
+
+    public String getPendingMaintenanceSummary() {
+        SharedPreferences prefs = maintenancePrefs();
+        int pending = 0;
+        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_CLEANUP_BODY_HTML, false)) pending++;
+        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, false)) pending++;
+        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_VACUUM, false)) pending++;
+        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_RECOMPRESS_COVERS, false)) pending++;
+        if (pending == 0) return "当前无需优化";
+        return "待处理 " + pending + " 项维护任务";
+    }
+
+    public void runStorageMaintenanceWithProgress(MaintenanceProgressListener listener) {
+        migrateMaintenancePrefsIfNeeded();
+        SharedPreferences prefs = maintenancePrefs();
+
+        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_CLEANUP_BODY_HTML, false)) {
+            try {
+                if (listener != null) listener.onPhaseStart("清理废弃数据");
+                clearDeprecatedChapterHtml(getWritableDatabase());
+                prefs.edit().putBoolean(KEY_MAINTENANCE_PHASE_CLEANUP_BODY_HTML, false).apply();
+                if (listener != null) listener.onPhaseDone("清理废弃数据");
+            } catch (Exception error) {
+                Log.w(TAG, "Body HTML cleanup phase failed", error);
+                if (listener != null) listener.onError("清理废弃数据失败: " + error.getMessage());
+                return;
+            }
+        }
+
+        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, false)) {
+            try {
+                if (listener != null) listener.onPhaseStart("整理数据库日志");
+                synchronized (this) {
+                    getWritableDatabase().execSQL("PRAGMA wal_checkpoint(TRUNCATE)");
+                }
+                prefs.edit().putBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, false).apply();
+                if (listener != null) listener.onPhaseDone("整理数据库日志");
+            } catch (Exception error) {
+                Log.w(TAG, "WAL checkpoint phase failed", error);
+                if (listener != null) listener.onError("整理数据库日志失败: " + error.getMessage());
+                return;
+            }
+        }
+
+        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_VACUUM, false)) {
+            try {
+                if (listener != null) listener.onPhaseStart("压缩数据库");
+                synchronized (this) {
+                    SQLiteDatabase db = getWritableDatabase();
+                    db.execSQL("PRAGMA wal_checkpoint(TRUNCATE)");
+                    db.execSQL("VACUUM");
+                }
+                prefs.edit().putBoolean(KEY_MAINTENANCE_PHASE_VACUUM, false).apply();
+                if (listener != null) listener.onPhaseDone("压缩数据库");
+            } catch (Exception error) {
+                Log.w(TAG, "Vacuum phase failed", error);
+                if (listener != null) listener.onError("压缩数据库失败: " + error.getMessage());
+                return;
+            }
+        }
+
+        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_RECOMPRESS_COVERS, false)) {
+            try {
+                if (listener != null) listener.onPhaseStart("优化封面图片");
+                recompressExistingCovers();
+                prefs.edit().putBoolean(KEY_MAINTENANCE_PHASE_RECOMPRESS_COVERS, false).apply();
+                if (listener != null) listener.onPhaseDone("优化封面图片");
+            } catch (Exception error) {
+                Log.w(TAG, "Cover recompression phase failed", error);
+                if (listener != null) listener.onError("优化封面图片失败: " + error.getMessage());
+                return;
+            }
+        }
+
+        if (listener != null) listener.onAllDone();
+    }
+
+    /**
+     * 将旧版本的双标记迁移到新的四阶段标记。
+     * 仅在旧标记存在且新标记尚未初始化时执行一次。
+     */
+    private void migrateMaintenancePrefsIfNeeded() {
+        SharedPreferences prefs = maintenancePrefs();
+        if (prefs.contains(KEY_MAINTENANCE_PHASE_CLEANUP_BODY_HTML)) {
+            return;
+        }
+        boolean legacyVacuum = prefs.getBoolean(KEY_VACUUM_AFTER_BODY_HTML_CLEANUP_LEGACY, false);
+        boolean legacyRecompress = prefs.getBoolean(KEY_RECOMPRESS_COVERS_AFTER_BODY_HTML_CLEANUP_LEGACY, false);
+        if (legacyVacuum || legacyRecompress) {
+            prefs.edit()
+                    .putBoolean(KEY_MAINTENANCE_PHASE_CLEANUP_BODY_HTML, legacyVacuum)
+                    .putBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, legacyVacuum)
+                    .putBoolean(KEY_MAINTENANCE_PHASE_VACUUM, legacyVacuum)
+                    .putBoolean(KEY_MAINTENANCE_PHASE_RECOMPRESS_COVERS, legacyRecompress)
+                    .remove(KEY_VACUUM_AFTER_BODY_HTML_CLEANUP_LEGACY)
+                    .remove(KEY_RECOMPRESS_COVERS_AFTER_BODY_HTML_CLEANUP_LEGACY)
+                    .apply();
+        }
+    }
+
     private void markStorageSlimmingMaintenancePending() {
         maintenancePrefs().edit()
-                .putBoolean(KEY_VACUUM_AFTER_BODY_HTML_CLEANUP, true)
-                .putBoolean(KEY_RECOMPRESS_COVERS_AFTER_BODY_HTML_CLEANUP, true)
+                .putBoolean(KEY_MAINTENANCE_PHASE_CLEANUP_BODY_HTML, true)
+                .putBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, true)
+                .putBoolean(KEY_MAINTENANCE_PHASE_VACUUM, true)
+                .putBoolean(KEY_MAINTENANCE_PHASE_RECOMPRESS_COVERS, true)
                 .apply();
     }
 
     private void schedulePendingStorageMaintenance() {
         SharedPreferences prefs = maintenancePrefs();
-        boolean hasWork = prefs.getBoolean(KEY_VACUUM_AFTER_BODY_HTML_CLEANUP, false)
-                || prefs.getBoolean(KEY_RECOMPRESS_COVERS_AFTER_BODY_HTML_CLEANUP, false);
+        boolean hasWork = prefs.getBoolean(KEY_MAINTENANCE_PHASE_CLEANUP_BODY_HTML, false)
+                || prefs.getBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, false)
+                || prefs.getBoolean(KEY_MAINTENANCE_PHASE_VACUUM, false)
+                || prefs.getBoolean(KEY_MAINTENANCE_PHASE_RECOMPRESS_COVERS, false);
         if (!hasWork || storageMaintenanceRunning) {
             return;
         }
@@ -843,22 +970,54 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
 
     private void runPendingStorageMaintenance() {
         SharedPreferences prefs = maintenancePrefs();
-        if (prefs.getBoolean(KEY_RECOMPRESS_COVERS_AFTER_BODY_HTML_CLEANUP, false)) {
+
+        // 阶段1：清空废弃的 body_html 列（idempotent，可安全重试）
+        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_CLEANUP_BODY_HTML, false)) {
             try {
-                recompressExistingCovers();
-                prefs.edit().putBoolean(KEY_RECOMPRESS_COVERS_AFTER_BODY_HTML_CLEANUP, false).apply();
+                clearDeprecatedChapterHtml(getWritableDatabase());
+                prefs.edit().putBoolean(KEY_MAINTENANCE_PHASE_CLEANUP_BODY_HTML, false).apply();
             } catch (Exception error) {
-                Log.w(TAG, "Cover recompression maintenance failed", error);
+                Log.w(TAG, "Body HTML cleanup phase failed", error);
+                return;
             }
         }
-        if (prefs.getBoolean(KEY_VACUUM_AFTER_BODY_HTML_CLEANUP, false)) {
+
+        // 阶段2：WAL checkpoint + truncate，将 WAL 数据合并回主库并截断
+        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, false)) {
             try {
                 synchronized (this) {
-                    getWritableDatabase().execSQL("VACUUM");
+                    getWritableDatabase().execSQL("PRAGMA wal_checkpoint(TRUNCATE)");
                 }
-                prefs.edit().putBoolean(KEY_VACUUM_AFTER_BODY_HTML_CLEANUP, false).apply();
+                prefs.edit().putBoolean(KEY_MAINTENANCE_PHASE_WAL_CHECKPOINT, false).apply();
             } catch (Exception error) {
-                Log.w(TAG, "Database vacuum maintenance failed", error);
+                Log.w(TAG, "WAL checkpoint phase failed", error);
+                return;
+            }
+        }
+
+        // 阶段3：VACUUM 瘦身，前后均执行 checkpoint 确保空间释放可被系统感知
+        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_VACUUM, false)) {
+            try {
+                synchronized (this) {
+                    SQLiteDatabase db = getWritableDatabase();
+                    db.execSQL("PRAGMA wal_checkpoint(TRUNCATE)");
+                    db.execSQL("VACUUM");
+                }
+                prefs.edit().putBoolean(KEY_MAINTENANCE_PHASE_VACUUM, false).apply();
+            } catch (Exception error) {
+                Log.w(TAG, "Vacuum phase failed", error);
+                return;
+            }
+        }
+
+        // 阶段4：封面重压缩（与数据库瘦身解耦，仅对已有封面执行一次）
+        if (prefs.getBoolean(KEY_MAINTENANCE_PHASE_RECOMPRESS_COVERS, false)) {
+            try {
+                recompressExistingCovers();
+                prefs.edit().putBoolean(KEY_MAINTENANCE_PHASE_RECOMPRESS_COVERS, false).apply();
+            } catch (Exception error) {
+                Log.w(TAG, "Cover recompression phase failed", error);
+                return;
             }
         }
     }
@@ -873,8 +1032,9 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
             if (!sourceFile.exists() || !sourceFile.isFile()) {
                 continue;
             }
+            File compressedFile = null;
             try {
-                File compressedFile = CoverImageStore.saveCompressedCover(appContext, sourceFile, "cover_" + book.id);
+                compressedFile = CoverImageStore.saveCompressedCover(appContext, sourceFile, "cover_" + book.id);
                 if (shouldReplaceCover(sourceFile, compressedFile)) {
                     setCoverPath(book.id, compressedFile.getAbsolutePath());
                     deleteFileIfExists(sourceFile.getAbsolutePath());
@@ -883,6 +1043,9 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 }
             } catch (Exception error) {
                 Log.w(TAG, "Skipping cover recompression for book " + book.id, error);
+                if (compressedFile != null) {
+                    deleteFileIfExists(compressedFile.getAbsolutePath());
+                }
             }
         }
     }
@@ -1112,6 +1275,29 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
 
     public File getDatabaseFile() {
         return appContext.getDatabasePath(DATABASE_NAME);
+    }
+
+    public String getDatabaseSizeInfo() {
+        File dbFile = getDatabaseFile();
+        long dbSize = dbFile.exists() ? dbFile.length() : 0L;
+        File walFile = new File(dbFile.getAbsolutePath() + "-wal");
+        long walSize = walFile.exists() ? walFile.length() : 0L;
+        File shmFile = new File(dbFile.getAbsolutePath() + "-shm");
+        long shmSize = shmFile.exists() ? shmFile.length() : 0L;
+        long total = dbSize + walSize + shmSize;
+        return "主库 " + formatFileSize(dbSize)
+                + " · WAL " + formatFileSize(walSize)
+                + " · SHM " + formatFileSize(shmSize)
+                + "\n合计 " + formatFileSize(total);
+    }
+
+    private static String formatFileSize(long bytes) {
+        if (bytes <= 0L) return "0 B";
+        if (bytes < 1024L) return bytes + " B";
+        double kb = bytes / 1024.0;
+        if (kb < 1024.0) return String.format(Locale.US, "%.1f KB", kb);
+        double mb = kb / 1024.0;
+        return String.format(Locale.US, "%.2f MB", mb);
     }
 
     private void deleteSidecarFiles() {

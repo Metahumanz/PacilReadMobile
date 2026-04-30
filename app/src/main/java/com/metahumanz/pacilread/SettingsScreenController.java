@@ -11,6 +11,8 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -69,6 +71,9 @@ final class SettingsScreenController {
     private SystemTtsClient testSystemTtsClient;
 
     private TextView statusText;
+    private TextView databaseSizeText;
+    private TextView maintenanceSummaryText;
+    private Button optimizeDatabaseButton;
     private TextView fullBackupText;
     private TextView liteBackupText;
     private CheckBox autoOpenCheck;
@@ -186,6 +191,8 @@ final class SettingsScreenController {
         updateTtsSettingsVisibility();
         bindingSettingsValues = false;
         refreshStatusSummary();
+        refreshDatabaseSizeLabel();
+        refreshMaintenanceSummary();
     }
 
     void saveSettings() {
@@ -303,6 +310,9 @@ final class SettingsScreenController {
         glassOpacitySeekBar = activity.findViewById(R.id.seek_glass_opacity);
         glassOpacityText = activity.findViewById(R.id.text_glass_opacity);
         statusText = activity.findViewById(R.id.text_status);
+        databaseSizeText = activity.findViewById(R.id.text_database_size);
+        maintenanceSummaryText = activity.findViewById(R.id.text_maintenance_summary);
+        optimizeDatabaseButton = activity.findViewById(R.id.button_optimize_database);
         fullBackupText = activity.findViewById(R.id.text_backup_full);
         liteBackupText = activity.findViewById(R.id.text_backup_lite);
         fullBackupButton = activity.findViewById(R.id.button_full_backup);
@@ -365,6 +375,9 @@ final class SettingsScreenController {
         if (ttsTestButton != null) {
             ttsTestButton.setOnClickListener(v -> testTtsEngine());
         }
+        if (optimizeDatabaseButton != null) {
+            optimizeDatabaseButton.setOnClickListener(v -> startDatabaseOptimization());
+        }
         fullBackupButton.setOnClickListener(v -> runWebDavAction("正在执行全量备份...", listener -> backupManager.fullBackup(listener)));
         liteBackupButton.setOnClickListener(v -> runWebDavAction("正在执行增量备份...", listener -> backupManager.incrementalBackup(listener)));
         fullRestoreButton.setOnClickListener(v -> confirmRestore("确定要从云端恢复吗？这会恢复公共书架数据和 Android 私有设置；WebDAV 连接信息与阅读统计设备 ID 会保留本机，TTS API Key 会随 Android 设置恢复。", listener -> backupManager.fullRestore(listener)));
@@ -374,6 +387,138 @@ final class SettingsScreenController {
     private void refreshBackupLabels() {
         if (fullBackupText != null) fullBackupText.setText("全量备份：最近一次 " + backupManager.lastFullBackupLabel());
         if (liteBackupText != null) liteBackupText.setText("增量备份：最近一次 " + backupManager.lastLiteBackupLabel());
+    }
+
+    private void refreshDatabaseSizeLabel() {
+        if (databaseSizeText == null) return;
+        try {
+            databaseSizeText.setText("本地数据库大小：" + databaseHelper.getDatabaseSizeInfo());
+        } catch (Exception ignored) {
+        }
+    }
+
+    private String readCurrentDatabaseSize() {
+        try {
+            return databaseHelper.getDatabaseSizeInfo();
+        } catch (Exception e) {
+            return "未知";
+        }
+    }
+
+    private void refreshMaintenanceSummary() {
+        if (maintenanceSummaryText == null) return;
+        try {
+            maintenanceSummaryText.setText("维护任务：" + databaseHelper.getPendingMaintenanceSummary());
+            if (optimizeDatabaseButton != null) {
+                optimizeDatabaseButton.setEnabled(!"当前无需优化".equals(databaseHelper.getPendingMaintenanceSummary()));
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void startDatabaseOptimization() {
+        final String currentSize = readCurrentDatabaseSize();
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+        builder.setTitle("优化数据库存储");
+        builder.setCancelable(false);
+
+        LinearLayout dialogLayout = new LinearLayout(activity);
+        dialogLayout.setOrientation(LinearLayout.VERTICAL);
+        dialogLayout.setPadding(dp(24), dp(20), dp(24), dp(12));
+
+        TextView warningText = new TextView(activity);
+        warningText.setText("请勿退出应用，优化过程中需要保持数据库锁定。");
+        warningText.setTextSize(13f);
+        warningText.setTextColor(ThemeModeHelper.resolveColor(activity, R.color.app_danger));
+        warningText.setPadding(0, 0, 0, dp(12));
+        dialogLayout.addView(warningText);
+
+        ProgressBar progressBar = new ProgressBar(activity);
+        progressBar.setIndeterminate(true);
+        progressBar.setPadding(0, 0, 0, dp(12));
+        dialogLayout.addView(progressBar);
+
+        TextView phaseText = new TextView(activity);
+        phaseText.setText("准备中...");
+        phaseText.setTextSize(14f);
+        phaseText.setTextColor(ThemeModeHelper.resolveColor(activity, R.color.app_text_primary));
+        phaseText.setPadding(0, dp(4), 0, dp(4));
+        dialogLayout.addView(phaseText);
+
+        builder.setView(dialogLayout);
+        AlertDialog dialog = builder.create();
+        dialog.show();
+
+        setBusy(true);
+        setAllButtonsEnabled(false);
+
+        executor.execute(() -> {
+            databaseHelper.runStorageMaintenanceWithProgress(new ReaderDatabaseHelper.MaintenanceProgressListener() {
+                @Override
+                public void onPhaseStart(String phaseName) {
+                    activity.runOnUiThread(() -> phaseText.setText("正在" + phaseName + "…"));
+                }
+
+                @Override
+                public void onPhaseDone(String phaseName) {
+                    activity.runOnUiThread(() -> phaseText.setText(phaseName + " 完成"));
+                }
+
+                @Override
+                public void onAllDone() {
+                    final String afterSize = readCurrentDatabaseSize();
+                    activity.runOnUiThread(() -> {
+                        dialog.dismiss();
+                        setBusy(false);
+                        setAllButtonsEnabled(true);
+                        refreshDatabaseSizeLabel();
+                        refreshMaintenanceSummary();
+                        showOptimizationResultDialog(currentSize, afterSize);
+                    });
+                }
+
+                @Override
+                public void onError(String errorMessage) {
+                    activity.runOnUiThread(() -> {
+                        dialog.dismiss();
+                        setBusy(false);
+                        setAllButtonsEnabled(true);
+                        refreshDatabaseSizeLabel();
+                        refreshMaintenanceSummary();
+                        showToast("优化失败: " + errorMessage);
+                    });
+                }
+            });
+        });
+    }
+
+    private void showOptimizationResultDialog(String before, String after) {
+        AlertDialog resultDialog = new AlertDialog.Builder(activity)
+                .setTitle("优化完成")
+                .setMessage("优化前：\n" + before + "\n\n优化后：\n" + after)
+                .setPositiveButton("知道了", null)
+                .create();
+        resultDialog.setOnShowListener(unused -> {
+            if (resultDialog.getWindow() != null) {
+                resultDialog.getWindow().setBackgroundDrawableResource(R.drawable.bg_app_dialog);
+            }
+        });
+        resultDialog.show();
+    }
+
+    private int dp(int value) {
+        return Math.round(activity.getResources().getDisplayMetrics().density * value);
+    }
+
+    private void setAllButtonsEnabled(boolean enabled) {
+        if (optimizeDatabaseButton != null) optimizeDatabaseButton.setEnabled(enabled);
+        fullBackupButton.setEnabled(enabled);
+        fullRestoreButton.setEnabled(enabled);
+        liteBackupButton.setEnabled(enabled);
+        liteRestoreButton.setEnabled(enabled);
+        testButton.setEnabled(enabled);
+        if (ttsTestButton != null) ttsTestButton.setEnabled(enabled);
     }
 
     private void setupThemeSpinners() {
@@ -756,6 +901,7 @@ final class SettingsScreenController {
         if (mimoApiKeyInput != null) {
             mimoApiKeyInput.setEnabled(!busy);
         }
+        if (optimizeDatabaseButton != null) optimizeDatabaseButton.setEnabled(!busy);
         fullBackupButton.setEnabled(!busy);
         fullRestoreButton.setEnabled(!busy);
         liteBackupButton.setEnabled(!busy);
