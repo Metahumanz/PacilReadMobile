@@ -116,6 +116,7 @@ public class SimulationPageTurnView extends View {
             return;
         }
         calcPoints();
+        buildCurrentFoldPath();
         
         // 1. Draw the area of the NEXT page that is revealed (clipping out the folded part of the current page)
         drawNextPageArea(canvas, backBitmap);
@@ -215,15 +216,6 @@ public class SimulationPageTurnView extends View {
     }
 
     private void drawCurrentPageArea(Canvas canvas, Bitmap bitmap) {
-        path0.reset();
-        path0.moveTo(bezierStart1.x, bezierStart1.y);
-        path0.quadTo(bezierControl1.x, bezierControl1.y, bezierEnd1.x, bezierEnd1.y);
-        path0.lineTo(touchX, touchY);
-        path0.lineTo(bezierEnd2.x, bezierEnd2.y);
-        path0.quadTo(bezierControl2.x, bezierControl2.y, bezierStart2.x, bezierStart2.y);
-        path0.lineTo(cornerX, cornerY);
-        path0.close();
-
         canvas.save();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             canvas.clipOutPath(path0);
@@ -238,6 +230,17 @@ public class SimulationPageTurnView extends View {
     private void calcCornerXY(float x, float y) {
         cornerX = x <= getWidth() / 2f ? 0 : getWidth();
         cornerY = y <= getHeight() / 2f ? 0 : getHeight();
+    }
+
+    private void buildCurrentFoldPath() {
+        path0.reset();
+        path0.moveTo(bezierStart1.x, bezierStart1.y);
+        path0.quadTo(bezierControl1.x, bezierControl1.y, bezierEnd1.x, bezierEnd1.y);
+        path0.lineTo(touchX, touchY);
+        path0.lineTo(bezierEnd2.x, bezierEnd2.y);
+        path0.quadTo(bezierControl2.x, bezierControl2.y, bezierStart2.x, bezierStart2.y);
+        path0.lineTo(cornerX, cornerY);
+        path0.close();
     }
 
     private void calcPoints() {
@@ -255,9 +258,8 @@ public class SimulationPageTurnView extends View {
 
         if (localTouchX > 0 && localTouchX < getWidth()) {
             if (bezierStart1.x < 0 || bezierStart1.x > getWidth()) {
-                // Fix: take absolute value so the crease boundary maps correctly
                 if (bezierStart1.x < 0) {
-                    bezierStart1.x = Math.abs(bezierStart1.x);
+                    bezierStart1.x = getWidth() - bezierStart1.x;
                 }
 
                 float f1 = Math.abs(cornerX - localTouchX);
