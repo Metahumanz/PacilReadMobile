@@ -37,7 +37,7 @@ public final class TxtChapterParser {
         List<HeadingMatch> matches = findBestHeadings(content);
         List<ImportedBook.ChapterSeed> result = new ArrayList<>();
         if (matches.isEmpty()) {
-            result.add(new ImportedBook.ChapterSeed("全文", HtmlUtils.toParagraphHtml(content), content, 0));
+            result.add(new ImportedBook.ChapterSeed("全文", "", content, 0));
             return result;
         }
 
@@ -45,7 +45,7 @@ public final class TxtChapterParser {
         if (matches.get(0).start > 0) {
             String intro = content.substring(0, matches.get(0).start).trim();
             if (!intro.isEmpty()) {
-                result.add(new ImportedBook.ChapterSeed("前言", HtmlUtils.toParagraphHtml(intro), intro, chapterIndex++));
+                result.add(new ImportedBook.ChapterSeed("前言", "", intro, chapterIndex++));
             }
         }
 
@@ -55,7 +55,7 @@ public final class TxtChapterParser {
             String body = content.substring(current.end, nextStart).trim();
             result.add(new ImportedBook.ChapterSeed(
                     current.title.isEmpty() ? "第 " + (chapterIndex + 1) + " 章" : current.title,
-                    HtmlUtils.toParagraphHtml(body),
+                    "",
                     body,
                     chapterIndex
             ));
@@ -63,7 +63,7 @@ public final class TxtChapterParser {
         }
 
         if (result.isEmpty()) {
-            result.add(new ImportedBook.ChapterSeed("全文", HtmlUtils.toParagraphHtml(content), content, 0));
+            result.add(new ImportedBook.ChapterSeed("全文", "", content, 0));
         }
         return result;
     }

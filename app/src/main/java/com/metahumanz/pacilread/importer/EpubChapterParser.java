@@ -1,6 +1,9 @@
 package com.metahumanz.pacilread.importer;
 
+import android.content.Context;
+
 import com.metahumanz.pacilread.model.ImportedBook;
+import com.metahumanz.pacilread.util.CoverImageStore;
 import com.metahumanz.pacilread.util.HtmlUtils;
 
 import org.w3c.dom.Document;
@@ -62,7 +65,7 @@ public final class EpubChapterParser {
                     continue;
                 }
                 String title = findChapterTitle(item.href, titles, documentText, order + 1);
-                chapters.add(new ImportedBook.ChapterSeed(title, bodyHtml, plain, order));
+                chapters.add(new ImportedBook.ChapterSeed(title, "", plain, order));
                 order++;
             }
 
@@ -71,6 +74,28 @@ public final class EpubChapterParser {
             }
             return chapters;
         }
+    }
+
+    public static File extractCover(Context context, File epubFile, String prefix) {
+        try (ZipFile zipFile = new ZipFile(epubFile, Charset.forName("UTF-8"))) {
+            String opfPath = resolvePackageDocumentPath(zipFile);
+            Document opfDocument = parseXml(readEntry(zipFile, opfPath));
+            String opfDir = parentPath(opfPath);
+            Map<String, ManifestItem> manifest = parseManifest(opfDocument);
+            List<ManifestItem> candidates = coverCandidates(opfDocument, manifest);
+            for (ManifestItem item : candidates) {
+                byte[] imageBytes = readManifestItem(zipFile, opfDir, item);
+                if (imageBytes == null || imageBytes.length == 0) {
+                    continue;
+                }
+                try {
+                    return CoverImageStore.saveCompressedCover(context, imageBytes, prefix);
+                } catch (IOException ignored) {
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     private static String resolvePackageDocumentPath(ZipFile zipFile) throws Exception {
@@ -88,17 +113,83 @@ public final class EpubChapterParser {
     }
 
     private static Map<String, ManifestItem> parseManifest(Document opfDocument) {
-        Map<String, ManifestItem> manifest = new HashMap<>();
+        Map<String, ManifestItem> manifest = new LinkedHashMap<>();
         NodeList items = opfDocument.getElementsByTagName("item");
         for (int i = 0; i < items.getLength(); i++) {
             Element item = (Element) items.item(i);
+            String id = item.getAttribute("id");
             manifest.put(item.getAttribute("id"), new ManifestItem(
+                    id,
                     item.getAttribute("href"),
                     item.getAttribute("media-type"),
                     item.getAttribute("properties")
             ));
         }
         return manifest;
+    }
+
+    private static List<ManifestItem> coverCandidates(Document opfDocument, Map<String, ManifestItem> manifest) {
+        List<ManifestItem> candidates = new ArrayList<>();
+        String coverId = opfCoverId(opfDocument);
+        if (!coverId.isBlank()) {
+            addCoverCandidate(candidates, manifest.get(coverId));
+        }
+        for (ManifestItem item : manifest.values()) {
+            if (item.properties != null && item.properties.toLowerCase(Locale.ROOT).contains("cover-image")) {
+                addCoverCandidate(candidates, item);
+            }
+        }
+        for (ManifestItem item : manifest.values()) {
+            if (!isImageItem(item)) {
+                continue;
+            }
+            String href = item.href == null ? "" : item.href.toLowerCase(Locale.ROOT);
+            if (href.contains("cover") || href.contains("front") || href.contains("title")) {
+                addCoverCandidate(candidates, item);
+            }
+        }
+        return candidates;
+    }
+
+    private static String opfCoverId(Document opfDocument) {
+        NodeList metas = opfDocument.getElementsByTagName("meta");
+        for (int i = 0; i < metas.getLength(); i++) {
+            Element meta = (Element) metas.item(i);
+            if ("cover".equalsIgnoreCase(meta.getAttribute("name"))) {
+                String content = meta.getAttribute("content");
+                return content == null ? "" : content.trim();
+            }
+        }
+        return "";
+    }
+
+    private static void addCoverCandidate(List<ManifestItem> candidates, ManifestItem item) {
+        if (!isImageItem(item)) {
+            return;
+        }
+        for (ManifestItem existing : candidates) {
+            if ((!existing.id.isBlank() && existing.id.equals(item.id)) || existing.href.equals(item.href)) {
+                return;
+            }
+        }
+        candidates.add(item);
+    }
+
+    private static boolean isImageItem(ManifestItem item) {
+        if (item == null || item.href == null || item.href.isBlank()) {
+            return false;
+        }
+        String mediaType = item.mediaType == null ? "" : item.mediaType.toLowerCase(Locale.ROOT);
+        String href = item.href.toLowerCase(Locale.ROOT);
+        boolean imageMediaType = mediaType.startsWith("image/") && !mediaType.contains("svg");
+        boolean imageExtension = href.endsWith(".jpg")
+                || href.endsWith(".jpeg")
+                || href.endsWith(".png")
+                || href.endsWith(".webp");
+        if (!imageMediaType && !imageExtension) {
+            return false;
+        }
+        return !href.endsWith(".svg");
     }
 
     private static List<String> parseSpine(Document opfDocument) {
@@ -237,6 +328,15 @@ public final class EpubChapterParser {
         }
     }
 
+    private static byte[] readManifestItem(ZipFile zipFile, String opfDir, ManifestItem item) throws IOException {
+        if (item == null || item.href == null || item.href.isBlank()) {
+            return null;
+        }
+        String resolvedPath = normalizeEntryPath(resolveAgainst(opfDir, item.href));
+        byte[] bytes = readEntry(zipFile, resolvedPath);
+        return bytes == null ? readEntry(zipFile, urlDecodedPath(resolvedPath)) : bytes;
+    }
+
     private static byte[] readAllBytesCompat(java.io.InputStream is) throws IOException {
         java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
         int nRead;
@@ -294,11 +394,13 @@ public final class EpubChapterParser {
     }
 
     private static final class ManifestItem {
+        final String id;
         final String href;
         final String mediaType;
         final String properties;
 
-        ManifestItem(String href, String mediaType, String properties) {
+        ManifestItem(String id, String href, String mediaType, String properties) {
+            this.id = id == null ? "" : id;
             this.href = href;
             this.mediaType = mediaType;
             this.properties = properties;
