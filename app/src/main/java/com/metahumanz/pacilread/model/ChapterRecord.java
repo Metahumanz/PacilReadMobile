@@ -7,4 +7,7 @@ public class ChapterRecord {
     public String bodyHtml;
     public String bodyText;
     public int orderIndex;
+    public String bodyTextPath;
+    public String bodyTextStorage = "db";
+    public long bodyTextSize;
 }
