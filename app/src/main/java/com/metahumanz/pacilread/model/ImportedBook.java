@@ -8,6 +8,7 @@ public class ImportedBook {
     public String author;
     public String sourceDisplayName;
     public String storedPath;
+    public String coverPath;
     public String bookType = "text";
     public final List<ChapterSeed> chapters = new ArrayList<>();
 
