@@ -217,7 +217,8 @@ public final class ReaderContentController {
                 try {
                     webDavClient.ensureProgressDirectory();
                     webDavClient.uploadProgress(bookSnapshot, chapterSnapshot, offset);
-                } catch (Exception ignore) {
+                } catch (Exception error) {
+                    Log.w(TAG, "Failed to upload reader progress", error);
                 }
             });
         }

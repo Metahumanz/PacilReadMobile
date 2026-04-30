@@ -54,8 +54,21 @@ public class WebDavClient {
     }
 
     public void ensureProgressDirectory() throws Exception {
-        ensureDirectoryTree(requireConfiguredServerUrl(), settingsStore.getWebDavProgressDir(), "初始化进度父目录");
-        requireSuccessfulResponse(request(requireConfiguredProgressBaseUrl() + "bookProgress/", "MKCOL", null, null), "初始化进度目录", true);
+        String serverUrl = requireConfiguredServerUrl();
+        Exception lastError = null;
+        boolean ensuredAny = false;
+        for (ProgressLocation location : progressLocations()) {
+            try {
+                ensureDirectoryTree(serverUrl, location.parentDirectory, "初始化进度父目录");
+                requireSuccessfulResponse(request(location.baseUrl + "bookProgress/", "MKCOL", null, null), "初始化进度目录", true);
+                ensuredAny = true;
+            } catch (Exception error) {
+                lastError = error;
+            }
+        }
+        if (!ensuredAny && lastError != null) {
+            throw lastError;
+        }
     }
 
     public void ensureBackupDirectories() throws Exception {
@@ -101,19 +114,40 @@ public class WebDavClient {
     }
 
     public ProgressPayload downloadProgress(BookRecord book) throws Exception {
-        Response response = request(progressFileUrl(book), "GET", null, null);
-        if (response.code != 200 || response.body == null || response.body.isBlank()) {
-            return null;
+        ProgressPayload latestPayload = null;
+        Exception lastError = null;
+        for (String url : progressFileUrls(book)) {
+            try {
+                Response response = request(url, "GET", null, null);
+                if (response.code == 404) {
+                    continue;
+                }
+                requireSuccessfulResponse(response, "下载阅读进度", false);
+                if (response.body == null || response.body.isBlank()) {
+                    continue;
+                }
+                JSONObject jsonObject = new JSONObject(response.body);
+                ProgressPayload payload = new ProgressPayload();
+                payload.author = jsonObject.optString("author", "");
+                payload.name = jsonObject.optString("name", "");
+                payload.chapterIndex = jsonObject.optInt("durChapterIndex", 0);
+                payload.chapterPosition = jsonObject.optInt("durChapterPos", 0);
+                payload.chapterTime = jsonObject.optLong("durChapterTime", 0L);
+                payload.chapterTitle = jsonObject.optString("durChapterTitle", "");
+                if (latestPayload == null || payload.chapterTime > latestPayload.chapterTime) {
+                    latestPayload = payload;
+                }
+            } catch (Exception error) {
+                lastError = error;
+            }
         }
-        JSONObject jsonObject = new JSONObject(response.body);
-        ProgressPayload payload = new ProgressPayload();
-        payload.author = jsonObject.optString("author", "");
-        payload.name = jsonObject.optString("name", "");
-        payload.chapterIndex = jsonObject.optInt("durChapterIndex", 0);
-        payload.chapterPosition = jsonObject.optInt("durChapterPos", 0);
-        payload.chapterTime = jsonObject.optLong("durChapterTime", 0L);
-        payload.chapterTitle = jsonObject.optString("durChapterTitle", "");
-        return payload;
+        if (latestPayload != null) {
+            return latestPayload;
+        }
+        if (lastError != null) {
+            throw lastError;
+        }
+        return null;
     }
 
     public void uploadProgress(BookRecord book, ChapterRecord chapter, int charPosition) throws Exception {
@@ -127,12 +161,21 @@ public class WebDavClient {
         payload.put("durChapterTime", System.currentTimeMillis());
         payload.put("durChapterTitle", chapter.title);
         payload.put("name", book.title);
-        request(
-                progressFileUrl(book),
-                "PUT",
-                payload.toString(2),
-                null
-        );
+        String body = payload.toString(2);
+        Exception lastError = null;
+        boolean uploadedAny = false;
+        for (String url : progressFileUrls(book)) {
+            try {
+                Response response = request(url, "PUT", body, null);
+                requireSuccessfulResponse(response, "上传阅读进度", false);
+                uploadedAny = true;
+            } catch (Exception error) {
+                lastError = error;
+            }
+        }
+        if (!uploadedAny && lastError != null) {
+            throw lastError;
+        }
     }
 
     private String safeProgressFileName(BookRecord book) {
@@ -141,8 +184,38 @@ public class WebDavClient {
         return safeTitle + "_" + safeAuthor + ".json";
     }
 
-    private String progressFileUrl(BookRecord book) throws Exception {
-        return settingsStore.getWebDavProgressBaseUrl() + "bookProgress/" + encodePathSegment(safeProgressFileName(book));
+    private List<String> progressFileUrls(BookRecord book) throws Exception {
+        String fileName = encodePathSegment(safeProgressFileName(book));
+        List<String> urls = new ArrayList<>();
+        for (ProgressLocation location : progressLocations()) {
+            addUnique(urls, location.baseUrl + "bookProgress/" + fileName);
+        }
+        return urls;
+    }
+
+    private List<ProgressLocation> progressLocations() {
+        List<ProgressLocation> locations = new ArrayList<>();
+        addProgressLocation(locations, requireConfiguredProgressBaseUrl(), settingsStore.getWebDavProgressDir());
+        addProgressLocation(locations, backupRootBaseUrl(), settingsStore.getWebDavDir());
+        return locations;
+    }
+
+    private void addProgressLocation(List<ProgressLocation> locations, String baseUrl, String parentDirectory) {
+        if (baseUrl == null || baseUrl.isBlank()) {
+            return;
+        }
+        for (ProgressLocation location : locations) {
+            if (location.baseUrl.equals(baseUrl)) {
+                return;
+            }
+        }
+        locations.add(new ProgressLocation(baseUrl, parentDirectory));
+    }
+
+    private void addUnique(List<String> values, String value) {
+        if (value != null && !value.isBlank() && !values.contains(value)) {
+            values.add(value);
+        }
     }
 
     private String encodePathSegment(String value) throws Exception {
@@ -398,6 +471,16 @@ public class WebDavClient {
         public int chapterPosition;
         public long chapterTime;
         public String chapterTitle;
+    }
+
+    private static class ProgressLocation {
+        final String baseUrl;
+        final String parentDirectory;
+
+        ProgressLocation(String baseUrl, String parentDirectory) {
+            this.baseUrl = baseUrl;
+            this.parentDirectory = parentDirectory;
+        }
     }
 
     private static class BinaryResponse {
