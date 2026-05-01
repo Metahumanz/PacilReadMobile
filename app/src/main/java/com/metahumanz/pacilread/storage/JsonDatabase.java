@@ -1108,7 +1108,12 @@ public class JsonDatabase {
 
     public File resolveChapterTextFile(String bodyTextPath) {
         if (bodyTextPath == null || bodyTextPath.isEmpty()) return null;
-        return new File(appContext.getFilesDir(), bodyTextPath);
+        // 如果路径已经包含 chapter_text/ 前缀，直接拼 filesDir
+        // 否则拼 chapter_text 目录（兼容旧数据库中的短格式路径 book_X/chapter_Y.txt.gz）
+        if (bodyTextPath.startsWith("chapter_text/") || bodyTextPath.startsWith("chapter_text\\")) {
+            return new File(appContext.getFilesDir(), bodyTextPath);
+        }
+        return new File(getChapterTextDir(), bodyTextPath);
     }
 
     public String resolveChapterText(long bookId, long chapterId, String bodyText,
