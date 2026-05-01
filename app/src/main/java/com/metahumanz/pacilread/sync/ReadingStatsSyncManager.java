@@ -3,7 +3,7 @@ package com.metahumanz.pacilread.sync;
 import android.content.Context;
 
 import com.metahumanz.pacilread.model.ReadingTimeEntryRecord;
-import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
+import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.stats.ReadingStatsUtils;
 
@@ -17,13 +17,13 @@ public class ReadingStatsSyncManager {
     private static final int SCHEMA_VERSION = 1;
 
     private final Context context;
-    private final ReaderDatabaseHelper databaseHelper;
+    private final JsonDatabase databaseHelper;
     private final SettingsStore settingsStore;
     private final WebDavClient webDavClient;
 
     public ReadingStatsSyncManager(
             Context context,
-            ReaderDatabaseHelper databaseHelper,
+            JsonDatabase databaseHelper,
             SettingsStore settingsStore,
             WebDavClient webDavClient
     ) {

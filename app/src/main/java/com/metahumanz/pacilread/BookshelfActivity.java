@@ -10,6 +10,7 @@ import android.os.Bundle;
 import android.text.TextUtils;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -24,11 +25,12 @@ import android.widget.TextView;
 
 import com.metahumanz.pacilread.importer.BookImportService;
 import com.metahumanz.pacilread.model.BookRecord;
-import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
+import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedActivity;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.ui.LaunchSourceTransition;
+import com.metahumanz.pacilread.util.CoverImageStore;
 import com.metahumanz.pacilread.util.FileAssetHelper;
 
 import java.io.File;
@@ -49,7 +51,7 @@ public class BookshelfActivity extends ThemedActivity {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final List<BookRecord> allBooks = new ArrayList<>();
 
-    private ReaderDatabaseHelper databaseHelper;
+    private JsonDatabase databaseHelper;
     private SettingsStore settingsStore;
     private BookImportService importService;
     private BookListAdapter listAdapter;
@@ -88,7 +90,7 @@ public class BookshelfActivity extends ThemedActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_bookshelf);
 
-        databaseHelper = ReaderDatabaseHelper.getInstance(this);
+        databaseHelper = JsonDatabase.getInstance(this);
         settingsStore = new SettingsStore(this);
         importService = new BookImportService(this);
 
@@ -339,6 +341,12 @@ public class BookshelfActivity extends ThemedActivity {
             }
 
             @Override
+            public void onLibraryDataRestored() {
+                refreshBooks();
+                refreshCurrentHomePage(false);
+            }
+
+            @Override
             public void onThemeChanged() {
                 recreate();
             }
@@ -535,20 +543,30 @@ public class BookshelfActivity extends ThemedActivity {
         showLoading("正在导入 " + uris.size() + " 本书籍...");
         executor.execute(() -> {
             int successCount = 0, failCount = 0;
+            String firstError = null;
             for (Uri uri : uris) {
                 try {
                     databaseHelper.insertImportedBook(importService.importFromUri(uri, false));
                     successCount++;
                 } catch (Exception e) {
                     failCount++;
+                    Log.w(TAG, "导入书籍失败: " + uri, e);
+                    if (firstError == null) {
+                        firstError = readableError(e);
+                    }
                 }
             }
             final int sCount = successCount, fCount = failCount;
+            final String errorMessage = firstError;
             runOnUiThread(() -> {
                 hideLoading();
                 refreshBooks();
                 if (fCount > 0) {
-                    showToast("导入完成: 成功 " + sCount + "，失败 " + fCount);
+                    if (sCount == 0 && errorMessage != null && !errorMessage.isBlank()) {
+                        showToast("导入失败: " + errorMessage);
+                    } else {
+                        showToast("导入完成: 成功 " + sCount + "，失败 " + fCount);
+                    }
                 } else {
                     showToast("成功导入 " + sCount + " 本书籍");
                 }
@@ -682,7 +700,7 @@ public class BookshelfActivity extends ThemedActivity {
         executor.execute(() -> {
             try {
                 BookRecord currentBook = databaseHelper.getBook(bookId);
-                File coverFile = FileAssetHelper.copyUriToFolder(this, uri, "covers", "cover_" + bookId);
+                File coverFile = CoverImageStore.saveCompressedCover(this, uri, "cover_" + bookId);
                 if (currentBook != null && currentBook.coverPath != null && !currentBook.coverPath.isBlank()) {
                     FileAssetHelper.deleteIfExists(currentBook.coverPath);
                 }

@@ -198,6 +198,23 @@
                     android:textSize="13sp" />
             </GridLayout>
 
+            <CheckBox
+                android:id="@+id/check_webdav_clean_remote_orphans"
+                style="@style/AppChromeCheckBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:minHeight="48dp"
+                android:text="备份后清理远端未引用文件" />
+
+            <TextView
+                style="@style/AppChromeCaption"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="开启后，全量和增量备份都会移除当前备份目录下已不被书架引用的章节正文包、源文件、封面和背景图。"
+                android:textColor="?attr/themeColorAppTextSecondary" />
+
             <Button
                 android:id="@+id/button_test_webdav"
                 style="@style/AppChromeCompactToggleButton"

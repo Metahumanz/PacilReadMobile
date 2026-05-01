@@ -6,17 +6,20 @@ import android.content.Intent;
 import android.net.Uri;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 
 import com.metahumanz.pacilread.importer.BookImportService;
-import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
+import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
 import com.metahumanz.pacilread.sync.WebDavBackupManager;
@@ -33,12 +36,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 final class SettingsScreenController {
+    private static final String TAG = "SettingsScreen";
     static final int REQUEST_PICK_BOOK = 3001;
 
     interface Host {
         void openBookPicker(Intent intent, int requestCode);
         void openReader(long bookId);
         void onSettingsSaved();
+        void onLibraryDataRestored();
         void onThemeChanged();
     }
 
@@ -56,7 +61,7 @@ final class SettingsScreenController {
     private final Activity activity;
     private final Host host;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private final ReaderDatabaseHelper databaseHelper;
+    private final JsonDatabase databaseHelper;
     private final SettingsStore settingsStore;
     private final WebDavClient webDavClient;
     private final WebDavBackupManager backupManager;
@@ -69,6 +74,9 @@ final class SettingsScreenController {
     private SystemTtsClient testSystemTtsClient;
 
     private TextView statusText;
+    private TextView databaseSizeText;
+    private TextView maintenanceSummaryText;
+    private Button optimizeDatabaseButton;
     private TextView fullBackupText;
     private TextView liteBackupText;
     private CheckBox autoOpenCheck;
@@ -107,6 +115,7 @@ final class SettingsScreenController {
     private Button webDavSyncThemesButton;
     private Button webDavSyncBackgroundsButton;
     private Button webDavSyncReadingStatsButton;
+    private CheckBox webDavCleanRemoteOrphansCheck;
     private View webDavSyncOptionsLayout;
     private View ttsMimoKeyLayout;
     private Button transitionFluidButton;
@@ -123,7 +132,7 @@ final class SettingsScreenController {
     SettingsScreenController(Activity activity, Host host) {
         this.activity = activity;
         this.host = host;
-        this.databaseHelper = ReaderDatabaseHelper.getInstance(activity);
+        this.databaseHelper = JsonDatabase.getInstance(activity);
         this.settingsStore = new SettingsStore(activity);
         this.webDavClient = new WebDavClient(settingsStore);
         this.backupManager = new WebDavBackupManager(activity, databaseHelper, settingsStore, webDavClient);
@@ -150,6 +159,9 @@ final class SettingsScreenController {
         readerMenuAutoHideCheck.setChecked(settingsStore.isReaderMenuAutoHideEnabled());
         bookshelfShowAddEntryCheck.setChecked(settingsStore.isBookshelfAddEntryVisible());
         webDavEnabledCheck.setChecked(settingsStore.isWebDavEnabled());
+        if (webDavCleanRemoteOrphansCheck != null) {
+            webDavCleanRemoteOrphansCheck.setChecked(settingsStore.isWebDavCleanRemoteOrphansEnabled());
+        }
         urlInput.setText(settingsStore.getWebDavUrl());
         dirInput.setText(settingsStore.getWebDavDir());
         settingsSubdirInput.setText(settingsStore.getWebDavSettingsSubdir());
@@ -186,6 +198,8 @@ final class SettingsScreenController {
         updateTtsSettingsVisibility();
         bindingSettingsValues = false;
         refreshStatusSummary();
+        refreshDatabaseSizeLabel();
+        refreshMaintenanceSummary();
     }
 
     void saveSettings() {
@@ -231,6 +245,9 @@ final class SettingsScreenController {
         settingsStore.setWebDavSyncThemesEnabled(webDavSyncThemesButton.isSelected());
         settingsStore.setWebDavSyncBackgroundsEnabled(webDavSyncBackgroundsButton.isSelected());
         settingsStore.setWebDavSyncReadingStatsEnabled(webDavSyncReadingStatsButton.isSelected());
+        if (webDavCleanRemoteOrphansCheck != null) {
+            settingsStore.setWebDavCleanRemoteOrphansEnabled(webDavCleanRemoteOrphansCheck.isChecked());
+        }
         updateTtsSettingsVisibility();
         refreshStatusSummary();
         if (host != null) {
@@ -303,6 +320,9 @@ final class SettingsScreenController {
         glassOpacitySeekBar = activity.findViewById(R.id.seek_glass_opacity);
         glassOpacityText = activity.findViewById(R.id.text_glass_opacity);
         statusText = activity.findViewById(R.id.text_status);
+        databaseSizeText = activity.findViewById(R.id.text_database_size);
+        maintenanceSummaryText = activity.findViewById(R.id.text_maintenance_summary);
+        optimizeDatabaseButton = activity.findViewById(R.id.button_optimize_database);
         fullBackupText = activity.findViewById(R.id.text_backup_full);
         liteBackupText = activity.findViewById(R.id.text_backup_lite);
         fullBackupButton = activity.findViewById(R.id.button_full_backup);
@@ -318,6 +338,7 @@ final class SettingsScreenController {
         webDavSyncThemesButton = activity.findViewById(R.id.button_webdav_sync_themes);
         webDavSyncBackgroundsButton = activity.findViewById(R.id.button_webdav_sync_backgrounds);
         webDavSyncReadingStatsButton = activity.findViewById(R.id.button_webdav_sync_reading_stats);
+        webDavCleanRemoteOrphansCheck = activity.findViewById(R.id.check_webdav_clean_remote_orphans);
         ttsMimoKeyLayout = activity.findViewById(R.id.layout_tts_mimo_key);
     }
 
@@ -365,15 +386,154 @@ final class SettingsScreenController {
         if (ttsTestButton != null) {
             ttsTestButton.setOnClickListener(v -> testTtsEngine());
         }
+        if (optimizeDatabaseButton != null) {
+            optimizeDatabaseButton.setOnClickListener(v -> startDatabaseOptimization());
+        }
         fullBackupButton.setOnClickListener(v -> runWebDavAction("正在执行全量备份...", listener -> backupManager.fullBackup(listener)));
         liteBackupButton.setOnClickListener(v -> runWebDavAction("正在执行增量备份...", listener -> backupManager.incrementalBackup(listener)));
-        fullRestoreButton.setOnClickListener(v -> confirmRestore("确定要从云端恢复吗？这会恢复公共书架数据和 Android 私有设置；WebDAV 连接信息与阅读统计设备 ID 会保留本机，TTS API Key 会随 Android 设置恢复。", listener -> backupManager.fullRestore(listener)));
-        liteRestoreButton.setOnClickListener(v -> confirmRestore("确定要从云端增量恢复吗？这会合并公共书架数据并恢复 Android 私有设置；WebDAV 连接信息与阅读统计设备 ID 会保留本机，TTS API Key 会随 Android 设置恢复。", listener -> backupManager.incrementalRestore(listener)));
+        fullRestoreButton.setOnClickListener(v -> confirmRestore("确定要从云端恢复吗？这会恢复公共书架数据和 Android 私有设置；WebDAV 连接信息与阅读统计设备 ID 会保留本机，TTS API Key 会随 Android 设置恢复。", listener -> backupManager.fullRestore(listener), true));
+        liteRestoreButton.setOnClickListener(v -> confirmRestore("确定要从云端增量恢复吗？这会合并公共书架数据并恢复 Android 私有设置；WebDAV 连接信息与阅读统计设备 ID 会保留本机，TTS API Key 会随 Android 设置恢复。", listener -> backupManager.incrementalRestore(listener), true));
     }
 
     private void refreshBackupLabels() {
         if (fullBackupText != null) fullBackupText.setText("全量备份：最近一次 " + backupManager.lastFullBackupLabel());
         if (liteBackupText != null) liteBackupText.setText("增量备份：最近一次 " + backupManager.lastLiteBackupLabel());
+    }
+
+    private void refreshDatabaseSizeLabel() {
+        if (databaseSizeText == null) return;
+        try {
+            databaseSizeText.setText("本地存储占用：" + databaseHelper.getDatabaseSizeInfo());
+        } catch (Exception ignored) {
+        }
+    }
+
+    private String readCurrentDatabaseSize() {
+        try {
+            return databaseHelper.getDatabaseSizeInfo();
+        } catch (Exception e) {
+            return "未知";
+        }
+    }
+
+    private void refreshMaintenanceSummary() {
+        if (maintenanceSummaryText == null) return;
+        try {
+            String summary = databaseHelper.getPendingMaintenanceSummary();
+            maintenanceSummaryText.setText("维护任务：" + summary);
+            if (optimizeDatabaseButton != null) {
+                optimizeDatabaseButton.setEnabled(!settingsBusy && databaseHelper.hasPendingMaintenanceWork());
+            }
+        } catch (Exception ignored) {
+            if (optimizeDatabaseButton != null) {
+                optimizeDatabaseButton.setEnabled(false);
+            }
+        }
+    }
+
+    private void startDatabaseOptimization() {
+        final String currentSize = readCurrentDatabaseSize();
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+        builder.setTitle("优化数据库存储");
+        builder.setCancelable(false);
+
+        LinearLayout dialogLayout = new LinearLayout(activity);
+        dialogLayout.setOrientation(LinearLayout.VERTICAL);
+        dialogLayout.setPadding(dp(24), dp(20), dp(24), dp(12));
+
+        TextView warningText = new TextView(activity);
+        warningText.setText("请勿退出应用，优化过程中需要保持数据库锁定。");
+        warningText.setTextSize(13f);
+        warningText.setTextColor(ThemeModeHelper.resolveColor(activity, R.color.app_danger));
+        warningText.setPadding(0, 0, 0, dp(12));
+        dialogLayout.addView(warningText);
+
+        ProgressBar progressBar = new ProgressBar(activity);
+        progressBar.setIndeterminate(true);
+        progressBar.setPadding(0, 0, 0, dp(12));
+        dialogLayout.addView(progressBar);
+
+        TextView phaseText = new TextView(activity);
+        phaseText.setText("准备中...");
+        phaseText.setTextSize(14f);
+        phaseText.setTextColor(ThemeModeHelper.resolveColor(activity, R.color.app_text_primary));
+        phaseText.setPadding(0, dp(4), 0, dp(4));
+        dialogLayout.addView(phaseText);
+
+        builder.setView(dialogLayout);
+        AlertDialog dialog = builder.create();
+        dialog.show();
+
+        setBusy(true);
+        setAllButtonsEnabled(false);
+
+        executor.execute(() -> {
+            databaseHelper.runStorageMaintenanceWithProgress(new JsonDatabase.MaintenanceProgressListener() {
+                @Override
+                public void onPhaseStart(String phaseName) {
+                    activity.runOnUiThread(() -> phaseText.setText("正在" + phaseName + "…"));
+                }
+
+                @Override
+                public void onPhaseDone(String phaseName) {
+                    activity.runOnUiThread(() -> phaseText.setText(phaseName + " 完成"));
+                }
+
+                @Override
+                public void onAllDone() {
+                    final String afterSize = readCurrentDatabaseSize();
+                    activity.runOnUiThread(() -> {
+                        dialog.dismiss();
+                        setBusy(false);
+                        setAllButtonsEnabled(true);
+                        refreshDatabaseSizeLabel();
+                        refreshMaintenanceSummary();
+                        showOptimizationResultDialog(currentSize, afterSize);
+                    });
+                }
+
+                @Override
+                public void onError(String errorMessage) {
+                    activity.runOnUiThread(() -> {
+                        dialog.dismiss();
+                        setBusy(false);
+                        setAllButtonsEnabled(true);
+                        refreshDatabaseSizeLabel();
+                        refreshMaintenanceSummary();
+                        showToast("优化失败: " + errorMessage);
+                    });
+                }
+            });
+        });
+    }
+
+    private void showOptimizationResultDialog(String before, String after) {
+        AlertDialog resultDialog = new AlertDialog.Builder(activity)
+                .setTitle("优化完成")
+                .setMessage("优化前：\n" + before + "\n\n优化后：\n" + after)
+                .setPositiveButton("知道了", null)
+                .create();
+        resultDialog.setOnShowListener(unused -> {
+            if (resultDialog.getWindow() != null) {
+                resultDialog.getWindow().setBackgroundDrawableResource(R.drawable.bg_app_dialog);
+            }
+        });
+        resultDialog.show();
+    }
+
+    private int dp(int value) {
+        return Math.round(activity.getResources().getDisplayMetrics().density * value);
+    }
+
+    private void setAllButtonsEnabled(boolean enabled) {
+        if (optimizeDatabaseButton != null) optimizeDatabaseButton.setEnabled(enabled && hasPendingMaintenanceWork());
+        fullBackupButton.setEnabled(enabled);
+        fullRestoreButton.setEnabled(enabled);
+        liteBackupButton.setEnabled(enabled);
+        liteRestoreButton.setEnabled(enabled);
+        testButton.setEnabled(enabled);
+        if (ttsTestButton != null) ttsTestButton.setEnabled(enabled);
     }
 
     private void setupThemeSpinners() {
@@ -554,6 +714,9 @@ final class SettingsScreenController {
         readerMenuAutoHideCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsChanged());
         bookshelfShowAddEntryCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsChanged());
         webDavEnabledCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsChanged());
+        if (webDavCleanRemoteOrphansCheck != null) {
+            webDavCleanRemoteOrphansCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsChanged());
+        }
     }
 
     private void setupWebDavSyncButtons() {
@@ -583,7 +746,8 @@ final class SettingsScreenController {
         }
         statusText.setText("已启用自动进度同步\n手动备份范围：" + buildWebDavScopeSummary()
                 + "\nAndroid 设置快照：" + buildWebDavSettingsSnapshotSummary()
-                + "\n阅读时长累计：" + (settingsStore.isWebDavSyncReadingStatsEnabled() ? "已启用" : "已关闭"));
+                + "\n阅读时长累计：" + (settingsStore.isWebDavSyncReadingStatsEnabled() ? "已启用" : "已关闭")
+                + "\n远端清理：" + (settingsStore.isWebDavCleanRemoteOrphansEnabled() ? "备份后执行" : "已关闭"));
     }
 
     private void openPicker() {
@@ -711,16 +875,20 @@ final class SettingsScreenController {
         }
     }
 
-    private void confirmRestore(String message, BackgroundAction action) {
+    private void confirmRestore(String message, BackgroundAction action, boolean refreshLibraryOnSuccess) {
         new AlertDialog.Builder(activity)
                 .setTitle("确认恢复")
                 .setMessage(message)
                 .setNegativeButton("取消", null)
-                .setPositiveButton("继续", (dialog, which) -> runWebDavAction("正在恢复数据...", action))
+                .setPositiveButton("继续", (dialog, which) -> runWebDavAction("正在恢复数据...", action, refreshLibraryOnSuccess))
                 .show();
     }
 
     private void runWebDavAction(String startMessage, BackgroundAction action) {
+        runWebDavAction(startMessage, action, false);
+    }
+
+    private void runWebDavAction(String startMessage, BackgroundAction action, boolean refreshLibraryOnSuccess) {
         saveSettings();
         setBusy(true);
         statusText.setText(startMessage);
@@ -732,13 +900,18 @@ final class SettingsScreenController {
                     bindCurrentValues();
                     refreshBackupLabels();
                     statusText.setText("操作完成，设置已自动保存");
+                    if (refreshLibraryOnSuccess && host != null) {
+                        host.onLibraryDataRestored();
+                    }
                     showToast("WebDAV 操作已完成");
                 });
             } catch (Exception error) {
                 activity.runOnUiThread(() -> {
+                    String message = readableError(error);
+                    Log.w(TAG, "WebDAV 操作失败", error);
                     setBusy(false);
-                    statusText.setText("操作失败: " + error.getMessage());
-                    showToast("操作失败");
+                    statusText.setText("操作失败: " + message);
+                    showToast("操作失败: " + message);
                 });
             }
         });
@@ -756,6 +929,7 @@ final class SettingsScreenController {
         if (mimoApiKeyInput != null) {
             mimoApiKeyInput.setEnabled(!busy);
         }
+        if (optimizeDatabaseButton != null) optimizeDatabaseButton.setEnabled(!busy && hasPendingMaintenanceWork());
         fullBackupButton.setEnabled(!busy);
         fullRestoreButton.setEnabled(!busy);
         liteBackupButton.setEnabled(!busy);
@@ -766,8 +940,17 @@ final class SettingsScreenController {
         webDavSyncThemesButton.setEnabled(!busy);
         webDavSyncBackgroundsButton.setEnabled(!busy);
         webDavSyncReadingStatsButton.setEnabled(!busy);
+        if (webDavCleanRemoteOrphansCheck != null) webDavCleanRemoteOrphansCheck.setEnabled(!busy);
         if (readingStatsController != null) {
             readingStatsController.setBusy(busy);
+        }
+    }
+
+    private boolean hasPendingMaintenanceWork() {
+        try {
+            return databaseHelper != null && databaseHelper.hasPendingMaintenanceWork();
+        } catch (Exception ignored) {
+            return false;
         }
     }
 
@@ -780,6 +963,20 @@ final class SettingsScreenController {
 
     private void showToast(String text) {
         AppUiUtils.showToast(activity, text);
+    }
+
+    private String readableError(Throwable error) {
+        if (error == null) {
+            return "未知错误";
+        }
+        String message = error.getMessage();
+        if ((message == null || message.isBlank()) && error.getCause() != null) {
+            message = error.getCause().getMessage();
+        }
+        if (message == null || message.isBlank()) {
+            message = error.getClass().getSimpleName();
+        }
+        return message.length() > 160 ? message.substring(0, 160) + "..." : message;
     }
 
     private synchronized SystemTtsClient getTestSystemTtsClient() {

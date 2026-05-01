@@ -4,7 +4,7 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 
-import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
+import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
 import com.metahumanz.pacilread.sync.WebDavClient;
@@ -19,7 +19,7 @@ public final class ReaderRuntime {
     public final ExecutorService ttsExecutor = Executors.newSingleThreadExecutor();
     public final ExecutorService synthesisExecutor = Executors.newSingleThreadExecutor();
     public final Handler mainHandler = new Handler(Looper.getMainLooper());
-    public final ReaderDatabaseHelper databaseHelper;
+    public final JsonDatabase databaseHelper;
     public final SettingsStore settingsStore;
     public final WebDavClient webDavClient;
     public final ReadingStatsSyncManager readingStatsSyncManager;
@@ -27,7 +27,7 @@ public final class ReaderRuntime {
     public final SystemTtsClient systemTtsClient;
 
     public ReaderRuntime(Context context) {
-        databaseHelper = ReaderDatabaseHelper.getInstance(context);
+        databaseHelper = JsonDatabase.getInstance(context);
         settingsStore = new SettingsStore(context);
         webDavClient = new WebDavClient(settingsStore);
         readingStatsSyncManager = new ReadingStatsSyncManager(context, databaseHelper, settingsStore, webDavClient);

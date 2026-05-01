@@ -42,6 +42,7 @@ public class WebDavClient {
         this.httpClient = new OkHttpClient.Builder()
                 .connectTimeout(8, TimeUnit.SECONDS)
                 .readTimeout(12, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
                 .build();
     }
 
@@ -54,16 +55,42 @@ public class WebDavClient {
     }
 
     public void ensureProgressDirectory() throws Exception {
-        ensureDirectoryTree(requireConfiguredServerUrl(), settingsStore.getWebDavProgressDir(), "初始化进度父目录");
-        requireSuccessfulResponse(request(requireConfiguredProgressBaseUrl() + "bookProgress/", "MKCOL", null, null), "初始化进度目录", true);
+        String serverUrl = requireConfiguredServerUrl();
+        Exception lastError = null;
+        boolean ensuredAny = false;
+        for (ProgressLocation location : progressLocations()) {
+            try {
+                ensureDirectoryTree(serverUrl, location.parentDirectory, "初始化进度父目录");
+                requireSuccessfulResponse(request(location.baseUrl + "bookProgress/", "MKCOL", null, null), "初始化进度目录", true);
+                ensuredAny = true;
+            } catch (Exception error) {
+                lastError = error;
+            }
+        }
+        if (!ensuredAny && lastError != null) {
+            throw lastError;
+        }
     }
 
     public void ensureBackupDirectories() throws Exception {
-        String base = backupBaseUrl();
+        ensureBackupRootDirectory();
+        ensureBookAssetDirectories();
+        ensureAndroidSettingsDirectory();
+    }
+
+    public void ensureBackupRootDirectory() throws Exception {
         ensureDirectoryTree(requireConfiguredServerUrl(), settingsStore.getWebDavDir(), "初始化备份目录");
+    }
+
+    public void ensureBookAssetDirectories() throws Exception {
+        String base = backupBaseUrl();
         requireSuccessfulResponse(request(base + "books/", "MKCOL", null, null), "初始化书籍备份目录", true);
         requireSuccessfulResponse(request(base + "covers/", "MKCOL", null, null), "初始化封面备份目录", true);
-        ensureAndroidSettingsDirectory();
+    }
+
+    public void ensureChapterTextDirectory() throws Exception {
+        String base = backupBaseUrl();
+        requireSuccessfulResponse(request(base + "chapter_text/", "MKCOL", null, null), "初始化章节正文备份目录", true);
     }
 
     public void ensureReadingStatsDirectory() throws Exception {
@@ -74,6 +101,21 @@ public class WebDavClient {
 
     public String backupBaseUrl() {
         return backupRootBaseUrl();
+    }
+
+    /** 增量同步目录 URL，用于 manifest + JSON 格式的增量备份 */
+    public String syncBaseUrl() {
+        return backupBaseUrl() + "sync/";
+    }
+
+    /** 全量快照目录 URL，用于 JSON 格式的全量备份 */
+    public String databaseBaseUrl() {
+        return backupBaseUrl() + "database/";
+    }
+
+    /** 创建任意远程目录（MKCOL），已存在也不报错 */
+    public void ensureDirectory(String directoryUrl) throws Exception {
+        requireSuccessfulResponse(request(directoryUrl, "MKCOL", null, null), "创建目录", true);
     }
 
     public String backupRootBaseUrl() {
@@ -101,19 +143,40 @@ public class WebDavClient {
     }
 
     public ProgressPayload downloadProgress(BookRecord book) throws Exception {
-        Response response = request(progressFileUrl(book), "GET", null, null);
-        if (response.code != 200 || response.body == null || response.body.isBlank()) {
-            return null;
+        ProgressPayload latestPayload = null;
+        Exception lastError = null;
+        for (String url : progressFileUrls(book)) {
+            try {
+                Response response = request(url, "GET", null, null);
+                if (response.code == 404) {
+                    continue;
+                }
+                requireSuccessfulResponse(response, "下载阅读进度", false);
+                if (response.body == null || response.body.isBlank()) {
+                    continue;
+                }
+                JSONObject jsonObject = new JSONObject(response.body);
+                ProgressPayload payload = new ProgressPayload();
+                payload.author = jsonObject.optString("author", "");
+                payload.name = jsonObject.optString("name", "");
+                payload.chapterIndex = jsonObject.optInt("durChapterIndex", 0);
+                payload.chapterPosition = jsonObject.optInt("durChapterPos", 0);
+                payload.chapterTime = jsonObject.optLong("durChapterTime", 0L);
+                payload.chapterTitle = jsonObject.optString("durChapterTitle", "");
+                if (latestPayload == null || payload.chapterTime > latestPayload.chapterTime) {
+                    latestPayload = payload;
+                }
+            } catch (Exception error) {
+                lastError = error;
+            }
         }
-        JSONObject jsonObject = new JSONObject(response.body);
-        ProgressPayload payload = new ProgressPayload();
-        payload.author = jsonObject.optString("author", "");
-        payload.name = jsonObject.optString("name", "");
-        payload.chapterIndex = jsonObject.optInt("durChapterIndex", 0);
-        payload.chapterPosition = jsonObject.optInt("durChapterPos", 0);
-        payload.chapterTime = jsonObject.optLong("durChapterTime", 0L);
-        payload.chapterTitle = jsonObject.optString("durChapterTitle", "");
-        return payload;
+        if (latestPayload != null) {
+            return latestPayload;
+        }
+        if (lastError != null) {
+            throw lastError;
+        }
+        return null;
     }
 
     public void uploadProgress(BookRecord book, ChapterRecord chapter, int charPosition) throws Exception {
@@ -127,12 +190,21 @@ public class WebDavClient {
         payload.put("durChapterTime", System.currentTimeMillis());
         payload.put("durChapterTitle", chapter.title);
         payload.put("name", book.title);
-        request(
-                progressFileUrl(book),
-                "PUT",
-                payload.toString(2),
-                null
-        );
+        String body = payload.toString(2);
+        Exception lastError = null;
+        boolean uploadedAny = false;
+        for (String url : progressFileUrls(book)) {
+            try {
+                Response response = request(url, "PUT", body, null);
+                requireSuccessfulResponse(response, "上传阅读进度", false);
+                uploadedAny = true;
+            } catch (Exception error) {
+                lastError = error;
+            }
+        }
+        if (!uploadedAny && lastError != null) {
+            throw lastError;
+        }
     }
 
     private String safeProgressFileName(BookRecord book) {
@@ -141,8 +213,38 @@ public class WebDavClient {
         return safeTitle + "_" + safeAuthor + ".json";
     }
 
-    private String progressFileUrl(BookRecord book) throws Exception {
-        return settingsStore.getWebDavProgressBaseUrl() + "bookProgress/" + encodePathSegment(safeProgressFileName(book));
+    private List<String> progressFileUrls(BookRecord book) throws Exception {
+        String fileName = encodePathSegment(safeProgressFileName(book));
+        List<String> urls = new ArrayList<>();
+        for (ProgressLocation location : progressLocations()) {
+            addUnique(urls, location.baseUrl + "bookProgress/" + fileName);
+        }
+        return urls;
+    }
+
+    private List<ProgressLocation> progressLocations() {
+        List<ProgressLocation> locations = new ArrayList<>();
+        addProgressLocation(locations, requireConfiguredProgressBaseUrl(), settingsStore.getWebDavProgressDir());
+        addProgressLocation(locations, backupRootBaseUrl(), settingsStore.getWebDavDir());
+        return locations;
+    }
+
+    private void addProgressLocation(List<ProgressLocation> locations, String baseUrl, String parentDirectory) {
+        if (baseUrl == null || baseUrl.isBlank()) {
+            return;
+        }
+        for (ProgressLocation location : locations) {
+            if (location.baseUrl.equals(baseUrl)) {
+                return;
+            }
+        }
+        locations.add(new ProgressLocation(baseUrl, parentDirectory));
+    }
+
+    private void addUnique(List<String> values, String value) {
+        if (value != null && !value.isBlank() && !values.contains(value)) {
+            values.add(value);
+        }
     }
 
     private String encodePathSegment(String value) throws Exception {
@@ -197,7 +299,8 @@ public class WebDavClient {
     public void uploadText(String remoteUrl, String content, String contentType) throws Exception {
         Map<String, String> headers = new HashMap<>();
         headers.put("Content-Type", contentType);
-        request(remoteUrl, "PUT", content.getBytes(StandardCharsets.UTF_8), null, headers);
+        Response response = request(remoteUrl, "PUT", content.getBytes(StandardCharsets.UTF_8), null, headers);
+        requireSuccessfulResponse(response, "上传文本", false);
     }
 
     public String downloadText(String remoteUrl) throws Exception {
@@ -209,11 +312,39 @@ public class WebDavClient {
     }
 
     public void uploadFile(File localFile, String remoteUrl) throws Exception {
-        try (FileInputStream inputStream = new FileInputStream(localFile)) {
-            byte[] bytes = readFullyBytes(inputStream);
-            Map<String, String> headers = new HashMap<>();
-            headers.put("Content-Type", "application/octet-stream");
-            request(remoteUrl, "PUT", bytes, null, headers);
+        retryNetwork(() -> {
+            RequestBody requestBody = RequestBody.create(localFile, MediaType.get("application/octet-stream"));
+            Request request = new Request.Builder()
+                    .url(remoteUrl)
+                    .header("Authorization", authorizationHeader())
+                    .put(requestBody)
+                    .build();
+            try (okhttp3.Response response = httpClient.newCall(request).execute()) {
+                requireSuccessfulResponse(new Response(response.code(), ""), "上传文件", false);
+            }
+        }, "上传文件");
+    }
+
+    public long remoteContentLength(String remoteUrl) throws Exception {
+        Request request = new Request.Builder()
+                .url(remoteUrl)
+                .header("Authorization", authorizationHeader())
+                .head()
+                .build();
+        try (okhttp3.Response response = httpClient.newCall(request).execute()) {
+            if (response.code() == 404) {
+                return -1L;
+            }
+            requireSuccessfulResponse(new Response(response.code(), ""), "检查云端文件", false);
+            String value = response.header("Content-Length");
+            if (value == null || value.isBlank()) {
+                return -1L;
+            }
+            try {
+                return Long.parseLong(value);
+            } catch (NumberFormatException ignored) {
+                return -1L;
+            }
         }
     }
 
@@ -231,16 +362,40 @@ public class WebDavClient {
     }
 
     public void downloadBinaryFile(String remoteUrl, File destination) throws Exception {
-        BinaryResponse response = requestBinary(remoteUrl, "GET");
-        if (response.code < 200 || response.code >= 300) {
-            throw new IllegalStateException("HTTP " + response.code);
+        retryNetwork(() -> {
+            BinaryResponse response = requestBinary(remoteUrl, "GET");
+            if (response.code < 200 || response.code >= 300) {
+                throw new IllegalStateException("HTTP " + response.code);
+            }
+            if (destination.getParentFile() != null && !destination.getParentFile().exists() && !destination.getParentFile().mkdirs()) {
+                throw new IllegalStateException("无法创建目录: " + destination.getParent());
+            }
+            try (FileOutputStream outputStream = new FileOutputStream(destination)) {
+                outputStream.write(response.bytes);
+            }
+        }, "下载文件");
+    }
+
+    /** 网络重试：仅对 IO 超时等瞬态错误重试，HTTP 4xx/5xx 不重试 */
+    private void retryNetwork(RetryAction action, String description) throws Exception {
+        int maxAttempts = 3;
+        Exception lastError = null;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                action.execute();
+                return;
+            } catch (java.io.IOException e) {
+                lastError = e;
+                if (attempt < maxAttempts) {
+                    Thread.sleep(1000L * attempt);
+                }
+            }
         }
-        if (destination.getParentFile() != null && !destination.getParentFile().exists() && !destination.getParentFile().mkdirs()) {
-            throw new IllegalStateException("无法创建目录: " + destination.getParent());
-        }
-        try (FileOutputStream outputStream = new FileOutputStream(destination)) {
-            outputStream.write(response.bytes);
-        }
+        throw lastError != null ? lastError : new IllegalStateException(description + " 失败");
+    }
+
+    private interface RetryAction {
+        void execute() throws Exception;
     }
 
     private Response request(String url, String method, String body, String depth) throws Exception {
@@ -288,7 +443,7 @@ public class WebDavClient {
         return "Basic " + Base64.encodeToString(raw.getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP);
     }
 
-    private void ensureAndroidSettingsDirectory() throws Exception {
+    public void ensureAndroidSettingsDirectory() throws Exception {
         ensureDirectoryTree(backupRootBaseUrl(), settingsStore.getWebDavSettingsSubdir(), "初始化 Android 设置目录");
         requireSuccessfulResponse(request(androidSettingsBackgroundsBaseUrl(), "MKCOL", null, null), "初始化 Android 背景目录", true);
     }
@@ -398,6 +553,16 @@ public class WebDavClient {
         public int chapterPosition;
         public long chapterTime;
         public String chapterTitle;
+    }
+
+    private static class ProgressLocation {
+        final String baseUrl;
+        final String parentDirectory;
+
+        ProgressLocation(String baseUrl, String parentDirectory) {
+            this.baseUrl = baseUrl;
+            this.parentDirectory = parentDirectory;
+        }
     }
 
     private static class BinaryResponse {

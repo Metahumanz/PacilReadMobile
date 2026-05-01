@@ -9,7 +9,7 @@ import android.widget.CheckBox;
 import android.widget.TextView;
 
 import com.metahumanz.pacilread.stats.ReadingStatsUtils;
-import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
+import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
 import com.metahumanz.pacilread.ui.LaunchSourceTransition;
@@ -27,7 +27,7 @@ final class SettingsReadingStatsController {
     }
 
     private final Activity activity;
-    private final ReaderDatabaseHelper databaseHelper;
+    private final JsonDatabase databaseHelper;
     private final SettingsStore settingsStore;
     private final ReadingStatsSyncManager readingStatsSyncManager;
     private final ExecutorService executor;
@@ -46,7 +46,7 @@ final class SettingsReadingStatsController {
 
     SettingsReadingStatsController(
             Activity activity,
-            ReaderDatabaseHelper databaseHelper,
+            JsonDatabase databaseHelper,
             SettingsStore settingsStore,
             ReadingStatsSyncManager readingStatsSyncManager,
             ExecutorService executor,

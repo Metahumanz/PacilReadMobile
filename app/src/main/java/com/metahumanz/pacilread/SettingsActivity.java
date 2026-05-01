@@ -47,6 +47,10 @@ public class SettingsActivity extends ThemedActivity {
             }
 
             @Override
+            public void onLibraryDataRestored() {
+            }
+
+            @Override
             public void onThemeChanged() {
                 recreate();
             }

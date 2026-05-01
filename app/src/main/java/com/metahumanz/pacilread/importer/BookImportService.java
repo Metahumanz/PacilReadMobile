@@ -74,6 +74,10 @@ public class BookImportService {
             importedBook.bookType = "pdf";
         } else {
             parsedChapters = EpubChapterParser.parse(localCopy);
+            File coverFile = EpubChapterParser.extractCover(context, localCopy, "epub_cover");
+            if (coverFile != null) {
+                importedBook.coverPath = coverFile.getAbsolutePath();
+            }
             importedBook.bookType = "epub";
         }
         importedBook.chapters.addAll(parsedChapters);

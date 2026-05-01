@@ -34,11 +34,14 @@ import com.metahumanz.pacilread.reader.modern.paging.ReaderPagingAnimator;
 import com.metahumanz.pacilread.reader.modern.theme.ReaderDisplayModeHelper;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderStyleController;
+import com.metahumanz.pacilread.sync.WebDavClient;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public final class ReaderContentController {
     private static final String TAG = "PacilReadReader";
@@ -52,6 +55,7 @@ public final class ReaderContentController {
     private static final List<ReplacementRuleRecord> cachedRules = new ArrayList<>();
     private static final Map<Integer, List<PageSlice>> cachedPageSlicesMap = new HashMap<>();
     private static ReaderLayoutSignature cachedLayoutSignature;
+    private static final ExecutorService PROGRESS_UPLOAD_EXECUTOR = Executors.newSingleThreadExecutor();
 
     private final ModernReaderActivity activity;
     private final ReaderRuntime runtime;
@@ -128,6 +132,7 @@ public final class ReaderContentController {
             style.applyReaderSettings();
             activity.onReaderBookLoaded();
             scheduleInitialReflowAfterLayout(targetChapterIndex, initialAnchorOffset);
+            scheduleRemoteProgressSync();
             return;
         }
 
@@ -179,7 +184,7 @@ public final class ReaderContentController {
                     style.applyReaderSettings();
                     activity.onReaderBookLoaded();
                     scheduleInitialReflowAfterLayout(targetChapterIndex, initialAnchorOffset);
-                    runtime.mainHandler.postDelayed(() -> syncFromWebDav(true), 2000L);
+                    scheduleRemoteProgressSync();
                 });
             } catch (Exception error) {
                 Log.e(TAG, "Failed to load reader state", error);
@@ -205,11 +210,15 @@ public final class ReaderContentController {
         // 数据库更新必须在主线程同步完成，防止 onDestroy 中 executor.shutdownNow() 中断写入
         runtime.databaseHelper.updateProgress(state.book.id, chapterOrderIndex, offset);
         if (runtime.settingsStore.isWebDavEnabled()) {
-            runtime.executor.execute(() -> {
+            BookRecord bookSnapshot = snapshotBookForProgressUpload(state.book);
+            ChapterRecord chapterSnapshot = snapshotChapterForProgressUpload(chapter);
+            WebDavClient webDavClient = runtime.webDavClient;
+            PROGRESS_UPLOAD_EXECUTOR.execute(() -> {
                 try {
-                    runtime.webDavClient.ensureProgressDirectory();
-                    runtime.webDavClient.uploadProgress(state.book, chapter, offset);
-                } catch (Exception ignore) {
+                    webDavClient.ensureProgressDirectory();
+                    webDavClient.uploadProgress(bookSnapshot, chapterSnapshot, offset);
+                } catch (Exception error) {
+                    Log.w(TAG, "Failed to upload reader progress", error);
                 }
             });
         }
@@ -265,6 +274,31 @@ public final class ReaderContentController {
                 }
             }
         });
+    }
+
+    private void scheduleRemoteProgressSync() {
+        runtime.mainHandler.postDelayed(() -> syncFromWebDav(true), 2000L);
+    }
+
+    private BookRecord snapshotBookForProgressUpload(BookRecord source) {
+        BookRecord snapshot = new BookRecord();
+        snapshot.id = source.id;
+        snapshot.title = source.title;
+        snapshot.author = source.author;
+        snapshot.readingStatsKey = source.readingStatsKey;
+        snapshot.progressIndex = source.progressIndex;
+        snapshot.progressOffset = source.progressOffset;
+        snapshot.lastReadAt = source.lastReadAt;
+        return snapshot;
+    }
+
+    private ChapterRecord snapshotChapterForProgressUpload(ChapterRecord source) {
+        ChapterRecord snapshot = new ChapterRecord();
+        snapshot.id = source.id;
+        snapshot.bookId = source.bookId;
+        snapshot.title = source.title;
+        snapshot.orderIndex = source.orderIndex;
+        return snapshot;
     }
 
     public List<PageSlice> getPagesForChapter(int chapterIndex) {

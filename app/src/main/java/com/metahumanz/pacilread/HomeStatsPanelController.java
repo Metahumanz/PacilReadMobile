@@ -10,7 +10,7 @@ import android.widget.TextView;
 
 import com.metahumanz.pacilread.model.ReadingBookStatRecord;
 import com.metahumanz.pacilread.stats.ReadingStatsUtils;
-import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
+import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.ui.LaunchSourceTransition;
 import com.metahumanz.pacilread.ui.TransitionMotionModeHelper;
@@ -20,7 +20,7 @@ import java.util.concurrent.ExecutorService;
 
 public final class HomeStatsPanelController {
     private final Activity activity;
-    private final ReaderDatabaseHelper databaseHelper;
+    private final JsonDatabase databaseHelper;
     private final SettingsStore settingsStore;
     private final ExecutorService executor;
 
@@ -36,7 +36,7 @@ public final class HomeStatsPanelController {
 
     public HomeStatsPanelController(
             Activity activity,
-            ReaderDatabaseHelper databaseHelper,
+            JsonDatabase databaseHelper,
             SettingsStore settingsStore,
             ExecutorService executor
     ) {
