@@ -39,6 +39,7 @@ public class SettingsStore {
     private static final String KEY_WEB_DAV_SYNC_THEMES = "webdav_sync_themes";
     private static final String KEY_WEB_DAV_SYNC_BACKGROUNDS = "webdav_sync_backgrounds";
     private static final String KEY_WEB_DAV_SYNC_READING_STATS = "webdav_sync_reading_stats";
+    private static final String KEY_WEB_DAV_CLEAN_REMOTE_ORPHANS = "webdav_clean_remote_orphans";
     private static final String KEY_FONT_SIZE = "font_size_sp";
     private static final String KEY_FONT_FAMILY = "font_family";
     private static final String KEY_FONT_WEIGHT = "font_weight";
@@ -305,6 +306,14 @@ public class SettingsStore {
 
     public void setWebDavSyncReadingStatsEnabled(boolean enabled) {
         preferences.edit().putBoolean(KEY_WEB_DAV_SYNC_READING_STATS, enabled).apply();
+    }
+
+    public boolean isWebDavCleanRemoteOrphansEnabled() {
+        return preferences.getBoolean(KEY_WEB_DAV_CLEAN_REMOTE_ORPHANS, false);
+    }
+
+    public void setWebDavCleanRemoteOrphansEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_WEB_DAV_CLEAN_REMOTE_ORPHANS, enabled).apply();
     }
 
     public boolean isReadingTimeTrackingEnabled() {
