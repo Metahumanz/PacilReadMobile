@@ -73,15 +73,43 @@ public class JsonDatabase {
             JsonDatabaseMigrator migrator = new JsonDatabaseMigrator(context);
             if (migrator.needsMigration()) {
                 Log.i(TAG, "检测到旧版 SQLite 数据库，开始迁移...");
+                // 删除可能残留的不完整 JSON 文件（上次迁移中断）
+                instance.purgeDataDir();
                 if (migrator.migrate()) {
-                    // 迁移完成后重新加载 JSON 并重定位路径
-                    instance.loadAll();
-                    instance.rebaseLocalAssetPaths();
-                    Log.i(TAG, "迁移完成，路径已重定位");
+                    // 验证所有关键文件均已写入
+                    String[] requiredFiles = {FILE_BOOKS, FILE_CHAPTERS, FILE_RULES,
+                            FILE_THEMES, FILE_BOOKMARKS, FILE_READING_STATS};
+                    boolean allExist = true;
+                    for (String f : requiredFiles) {
+                        if (!new File(instance.dataDir, f).exists()) {
+                            Log.e(TAG, "迁移后文件缺失：" + f);
+                            allExist = false;
+                        }
+                    }
+                    if (!allExist) {
+                        Log.e(TAG, "迁移不完整，清理 JSON 并将在下次启动重试");
+                        instance.purgeDataDir();
+                    } else {
+                        instance.loadAll();
+                        instance.rebaseLocalAssetPaths();
+                        Log.i(TAG, "迁移完成，路径已重定位");
+                    }
                 }
             }
         }
         return instance;
+    }
+
+    private void purgeDataDir() {
+        if (dataDir.exists()) {
+            File[] files = dataDir.listFiles();
+            if (files != null) {
+                for (File f : files) {
+                    f.delete();
+                }
+            }
+        }
+        dataDir.mkdirs();
     }
 
     // ========== 初始化 / 加载 ==========
@@ -1088,12 +1116,23 @@ public class JsonDatabase {
         if ("file_gzip".equals(bodyTextStorage) && bodyTextPath != null && !bodyTextPath.isEmpty()) {
             File file = resolveChapterTextFile(bodyTextPath);
             if (file != null && file.exists()) {
-                return readGzipFile(file);
+                String text = readGzipFile(file);
+                if (text.isEmpty()) {
+                    Log.w(TAG, "章节正文文件为空: book=" + bookId + " chapter=" + chapterId + " path=" + bodyTextPath);
+                }
+                return text;
+            } else {
+                Log.w(TAG, "章节外置正文缺失: book=" + bookId + " chapter=" + chapterId +
+                        " storage=" + bodyTextStorage + " path=" + bodyTextPath);
             }
         }
         // 回退：body_text 可能在 JSON/数据库中（"db" 模式），或文件缺失时的 fallback
         if (bodyText != null && !bodyText.isEmpty()) {
             return bodyText;
+        }
+        if (!"file_gzip".equals(bodyTextStorage) && (bodyTextPath == null || bodyTextPath.isEmpty())) {
+            Log.w(TAG, "章节正文不可用: book=" + bookId + " chapter=" + chapterId +
+                    " storage=" + bodyTextStorage + " path=" + bodyTextPath);
         }
         return "";
     }
