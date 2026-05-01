@@ -25,7 +25,7 @@ import android.widget.TextView;
 
 import com.metahumanz.pacilread.importer.BookImportService;
 import com.metahumanz.pacilread.model.BookRecord;
-import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
+import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedActivity;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
@@ -51,7 +51,7 @@ public class BookshelfActivity extends ThemedActivity {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final List<BookRecord> allBooks = new ArrayList<>();
 
-    private ReaderDatabaseHelper databaseHelper;
+    private JsonDatabase databaseHelper;
     private SettingsStore settingsStore;
     private BookImportService importService;
     private BookListAdapter listAdapter;
@@ -90,7 +90,7 @@ public class BookshelfActivity extends ThemedActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_bookshelf);
 
-        databaseHelper = ReaderDatabaseHelper.getInstance(this);
+        databaseHelper = JsonDatabase.getInstance(this);
         settingsStore = new SettingsStore(this);
         importService = new BookImportService(this);
 

@@ -28,7 +28,7 @@ import com.metahumanz.pacilread.reader.ReaderThemeConfig;
 import com.metahumanz.pacilread.reader.modern.config.ReaderOptionCatalog;
 import com.metahumanz.pacilread.reader.modern.theme.ReaderDisplayModeHelper;
 import com.metahumanz.pacilread.reader.modern.theme.ReaderThemePalette;
-import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
+import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedActivity;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
@@ -56,7 +56,7 @@ public class PreviewActivity extends ThemedActivity {
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
-    private ReaderDatabaseHelper databaseHelper;
+    private JsonDatabase databaseHelper;
     private SettingsStore settingsStore;
     private AppDrawerController drawerController;
     private View mainRoot;
@@ -106,7 +106,7 @@ public class PreviewActivity extends ThemedActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_preview);
 
-        databaseHelper = ReaderDatabaseHelper.getInstance(this);
+        databaseHelper = JsonDatabase.getInstance(this);
         settingsStore = new SettingsStore(this);
 
         mainRoot = findViewById(R.id.main_root);

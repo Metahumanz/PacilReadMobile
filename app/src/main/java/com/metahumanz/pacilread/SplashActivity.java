@@ -6,7 +6,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
-import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
+import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemedActivity;
 
@@ -39,7 +39,7 @@ public class SplashActivity extends ThemedActivity {
         if (settingsStore.isAutoOpenLastBook()) {
             splashExecutor.execute(() -> {
                 try {
-                    ReaderDatabaseHelper databaseHelper = ReaderDatabaseHelper.getInstance(SplashActivity.this);
+                    JsonDatabase databaseHelper = JsonDatabase.getInstance(SplashActivity.this);
                     long bookId = -1L;
                     if (databaseHelper.isDatabaseHealthyForStartup()) {
                         bookId = databaseHelper.getMostRecentBookId();

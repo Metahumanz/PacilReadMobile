@@ -13,7 +13,7 @@ import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.model.ChapterRecord;
 import com.metahumanz.pacilread.model.ReadingBookStatRecord;
 import com.metahumanz.pacilread.stats.ReadingStatsUtils;
-import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
+import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
 import com.metahumanz.pacilread.sync.WebDavClient;
@@ -36,7 +36,7 @@ public class ReadingStatsActivity extends ThemedActivity {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final DateFormat dateTimeFormat = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, Locale.SIMPLIFIED_CHINESE);
 
-    private ReaderDatabaseHelper databaseHelper;
+    private JsonDatabase databaseHelper;
     private SettingsStore settingsStore;
     private ReadingStatsSyncManager readingStatsSyncManager;
 
@@ -68,7 +68,7 @@ public class ReadingStatsActivity extends ThemedActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_reading_stats);
 
-        databaseHelper = ReaderDatabaseHelper.getInstance(this);
+        databaseHelper = JsonDatabase.getInstance(this);
         settingsStore = new SettingsStore(this);
         readingStatsSyncManager = new ReadingStatsSyncManager(this, databaseHelper, settingsStore, new WebDavClient(settingsStore));
 

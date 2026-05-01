@@ -19,7 +19,7 @@ import android.widget.Spinner;
 import android.widget.TextView;
 
 import com.metahumanz.pacilread.importer.BookImportService;
-import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
+import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
 import com.metahumanz.pacilread.sync.WebDavBackupManager;
@@ -61,7 +61,7 @@ final class SettingsScreenController {
     private final Activity activity;
     private final Host host;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private final ReaderDatabaseHelper databaseHelper;
+    private final JsonDatabase databaseHelper;
     private final SettingsStore settingsStore;
     private final WebDavClient webDavClient;
     private final WebDavBackupManager backupManager;
@@ -132,7 +132,7 @@ final class SettingsScreenController {
     SettingsScreenController(Activity activity, Host host) {
         this.activity = activity;
         this.host = host;
-        this.databaseHelper = ReaderDatabaseHelper.getInstance(activity);
+        this.databaseHelper = JsonDatabase.getInstance(activity);
         this.settingsStore = new SettingsStore(activity);
         this.webDavClient = new WebDavClient(settingsStore);
         this.backupManager = new WebDavBackupManager(activity, databaseHelper, settingsStore, webDavClient);
@@ -469,7 +469,7 @@ final class SettingsScreenController {
         setAllButtonsEnabled(false);
 
         executor.execute(() -> {
-            databaseHelper.runStorageMaintenanceWithProgress(new ReaderDatabaseHelper.MaintenanceProgressListener() {
+            databaseHelper.runStorageMaintenanceWithProgress(new JsonDatabase.MaintenanceProgressListener() {
                 @Override
                 public void onPhaseStart(String phaseName) {
                     activity.runOnUiThread(() -> phaseText.setText("正在" + phaseName + "…"));

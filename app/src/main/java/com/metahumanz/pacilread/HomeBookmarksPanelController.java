@@ -11,7 +11,7 @@ import android.widget.TextView;
 import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.model.BookmarkRecord;
 import com.metahumanz.pacilread.stats.ReadingStatsUtils;
-import com.metahumanz.pacilread.storage.ReaderDatabaseHelper;
+import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.ui.LaunchSourceTransition;
@@ -23,14 +23,14 @@ import java.util.concurrent.ExecutorService;
 
 public final class HomeBookmarksPanelController {
     private final Activity activity;
-    private final ReaderDatabaseHelper databaseHelper;
+    private final JsonDatabase databaseHelper;
     private final ExecutorService executor;
     private final LinearLayout listLayout;
     private final TextView emptyText;
 
     public HomeBookmarksPanelController(
             Activity activity,
-            ReaderDatabaseHelper databaseHelper,
+            JsonDatabase databaseHelper,
             ExecutorService executor
     ) {
         this.activity = activity;
