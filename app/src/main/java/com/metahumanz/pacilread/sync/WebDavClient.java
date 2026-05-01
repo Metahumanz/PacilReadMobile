@@ -42,6 +42,7 @@ public class WebDavClient {
         this.httpClient = new OkHttpClient.Builder()
                 .connectTimeout(8, TimeUnit.SECONDS)
                 .readTimeout(12, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
                 .build();
     }
 
@@ -72,11 +73,19 @@ public class WebDavClient {
     }
 
     public void ensureBackupDirectories() throws Exception {
-        String base = backupBaseUrl();
+        ensureBackupRootDirectory();
+        ensureBookAssetDirectories();
+        ensureAndroidSettingsDirectory();
+    }
+
+    public void ensureBackupRootDirectory() throws Exception {
         ensureDirectoryTree(requireConfiguredServerUrl(), settingsStore.getWebDavDir(), "初始化备份目录");
+    }
+
+    public void ensureBookAssetDirectories() throws Exception {
+        String base = backupBaseUrl();
         requireSuccessfulResponse(request(base + "books/", "MKCOL", null, null), "初始化书籍备份目录", true);
         requireSuccessfulResponse(request(base + "covers/", "MKCOL", null, null), "初始化封面备份目录", true);
-        ensureAndroidSettingsDirectory();
     }
 
     public void ensureChapterTextDirectory() throws Exception {
@@ -275,7 +284,8 @@ public class WebDavClient {
     public void uploadText(String remoteUrl, String content, String contentType) throws Exception {
         Map<String, String> headers = new HashMap<>();
         headers.put("Content-Type", contentType);
-        request(remoteUrl, "PUT", content.getBytes(StandardCharsets.UTF_8), null, headers);
+        Response response = request(remoteUrl, "PUT", content.getBytes(StandardCharsets.UTF_8), null, headers);
+        requireSuccessfulResponse(response, "上传文本", false);
     }
 
     public String downloadText(String remoteUrl) throws Exception {
@@ -287,11 +297,37 @@ public class WebDavClient {
     }
 
     public void uploadFile(File localFile, String remoteUrl) throws Exception {
-        try (FileInputStream inputStream = new FileInputStream(localFile)) {
-            byte[] bytes = readFullyBytes(inputStream);
-            Map<String, String> headers = new HashMap<>();
-            headers.put("Content-Type", "application/octet-stream");
-            request(remoteUrl, "PUT", bytes, null, headers);
+        RequestBody requestBody = RequestBody.create(localFile, MediaType.get("application/octet-stream"));
+        Request request = new Request.Builder()
+                .url(remoteUrl)
+                .header("Authorization", authorizationHeader())
+                .put(requestBody)
+                .build();
+        try (okhttp3.Response response = httpClient.newCall(request).execute()) {
+            requireSuccessfulResponse(new Response(response.code(), ""), "上传文件", false);
+        }
+    }
+
+    public long remoteContentLength(String remoteUrl) throws Exception {
+        Request request = new Request.Builder()
+                .url(remoteUrl)
+                .header("Authorization", authorizationHeader())
+                .head()
+                .build();
+        try (okhttp3.Response response = httpClient.newCall(request).execute()) {
+            if (response.code() == 404) {
+                return -1L;
+            }
+            requireSuccessfulResponse(new Response(response.code(), ""), "检查云端文件", false);
+            String value = response.header("Content-Length");
+            if (value == null || value.isBlank()) {
+                return -1L;
+            }
+            try {
+                return Long.parseLong(value);
+            } catch (NumberFormatException ignored) {
+                return -1L;
+            }
         }
     }
 
@@ -366,7 +402,7 @@ public class WebDavClient {
         return "Basic " + Base64.encodeToString(raw.getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP);
     }
 
-    private void ensureAndroidSettingsDirectory() throws Exception {
+    public void ensureAndroidSettingsDirectory() throws Exception {
         ensureDirectoryTree(backupRootBaseUrl(), settingsStore.getWebDavSettingsSubdir(), "初始化 Android 设置目录");
         requireSuccessfulResponse(request(androidSettingsBackgroundsBaseUrl(), "MKCOL", null, null), "初始化 Android 背景目录", true);
     }
