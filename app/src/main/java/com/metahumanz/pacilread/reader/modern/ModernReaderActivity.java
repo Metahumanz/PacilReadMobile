@@ -126,39 +126,30 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         setupControls();
         installPredictiveBack();
 
-        if (hasLaunchSource() && com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(runtime.settingsStore)) {
+        boolean useFluidEnter = hasLaunchSource() && com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(runtime.settingsStore);
+        if (useFluidEnter) {
             ActivityTransitionCompat.overrideOpen(this, 0, 0);
+            // 先隐藏，等 layout 就绪后再显示并启动动画，防止未就绪时闪现全屏
+            views.readerRoot.setVisibility(View.INVISIBLE);
             views.readerRoot.setAlpha(1f);
-            views.readerRoot.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+            views.readerRoot.getViewTreeObserver().addOnGlobalLayoutListener(new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
                 @Override
-                public boolean onPreDraw() {
-                    views.readerRoot.getViewTreeObserver().removeOnPreDrawListener(this);
-                    if (readerExitFinishing || readerEnterAnimationStarted) return true;
-                    readerEnterAnimationStarted = true;
-                    setReaderTransitionForegroundAlpha(0f);
-                    boolean started = LaunchSourceTransition.animateEnterFromSource(
-                            views.readerRoot,
-                            launchSource,
-                            LaunchSourceTransition.Options.defaults()
-                                    .withDuration(ENTER_TRANSITION_DURATION_MS)
-                                    .withEnterSnapshotOverlay(false)
-                                    .withEnterContentFade(false),
-                            ModernReaderActivity.this::finishReaderEnterForegroundFade
-                    );
-                    if (started) {
-                        scheduleReaderEnterForegroundFade();
-                    } else {
-                        finishReaderEnterForegroundFade();
-                    }
-                    return true;
+                public void onGlobalLayout() {
+                    views.readerRoot.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                    startFluidEnterAnimation();
                 }
             });
+            // 安全兜底：如果 GlobalLayoutListener 一直没触发，100ms 后强制启动
+            views.readerRoot.postDelayed(this::startFluidEnterAnimation, 100L);
         }
 
         state.sessionStartTime = System.currentTimeMillis();
         state.sessionStartOffset = 0;
 
         views.pageBodyCurrent.setText("正在载入...");
+        if (useFluidEnter) {
+            content.setDeferReflow(true);
+        }
         content.loadBook();
     }
 
@@ -309,9 +300,37 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         animateReaderTransitionForegroundToAlpha(1f, ENTER_TEXT_FADE_DURATION_MS, null);
     }
 
+    /** 启动流动进入动画。前提：readerRoot 已完成 layout 且 bounds 有效。 */
+    private boolean startFluidEnterAnimation() {
+        if (readerEnterAnimationStarted || readerExitFinishing) return false;
+        if (views == null || views.readerRoot == null) return false;
+        if (views.readerRoot.getWidth() <= 0 || views.readerRoot.getHeight() <= 0) return false;
+        readerEnterAnimationStarted = true;
+        views.readerRoot.setVisibility(View.VISIBLE);
+        setReaderTransitionForegroundAlpha(0f);
+        boolean started = LaunchSourceTransition.animateEnterFromSource(
+                views.readerRoot,
+                launchSource,
+                LaunchSourceTransition.Options.defaults()
+                        .withDuration(ENTER_TRANSITION_DURATION_MS)
+                        .withEnterSnapshotOverlay(false)
+                        .withEnterContentFade(false)
+                        .withInterpolator(new android.view.animation.AccelerateDecelerateInterpolator()),
+                this::finishReaderEnterForegroundFade
+        );
+        if (!started) {
+            finishReaderEnterForegroundFade();
+        }
+        return started;
+    }
+
     private void finishReaderEnterForegroundFade() {
         cancelScheduledReaderEnterForegroundFade();
-        animateReaderTransitionForegroundToAlpha(1f, 60L, null);
+        // 立即开始文字渐显（80ms），同时触发排版，两者并行不互相等待
+        animateReaderTransitionForegroundToAlpha(1f, 80L, null);
+        if (content != null) {
+            content.performDeferredInitialReflow(null);
+        }
     }
 
     private void fadeReaderForegroundForExit(Runnable onComplete) {

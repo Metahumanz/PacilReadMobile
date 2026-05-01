@@ -93,6 +93,11 @@ public final class LaunchSourceTransition {
                     enterUsesSnapshotOverlay, fadeContent);
         }
 
+        public Options withInterpolator(Interpolator newInterpolator) {
+            return new Options(durationMs, snapshotFadeStartFraction, newInterpolator,
+                    enterUsesSnapshotOverlay, enterFadesContent);
+        }
+
         private static float clampOption(float value, float min, float max) {
             return Math.max(min, Math.min(max, value));
         }
@@ -436,43 +441,48 @@ public final class LaunchSourceTransition {
         targetView.setTranslationY(startTranslationY);
         targetView.setAlpha(options.enterFadesContent ? 0f : 1f);
 
-        ImageView snapshotView = options.enterUsesSnapshotOverlay
+        // 预先创建硬件层纹理，避免动画首帧的纹理上传开销
+        targetView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+
+        final ImageView snapshotView = options.enterUsesSnapshotOverlay
                 ? createEnterSnapshotOverlay(
                         targetView, source, targetLocation, sourceScaleX, sourceScaleY,
                         startTranslationX, startTranslationY, pivotX, pivotY)
                 : null;
 
-        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
-        animator.setDuration(options.durationMs);
-        animator.setInterpolator(options.interpolator);
-        animator.addUpdateListener(animation -> {
-            float fraction = animation.getAnimatedFraction();
-            targetView.setScaleX(lerp(sourceScaleX, 1f, fraction));
-            targetView.setScaleY(lerp(sourceScaleY, 1f, fraction));
-            targetView.setTranslationX(lerp(startTranslationX, 0f, fraction));
-            targetView.setTranslationY(lerp(startTranslationY, 0f, fraction));
-            targetView.setAlpha(options.enterFadesContent ? clampAlpha(fraction) : 1f);
+        // 使用 ViewPropertyAnimator + withLayer()，动画在 GPU 上驱动，不阻塞主线程
+        android.view.ViewPropertyAnimator animator = targetView.animate()
+                .scaleX(1f)
+                .scaleY(1f)
+                .translationX(0f)
+                .translationY(0f)
+                .setDuration(options.durationMs)
+                .setInterpolator(options.interpolator)
+                .withLayer();
 
-            if (snapshotView != null) {
-                snapshotView.setScaleX(targetView.getScaleX());
-                snapshotView.setScaleY(targetView.getScaleY());
-                snapshotView.setTranslationX(targetView.getTranslationX());
-                snapshotView.setTranslationY(targetView.getTranslationY());
-                snapshotView.setAlpha(clampAlpha(1f - fraction));
+        if (options.enterFadesContent) {
+            animator.alpha(1f);
+        }
+
+        animator.withEndAction(() -> {
+            if (snapshotView != null && snapshotView.getParent() instanceof ViewGroup) {
+                ((ViewGroup) snapshotView.getParent()).getOverlay().remove(snapshotView);
             }
-        });
-        animator.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override
-            public void onAnimationEnd(android.animation.Animator animation) {
-                if (snapshotView != null && snapshotView.getParent() instanceof ViewGroup) {
-                    ((ViewGroup) snapshotView.getParent()).getOverlay().remove(snapshotView);
-                }
-                if (onComplete != null) {
-                    onComplete.run();
-                }
+            if (onComplete != null) {
+                onComplete.run();
             }
-        });
-        animator.start();
+        }).start();
+
+        if (snapshotView != null) {
+            snapshotView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+            snapshotView.animate()
+                    .alpha(0f)
+                    .setDuration(options.durationMs)
+                    .setInterpolator(options.interpolator)
+                    .withLayer()
+                    .start();
+        }
+
         return true;
     }
 

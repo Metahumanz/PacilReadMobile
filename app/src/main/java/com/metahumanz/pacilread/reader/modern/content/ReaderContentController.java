@@ -75,6 +75,9 @@ public final class ReaderContentController {
     private int pendingReflowAnchorOffset = 0;
     private int reflowGeneration = 0;
     private boolean initialReflowPending = false;
+    private boolean deferReflow = false;
+    private boolean initialReflowDeferred = false;
+    private Runnable onInitialReflowComplete = null;
     private Boolean lastAppliedDoublePageActive = null;
 
     public ReaderContentController(
@@ -103,6 +106,37 @@ public final class ReaderContentController {
         this.chrome = chrome;
     }
 
+    /** 设置是否推迟初始排版，等动画完成后再执行。 */
+    public void setDeferReflow(boolean defer) {
+        this.deferReflow = defer;
+        if (defer) {
+            this.initialReflowDeferred = true;
+        }
+    }
+
+    /** 执行被推迟的初始排版。动画已完成，跳过 debounce 直接执行。 */
+    public void performDeferredInitialReflow(Runnable onComplete) {
+        deferReflow = false;
+        if (!initialReflowDeferred) {
+            return;
+        }
+        initialReflowDeferred = false;
+        // 先存回调——即使 DB 还没返回，后续触发 reflow 时也能用到
+        onInitialReflowComplete = onComplete;
+        if (state.book == null || state.chapters.isEmpty()) {
+            return;
+        }
+        int chapterIndex = state.currentChapterIndex;
+        int anchorOffset = state.sessionStartOffset;
+        pendingReflowChapterIndex = chapterIndex;
+        pendingReflowAnchorOffset = anchorOffset;
+        initialReflowPending = true;
+        reflowGeneration++;
+        runtime.mainHandler.removeCallbacks(scheduledReflowRunnable);
+        // 动画已结束，跳过 32ms debounce，直接排队执行
+        runtime.mainHandler.post(scheduledReflowRunnable);
+    }
+
     public void loadBook() {
         if (lastCachedBookId == state.bookId && cachedBook != null && !cachedChapters.isEmpty()) {
             state.book = cachedBook;
@@ -129,9 +163,15 @@ public final class ReaderContentController {
             state.currentChapterIndex = targetChapterIndex;
             int initialAnchorOffset = resolveInitialAnchorOffset(state.book.progressOffset);
             state.sessionStartOffset = initialAnchorOffset;
-            style.applyReaderSettings();
+            if (!deferReflow) {
+                style.applyReaderSettings();
+            }
             activity.onReaderBookLoaded();
-            scheduleInitialReflowAfterLayout(targetChapterIndex, initialAnchorOffset);
+            if (deferReflow) {
+                initialReflowDeferred = true;
+            } else {
+                scheduleInitialReflowAfterLayout(targetChapterIndex, initialAnchorOffset);
+            }
             scheduleRemoteProgressSync();
             return;
         }
@@ -181,9 +221,15 @@ public final class ReaderContentController {
                     state.currentChapterIndex = targetChapterIndex;
                     int initialAnchorOffset = resolveInitialAnchorOffset(loadedBook.progressOffset);
                     state.sessionStartOffset = initialAnchorOffset;
-                    style.applyReaderSettings();
+                    if (!deferReflow) {
+                        style.applyReaderSettings();
+                    }
                     activity.onReaderBookLoaded();
-                    scheduleInitialReflowAfterLayout(targetChapterIndex, initialAnchorOffset);
+                    if (deferReflow) {
+                        initialReflowDeferred = true;
+                    } else {
+                        scheduleInitialReflowAfterLayout(targetChapterIndex, initialAnchorOffset);
+                    }
                     scheduleRemoteProgressSync();
                 });
             } catch (Exception error) {
@@ -765,6 +811,11 @@ public final class ReaderContentController {
             }
             if (completingInitialReflow) {
                 initialReflowPending = false;
+                if (onInitialReflowComplete != null) {
+                    Runnable callback = onInitialReflowComplete;
+                    onInitialReflowComplete = null;
+                    callback.run();
+                }
             }
             lastAppliedDoublePageActive = isDoublePageActive();
         });
