@@ -103,6 +103,21 @@ public class WebDavClient {
         return backupRootBaseUrl();
     }
 
+    /** 增量同步目录 URL，用于 manifest + JSON 格式的增量备份 */
+    public String syncBaseUrl() {
+        return backupBaseUrl() + "sync/";
+    }
+
+    /** 全量快照目录 URL，用于 JSON 格式的全量备份 */
+    public String databaseBaseUrl() {
+        return backupBaseUrl() + "database/";
+    }
+
+    /** 创建任意远程目录（MKCOL），已存在也不报错 */
+    public void ensureDirectory(String directoryUrl) throws Exception {
+        requireSuccessfulResponse(request(directoryUrl, "MKCOL", null, null), "创建目录", true);
+    }
+
     public String backupRootBaseUrl() {
         return appendDirectory(requireConfiguredServerUrl(), settingsStore.getWebDavDir());
     }
@@ -297,15 +312,17 @@ public class WebDavClient {
     }
 
     public void uploadFile(File localFile, String remoteUrl) throws Exception {
-        RequestBody requestBody = RequestBody.create(localFile, MediaType.get("application/octet-stream"));
-        Request request = new Request.Builder()
-                .url(remoteUrl)
-                .header("Authorization", authorizationHeader())
-                .put(requestBody)
-                .build();
-        try (okhttp3.Response response = httpClient.newCall(request).execute()) {
-            requireSuccessfulResponse(new Response(response.code(), ""), "上传文件", false);
-        }
+        retryNetwork(() -> {
+            RequestBody requestBody = RequestBody.create(localFile, MediaType.get("application/octet-stream"));
+            Request request = new Request.Builder()
+                    .url(remoteUrl)
+                    .header("Authorization", authorizationHeader())
+                    .put(requestBody)
+                    .build();
+            try (okhttp3.Response response = httpClient.newCall(request).execute()) {
+                requireSuccessfulResponse(new Response(response.code(), ""), "上传文件", false);
+            }
+        }, "上传文件");
     }
 
     public long remoteContentLength(String remoteUrl) throws Exception {
@@ -345,16 +362,40 @@ public class WebDavClient {
     }
 
     public void downloadBinaryFile(String remoteUrl, File destination) throws Exception {
-        BinaryResponse response = requestBinary(remoteUrl, "GET");
-        if (response.code < 200 || response.code >= 300) {
-            throw new IllegalStateException("HTTP " + response.code);
+        retryNetwork(() -> {
+            BinaryResponse response = requestBinary(remoteUrl, "GET");
+            if (response.code < 200 || response.code >= 300) {
+                throw new IllegalStateException("HTTP " + response.code);
+            }
+            if (destination.getParentFile() != null && !destination.getParentFile().exists() && !destination.getParentFile().mkdirs()) {
+                throw new IllegalStateException("无法创建目录: " + destination.getParent());
+            }
+            try (FileOutputStream outputStream = new FileOutputStream(destination)) {
+                outputStream.write(response.bytes);
+            }
+        }, "下载文件");
+    }
+
+    /** 网络重试：仅对 IO 超时等瞬态错误重试，HTTP 4xx/5xx 不重试 */
+    private void retryNetwork(RetryAction action, String description) throws Exception {
+        int maxAttempts = 3;
+        Exception lastError = null;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                action.execute();
+                return;
+            } catch (java.io.IOException e) {
+                lastError = e;
+                if (attempt < maxAttempts) {
+                    Thread.sleep(1000L * attempt);
+                }
+            }
         }
-        if (destination.getParentFile() != null && !destination.getParentFile().exists() && !destination.getParentFile().mkdirs()) {
-            throw new IllegalStateException("无法创建目录: " + destination.getParent());
-        }
-        try (FileOutputStream outputStream = new FileOutputStream(destination)) {
-            outputStream.write(response.bytes);
-        }
+        throw lastError != null ? lastError : new IllegalStateException(description + " 失败");
+    }
+
+    private interface RetryAction {
+        void execute() throws Exception;
     }
 
     private Response request(String url, String method, String body, String depth) throws Exception {
