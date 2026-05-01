@@ -224,7 +224,12 @@ public class WebDavClient {
 
     private List<ProgressLocation> progressLocations() {
         List<ProgressLocation> locations = new ArrayList<>();
-        addProgressLocation(locations, requireConfiguredProgressBaseUrl(), settingsStore.getWebDavProgressDir());
+        String progressBase = requireConfiguredProgressBaseUrl();
+        String serverUrl = requireConfiguredServerUrl();
+        // 当 progressBase 等于裸服务器 URL 时跳过，避免把 bookProgress/ 写到 WebDAV 根目录
+        if (!progressBase.equals(serverUrl)) {
+            addProgressLocation(locations, progressBase, settingsStore.getWebDavProgressDir());
+        }
         addProgressLocation(locations, backupRootBaseUrl(), settingsStore.getWebDavDir());
         return locations;
     }
