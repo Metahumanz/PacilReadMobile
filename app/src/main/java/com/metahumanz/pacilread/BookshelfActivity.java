@@ -10,6 +10,7 @@ import android.os.Bundle;
 import android.text.TextUtils;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -340,6 +341,12 @@ public class BookshelfActivity extends ThemedActivity {
             }
 
             @Override
+            public void onLibraryDataRestored() {
+                refreshBooks();
+                refreshCurrentHomePage(false);
+            }
+
+            @Override
             public void onThemeChanged() {
                 recreate();
             }
@@ -536,20 +543,30 @@ public class BookshelfActivity extends ThemedActivity {
         showLoading("正在导入 " + uris.size() + " 本书籍...");
         executor.execute(() -> {
             int successCount = 0, failCount = 0;
+            String firstError = null;
             for (Uri uri : uris) {
                 try {
                     databaseHelper.insertImportedBook(importService.importFromUri(uri, false));
                     successCount++;
                 } catch (Exception e) {
                     failCount++;
+                    Log.w(TAG, "导入书籍失败: " + uri, e);
+                    if (firstError == null) {
+                        firstError = readableError(e);
+                    }
                 }
             }
             final int sCount = successCount, fCount = failCount;
+            final String errorMessage = firstError;
             runOnUiThread(() -> {
                 hideLoading();
                 refreshBooks();
                 if (fCount > 0) {
-                    showToast("导入完成: 成功 " + sCount + "，失败 " + fCount);
+                    if (sCount == 0 && errorMessage != null && !errorMessage.isBlank()) {
+                        showToast("导入失败: " + errorMessage);
+                    } else {
+                        showToast("导入完成: 成功 " + sCount + "，失败 " + fCount);
+                    }
                 } else {
                     showToast("成功导入 " + sCount + " 本书籍");
                 }
