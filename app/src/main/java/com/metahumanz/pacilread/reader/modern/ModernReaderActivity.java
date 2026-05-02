@@ -9,6 +9,7 @@ import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.os.BatteryManager;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.InputDevice;
@@ -306,8 +307,13 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         if (views == null || views.readerRoot == null) return false;
         if (views.readerRoot.getWidth() <= 0 || views.readerRoot.getHeight() <= 0) return false;
         readerEnterAnimationStarted = true;
+        Log.d("PacilReadReader", "[时序] 流体进入动画开始");
         views.readerRoot.setVisibility(View.VISIBLE);
-        setReaderTransitionForegroundAlpha(0f);
+        // 不再隐藏前景：文字与背景一起缩放，正文就绪后直接显示
+        if (content != null) {
+            content.capturePaginationSnapshot();
+            content.prewarmChapterTextAfterSnapshot();
+        }
         boolean started = LaunchSourceTransition.animateEnterFromSource(
                 views.readerRoot,
                 launchSource,
@@ -315,7 +321,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                         .withDuration(ENTER_TRANSITION_DURATION_MS)
                         .withEnterSnapshotOverlay(false)
                         .withEnterContentFade(false)
-                        .withInterpolator(new android.view.animation.AccelerateDecelerateInterpolator()),
+                        .withInterpolator(new android.view.animation.PathInterpolator(0.25f, 0.1f, 0.25f, 1.0f)),
                 this::finishReaderEnterForegroundFade
         );
         if (!started) {
@@ -325,11 +331,11 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     }
 
     private void finishReaderEnterForegroundFade() {
+        Log.d("PacilReadReader", "[时序] 动画结束 finishReaderEnterForegroundFade - cacheHit=" + (content != null && content.isCacheHit()));
         cancelScheduledReaderEnterForegroundFade();
-        // 立即开始文字渐显（80ms），同时触发排版，两者并行不互相等待
-        animateReaderTransitionForegroundToAlpha(1f, 80L, null);
         if (content != null) {
-            content.performDeferredInitialReflow(null);
+            // 正文与背景一起缩放，动画结束时文字大概率已就绪，直接完成排版即可
+            content.performDeferredInitialReflow(() -> {});
         }
     }
 

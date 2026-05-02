@@ -2,6 +2,7 @@ package com.metahumanz.pacilread.storage;
 
 import android.content.Context;
 import android.util.Log;
+import android.util.LruCache;
 
 import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.model.BookmarkRecord;
@@ -55,6 +56,8 @@ public class JsonDatabase {
     private List<BookRecord> bookCache = new ArrayList<>();
     private List<ChapterRecord> chapterCache = new ArrayList<>();
     private List<ReplacementRuleRecord> ruleCache = new ArrayList<>();
+    // 解压后的章节正文缓存（chapterId → 正文），避免重复解压 gzip 文件
+    private final LruCache<Long, String> decompressedTextCache = new LruCache<>(20);
     private List<ReaderThemeRecord> themeCache = new ArrayList<>();
     private List<BookmarkRecord> bookmarkCache = new ArrayList<>();
     private List<ReadingTimeEntryRecord> readingStatsCache = new ArrayList<>();
@@ -377,6 +380,12 @@ public class JsonDatabase {
             }
             if (target != null) {
                 bookCache.remove(target);
+            }
+            // 驱逐该书籍所有章节的解压缓存（必须在 removeIf 之前，否则章节已移除）
+            for (ChapterRecord ch : chapterCache) {
+                if (ch.bookId == bookId) {
+                    decompressedTextCache.remove(ch.id);
+                }
             }
             chapterCache.removeIf(c -> c.bookId == bookId);
             ruleCache.removeIf(r -> r.bookId != null && r.bookId == bookId);
@@ -1119,11 +1128,18 @@ public class JsonDatabase {
     public String resolveChapterText(long bookId, long chapterId, String bodyText,
                                      String bodyTextPath, String bodyTextStorage) {
         if ("file_gzip".equals(bodyTextStorage) && bodyTextPath != null && !bodyTextPath.isEmpty()) {
+            // 先查解压缓存，避免重复 IO + 解压
+            String cached = decompressedTextCache.get(chapterId);
+            if (cached != null) {
+                return cached;
+            }
             File file = resolveChapterTextFile(bodyTextPath);
             if (file != null && file.exists()) {
                 String text = readGzipFile(file);
                 if (text.isEmpty()) {
                     Log.w(TAG, "章节正文文件为空: book=" + bookId + " chapter=" + chapterId + " path=" + bodyTextPath);
+                } else {
+                    decompressedTextCache.put(chapterId, text);
                 }
                 return text;
             } else {
@@ -1161,7 +1177,7 @@ public class JsonDatabase {
             java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
             try (java.io.FileInputStream fis = new java.io.FileInputStream(file);
                  java.util.zip.GZIPInputStream gzIn = new java.util.zip.GZIPInputStream(fis)) {
-                byte[] buffer = new byte[8192];
+                byte[] buffer = new byte[32768];
                 int read;
                 while ((read = gzIn.read(buffer)) != -1) {
                     baos.write(buffer, 0, read);

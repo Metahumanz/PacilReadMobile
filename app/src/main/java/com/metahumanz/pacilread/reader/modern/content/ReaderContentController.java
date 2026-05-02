@@ -77,8 +77,11 @@ public final class ReaderContentController {
     private boolean initialReflowPending = false;
     private boolean deferReflow = false;
     private boolean initialReflowDeferred = false;
+    private boolean isCacheHit = false;
     private Runnable onInitialReflowComplete = null;
     private Boolean lastAppliedDoublePageActive = null;
+    // 等待后台分页完成再触发排版（章节索引，-1 表示未等待）
+    private int waitingForPaginationChapterIndex = -1;
 
     public ReaderContentController(
             ModernReaderActivity activity,
@@ -116,14 +119,16 @@ public final class ReaderContentController {
 
     /** 执行被推迟的初始排版。动画已完成，跳过 debounce 直接执行。 */
     public void performDeferredInitialReflow(Runnable onComplete) {
+        Log.d(TAG, "[时序] performDeferredInitialReflow 被调用 - deferred=" + initialReflowDeferred);
         deferReflow = false;
+        onInitialReflowComplete = onComplete;
         if (!initialReflowDeferred) {
+            Log.d(TAG, "[时序] performDeferredInitialReflow 提前返回 - initialReflowDeferred=false");
             return;
         }
         initialReflowDeferred = false;
-        // 先存回调——即使 DB 还没返回，后续触发 reflow 时也能用到
-        onInitialReflowComplete = onComplete;
         if (state.book == null || state.chapters.isEmpty()) {
+            Log.d(TAG, "[时序] performDeferredInitialReflow 提前返回 - book/chapters 未就绪");
             return;
         }
         int chapterIndex = state.currentChapterIndex;
@@ -133,12 +138,109 @@ public final class ReaderContentController {
         initialReflowPending = true;
         reflowGeneration++;
         runtime.mainHandler.removeCallbacks(scheduledReflowRunnable);
-        // 动画已结束，跳过 32ms debounce，直接排队执行
+        Log.d(TAG, "[时序] 立即触发 performScheduledReflow - chapter=" + chapterIndex + " gen=" + reflowGeneration);
         runtime.mainHandler.post(scheduledReflowRunnable);
+    }
+
+    /** 从 loadBook UI 回调调用，尽早启动后台分页（不等动画快照）。
+     *  用 post 确保 view layout 完成后再捕获尺寸。 */
+    private void startBackgroundPagination(int chapterIndex) {
+        View anchor = views.pageCurrent != null ? views.pageCurrent : views.pageBodyCurrent;
+        if (anchor == null) return;
+        anchor.post(() -> startBackgroundPaginationAfterLayout(chapterIndex));
+    }
+
+    private void startBackgroundPaginationAfterLayout(int chapterIndex) {
+        int pageWidth = getReaderPageTextWidth();
+        int pageHeight = getRegularReaderPageHeight();
+        if (pageWidth <= 0 || pageHeight <= 0) {
+            Log.d(TAG, "[时序] 后台分页尺寸无效 w=" + pageWidth + " h=" + pageHeight + " - 重试");
+            View anchor = views.pageCurrent != null ? views.pageCurrent : views.pageBodyCurrent;
+            if (anchor != null) {
+                anchor.post(() -> startBackgroundPaginationAfterLayoutRetry(chapterIndex));
+            }
+            return;
+        }
+        Log.d(TAG, "[时序] 后台分页尺寸就绪 w=" + pageWidth + " h=" + pageHeight + " - 启动");
+        ReaderLayoutSignature sig = captureCurrentLayoutSignature();
+        if (sig != null) {
+            cachedLayoutSignature = sig;
+        }
+        launchBackgroundPagination(chapterIndex, pageWidth, pageHeight);
+    }
+
+    private void startBackgroundPaginationAfterLayoutRetry(int chapterIndex) {
+        int pageWidth = getReaderPageTextWidth();
+        int pageHeight = getRegularReaderPageHeight();
+        if (pageWidth <= 0 || pageHeight <= 0) return;
+        ReaderLayoutSignature sig = captureCurrentLayoutSignature();
+        if (sig != null) {
+            cachedLayoutSignature = sig;
+        }
+        launchBackgroundPagination(chapterIndex, pageWidth, pageHeight);
+    }
+
+    private void launchBackgroundPagination(int chapterIndex, int pageWidth, int pageHeight) {
+        synchronized (cachedPageSlicesMap) {
+            if (cachedPageSlicesMap.containsKey(chapterIndex)) return;
+        }
+        Log.d(TAG, "[时序] 后台分页开始执行 - chapter=" + chapterIndex + " w=" + pageWidth + " h=" + pageHeight);
+        final long startTime = System.currentTimeMillis();
+        float lineSpacing = views.pageBodyCurrent.getLineSpacingExtra();
+        TextPaint basePaint = new TextPaint(views.pageBodyCurrent.getPaint());
+        int indentPx = computeParagraphIndentPx();
+        Typeface titleTypeface = resolveChapterTitleTypeface();
+        float titleTextSize = resolveChapterTitleTextSizePx();
+        int titleMargin = getChapterTitleBodyMarginPx();
+        ReaderLayoutSignature sig = captureCurrentLayoutSignature();
+
+        runtime.executor.execute(() -> {
+            PaginationSnapshot snapshot = new PaginationSnapshot(
+                    pageWidth, pageHeight, lineSpacing, basePaint, sig,
+                    titleTypeface, titleTextSize, titleMargin, indentPx);
+            String processed = getProcessedChapterText(chapterIndex);
+            if (processed.isEmpty()) return;
+            DisplayChapterText display = buildDisplayChapterTextForBackground(chapterIndex, snapshot);
+            TextPaint paint = new TextPaint(snapshot.basePaint);
+            List<PageSlice> pages = sanitizePageSlices(ReaderPaginator.paginate(
+                    display.text, paint,
+                    snapshot.pageWidth, snapshot.regularPageHeight, snapshot.regularPageHeight,
+                    snapshot.lineSpacingExtra, display.bodyStartIndex));
+            final long elapsed = System.currentTimeMillis() - startTime;
+            Log.d(TAG, "[时序] 后台分页完成 - chapter=" + chapterIndex + " 页数=" + pages.size() + " 耗时=" + elapsed + "ms");
+            final ReaderLayoutSignature capturedSig = sig;
+            activity.runOnUiThread(() -> {
+                synchronized (cachedPageSlicesMap) {
+                    cachedPageSlicesMap.put(chapterIndex, pages);
+                }
+                // 更新布局签名，防止 ensurePaginationCacheMatchesLayout 因签名不匹配清空缓存
+                ReaderLayoutSignature currentSig = captureCurrentLayoutSignature();
+                if (currentSig != null) {
+                    cachedLayoutSignature = currentSig;
+                }
+                // 初始加载期间分页完成：主动触发排版，让文字与背景一起缩放出现
+                boolean isInitialLoad = initialReflowDeferred;
+                boolean isWaiting = waitingForPaginationChapterIndex == chapterIndex;
+                if (isInitialLoad || isWaiting) {
+                    Log.d(TAG, "[时序] 后台分页触发reflow - chapter=" + chapterIndex
+                            + " deferred=" + isInitialLoad + " waiting=" + isWaiting);
+                    if (isWaiting) {
+                        waitingForPaginationChapterIndex = -1;
+                        runtime.mainHandler.removeCallbacks(scheduledReflowRunnable);
+                    }
+                    runtime.mainHandler.post(scheduledReflowRunnable);
+                }
+            });
+        });
+    }
+
+    public boolean isCacheHit() {
+        return isCacheHit;
     }
 
     public void loadBook() {
         if (lastCachedBookId == state.bookId && cachedBook != null && !cachedChapters.isEmpty()) {
+            isCacheHit = true;
             state.book = cachedBook;
             state.chapters.clear();
             state.chapters.addAll(cachedChapters);
@@ -167,8 +269,17 @@ public final class ReaderContentController {
                 style.applyReaderSettings();
             }
             activity.onReaderBookLoaded();
+            chrome.updateReaderHud();
+            Log.d(TAG, "[时序] loadBook 缓存命中 UI回调 - chapter=" + targetChapterIndex);
             if (deferReflow) {
                 initialReflowDeferred = true;
+                // 清除旧缓存，后台分页会用 layout 就绪后的尺寸重新构建
+                cachedPageSlicesMap.clear();
+                cachedLayoutSignature = null;
+                prewarmChapterText(targetChapterIndex);
+                prewarmAdjacentChapters(targetChapterIndex);
+                Log.d(TAG, "[时序] 启动后台分页(缓存命中) - chapter=" + targetChapterIndex);
+                startBackgroundPagination(targetChapterIndex);
             } else {
                 scheduleInitialReflowAfterLayout(targetChapterIndex, initialAnchorOffset);
             }
@@ -181,6 +292,27 @@ public final class ReaderContentController {
                 BookRecord loadedBook = runtime.databaseHelper.getBook(state.bookId);
                 List<ChapterRecord> loadedChapters = runtime.databaseHelper.getChapters(state.bookId, false);
                 List<ReplacementRuleRecord> loadedRules = runtime.databaseHelper.getReplacementRules(state.bookId);
+
+                // 在同一个后台任务中提前加载目标章节正文+替换处理，消除第二次 executor 调度的空隙
+                String prewarmedText = null;
+                int prewarmChapterIndex = -1;
+                if (loadedBook != null && !loadedChapters.isEmpty()) {
+                    int targetIndex = ui.clamp(
+                            navigation.chapterIndexFromOrder(loadedBook.progressIndex), 0, loadedChapters.size() - 1);
+                    if (targetIndex >= 0 && targetIndex < loadedChapters.size()) {
+                        ChapterRecord targetChapter = loadedChapters.get(targetIndex);
+                        ChapterRecord fullChapter = runtime.databaseHelper.getChapterContent(targetChapter.id);
+                        if (fullChapter != null) {
+                            targetChapter.bodyText = fullChapter.bodyText;
+                        }
+                        String body = targetChapter.bodyText == null ? "" : targetChapter.bodyText;
+                        prewarmedText = ReplacementEngine.apply(body, loadedRules);
+                        prewarmChapterIndex = targetIndex;
+                    }
+                }
+                final String finalPrewarmedText = prewarmedText;
+                final int finalPrewarmIndex = prewarmChapterIndex;
+
                 activity.runOnUiThread(() -> {
                     if (loadedBook == null || loadedChapters.isEmpty()) {
                         ui.showToast("书籍不存在或内容为空");
@@ -189,6 +321,7 @@ public final class ReaderContentController {
                     }
 
                     lastCachedBookId = state.bookId;
+                    isCacheHit = false;
                     cachedBook = loadedBook;
                     cachedChapters.clear();
                     cachedChapters.addAll(loadedChapters);
@@ -221,12 +354,33 @@ public final class ReaderContentController {
                     state.currentChapterIndex = targetChapterIndex;
                     int initialAnchorOffset = resolveInitialAnchorOffset(loadedBook.progressOffset);
                     state.sessionStartOffset = initialAnchorOffset;
+
+                    // 预先注入已处理好的正文到缓存，后续 prewarm/prefetch 只需分页
+                    if (finalPrewarmedText != null && finalPrewarmIndex >= 0) {
+                        synchronized (processedChapterLruCache) {
+                            processedChapterLruCache.put(finalPrewarmIndex, finalPrewarmedText);
+                        }
+                        synchronized (processedChapterLengthCache) {
+                            processedChapterLengthCache.put(finalPrewarmIndex, finalPrewarmedText.length());
+                        }
+                    }
+
                     if (!deferReflow) {
                         style.applyReaderSettings();
                     }
                     activity.onReaderBookLoaded();
+                    chrome.updateReaderHud();
+                    Log.d(TAG, "[时序] loadBook 缓存未命中 UI回调 - chapter=" + targetChapterIndex);
                     if (deferReflow) {
                         initialReflowDeferred = true;
+                        // 清除旧缓存，后台分页会用 layout 就绪后的尺寸重新构建
+                        cachedPageSlicesMap.clear();
+                        cachedLayoutSignature = null;
+                        // 正文已缓存，后台只需分页（不含解压+替换）
+                        prewarmChapterText(targetChapterIndex);
+                        prewarmAdjacentChapters(targetChapterIndex);
+                        Log.d(TAG, "[时序] 启动后台分页(缓存未命中) - chapter=" + targetChapterIndex);
+                        startBackgroundPagination(targetChapterIndex);
                     } else {
                         scheduleInitialReflowAfterLayout(targetChapterIndex, initialAnchorOffset);
                     }
@@ -350,8 +504,11 @@ public final class ReaderContentController {
     public List<PageSlice> getPagesForChapter(int chapterIndex) {
         ensurePaginationCacheMatchesLayout();
         if (cachedPageSlicesMap.containsKey(chapterIndex)) {
+            Log.d(TAG, "[时序] getPagesForChapter 缓存命中 - chapter=" + chapterIndex);
             return cachedPageSlicesMap.get(chapterIndex);
         }
+        Log.w(TAG, "[时序] getPagesForChapter 缓存未命中! 主线程分页 - chapter=" + chapterIndex);
+        final long t0 = System.currentTimeMillis();
         DisplayChapterText display = buildDisplayChapterText(chapterIndex);
         int pageWidth = getReaderPageTextWidth();
         int regularPageHeight = getRegularReaderPageHeight();
@@ -366,6 +523,7 @@ public final class ReaderContentController {
                 display.bodyStartIndex
         ));
         cachedPageSlicesMap.put(chapterIndex, pages);
+        Log.w(TAG, "[时序] 主线程分页完成 - chapter=" + chapterIndex + " 页数=" + pages.size() + " 耗时=" + (System.currentTimeMillis() - t0) + "ms");
         return pages;
     }
 
@@ -425,9 +583,11 @@ public final class ReaderContentController {
     }
 
     public String getProcessedChapterText(int chapterIndex) {
-        String cached = processedChapterLruCache.get(chapterIndex);
-        if (cached != null) {
-            return cached;
+        synchronized (processedChapterLruCache) {
+            String cached = processedChapterLruCache.get(chapterIndex);
+            if (cached != null) {
+                return cached;
+            }
         }
         ChapterRecord chapter = state.chapters.get(chapterIndex);
         if (chapter.bodyText == null) {
@@ -439,9 +599,113 @@ public final class ReaderContentController {
         }
         String body = chapter.bodyText == null ? "" : chapter.bodyText;
         String processed = ReplacementEngine.apply(body, state.replacementRules);
-        processedChapterLruCache.put(chapterIndex, processed);
-        processedChapterLengthCache.put(chapterIndex, processed.length());
+        synchronized (processedChapterLruCache) {
+            processedChapterLruCache.put(chapterIndex, processed);
+        }
+        synchronized (processedChapterLengthCache) {
+            processedChapterLengthCache.put(chapterIndex, processed.length());
+        }
         return processed;
+    }
+
+    /** 在后台预加载章节正文+替换处理，让动画结束后的排版能直接命中缓存。 */
+    /** 在后台预加载章节正文+替换处理，如果排版参数快照已就绪则同时异步分页。 */
+    public void prewarmChapterText(int chapterIndex) {
+        if (state.book == null || state.chapters.isEmpty()) return;
+        if (chapterIndex < 0 || chapterIndex >= state.chapters.size()) return;
+        int safeIndex = Math.max(0, Math.min(chapterIndex, state.chapters.size() - 1));
+        runtime.executor.execute(() -> {
+            // 如果正文已缓存（例如 DB 查询时已预处理），跳过加载直接分页
+            boolean textAlreadyCached;
+            synchronized (processedChapterLruCache) {
+                textAlreadyCached = processedChapterLruCache.get(safeIndex) != null;
+            }
+            if (!textAlreadyCached) {
+                ChapterRecord chapter = state.chapters.get(safeIndex);
+                if (chapter == null) return;
+                String body;
+                if (chapter.bodyText == null) {
+                    ChapterRecord fullChapter = runtime.databaseHelper.getChapterContent(chapter.id);
+                    if (fullChapter != null) {
+                        chapter.bodyText = fullChapter.bodyText;
+                        chapter.bodyHtml = fullChapter.bodyHtml;
+                    }
+                }
+                body = chapter.bodyText == null ? "" : chapter.bodyText;
+                String processed = ReplacementEngine.apply(body, state.replacementRules);
+                synchronized (processedChapterLruCache) {
+                    processedChapterLruCache.put(safeIndex, processed);
+                }
+                synchronized (processedChapterLengthCache) {
+                    processedChapterLengthCache.put(safeIndex, processed.length());
+                }
+            }
+
+            // 如果排版参数快照已就绪，继续异步分页
+            PaginationSnapshot snapshot = cachedPaginationSnapshot;
+            if (snapshot == null || snapshot.pageWidth <= 0) return;
+            if (cachedPageSlicesMap.containsKey(safeIndex)) return;
+
+            synchronized (cachedPageSlicesMap) {
+                if (cachedPageSlicesMap.containsKey(safeIndex)) return;
+            }
+            DisplayChapterText display = buildDisplayChapterTextForBackground(safeIndex, snapshot);
+            TextPaint paint = new TextPaint(snapshot.basePaint);
+            List<PageSlice> pages = sanitizePageSlices(ReaderPaginator.paginate(
+                    display.text, paint,
+                    snapshot.pageWidth, snapshot.regularPageHeight, snapshot.regularPageHeight,
+                    snapshot.lineSpacingExtra, display.bodyStartIndex));
+
+            final List<PageSlice> finalPages = pages;
+            final ReaderLayoutSignature capturedSig = snapshot.layoutSignature;
+            activity.runOnUiThread(() -> {
+                if (capturedSig != null && capturedSig.equals(cachedLayoutSignature)) {
+                    synchronized (cachedPageSlicesMap) {
+                        cachedPageSlicesMap.put(safeIndex, finalPages);
+                    }
+                }
+            });
+        });
+    }
+
+    /** 排版快照就绪后调用，补发被跳过的后台分页。
+     *  仅供 ModernReaderActivity.startFluidEnterAnimation 调用。 */
+    public void prewarmChapterTextAfterSnapshot() {
+        if (!initialReflowDeferred || state.book == null || state.chapters.isEmpty()) return;
+        int chapterIndex = state.currentChapterIndex;
+        if (chapterIndex < 0 || chapterIndex >= state.chapters.size()) return;
+        synchronized (cachedPageSlicesMap) {
+            if (cachedPageSlicesMap.containsKey(chapterIndex)) return;
+        }
+        prewarmChapterText(chapterIndex);
+    }
+
+    /** 后台预加载相邻章节正文，让翻页时无需等待解压+替换处理。 */
+    private void prewarmAdjacentChapters(int currentChapterIndex) {
+        int nextIndex = currentChapterIndex + 1;
+        if (nextIndex < 0 || nextIndex >= state.chapters.size()) return;
+        runtime.executor.execute(() -> {
+            synchronized (processedChapterLruCache) {
+                if (processedChapterLruCache.get(nextIndex) != null) return;
+            }
+            ChapterRecord chapter = state.chapters.get(nextIndex);
+            if (chapter == null) return;
+            if (chapter.bodyText == null) {
+                ChapterRecord fullChapter = runtime.databaseHelper.getChapterContent(chapter.id);
+                if (fullChapter != null) {
+                    chapter.bodyText = fullChapter.bodyText;
+                    chapter.bodyHtml = fullChapter.bodyHtml;
+                }
+            }
+            String body = chapter.bodyText == null ? "" : chapter.bodyText;
+            String processed = ReplacementEngine.apply(body, state.replacementRules);
+            synchronized (processedChapterLruCache) {
+                processedChapterLruCache.put(nextIndex, processed);
+            }
+            synchronized (processedChapterLengthCache) {
+                processedChapterLengthCache.put(nextIndex, processed.length());
+            }
+        });
     }
 
     private DisplayChapterText buildDisplayChapterText(int chapterIndex) {
@@ -546,6 +810,22 @@ public final class ReaderContentController {
         if (cached != null) {
             return cached;
         }
+        ChapterRecord ch = (chapterIndex >= 0 && chapterIndex < state.chapters.size())
+                ? state.chapters.get(chapterIndex) : null;
+        // 正文已加载：直接用字符串长度，不触发解压
+        if (ch != null && ch.bodyText != null && !ch.bodyText.isEmpty()) {
+            int length = ch.bodyText.length();
+            processedChapterLengthCache.put(chapterIndex, length);
+            return length;
+        }
+        // 正文未加载：用元数据 bodyTextSize 估算（UTF-8 中文约 3 字节/字符）
+        // 避免为计算全书进度解压全部章节（大书可达数千章）
+        if (ch != null && ch.bodyTextSize > 0) {
+            int estimated = (int) Math.max(1, ch.bodyTextSize / 3);
+            processedChapterLengthCache.put(chapterIndex, estimated);
+            return estimated;
+        }
+        // 回退：解压加载
         int length = getProcessedChapterText(chapterIndex).length();
         processedChapterLengthCache.put(chapterIndex, length);
         return length;
@@ -622,6 +902,11 @@ public final class ReaderContentController {
 
     public void scheduleReflowAfterLayout(int chapterIndex, int anchorOffset) {
         if (state.book == null || state.chapters.isEmpty()) {
+            return;
+        }
+        // 初始加载期间屏蔽系统触发的 reflow（insets 变化、尺寸变化），
+        // 防止动画期间不必要的 layout + 分页阻塞主线程导致掉帧
+        if (deferReflow || initialReflowDeferred) {
             return;
         }
         if (initialReflowPending) {
@@ -787,29 +1072,61 @@ public final class ReaderContentController {
             return;
         }
         final int generation = reflowGeneration;
-        final int chapterIndex = ui.clamp(pendingReflowChapterIndex, 0, state.chapters.size() - 1);
-        final int anchorOffset = Math.max(pendingReflowAnchorOffset, 0);
+        // pendingReflowChapterIndex=-1 表示尚未通过 performDeferredInitialReflow 设置，
+        // 此时使用 loadBook 已确定的 currentChapterIndex（后台分页可能在动画期间就触发 reflow）
+        final int chapterIndex = pendingReflowChapterIndex >= 0
+                ? ui.clamp(pendingReflowChapterIndex, 0, state.chapters.size() - 1)
+                : ui.clamp(state.currentChapterIndex, 0, state.chapters.size() - 1);
+        final int anchorOffset = pendingReflowChapterIndex >= 0
+                ? Math.max(pendingReflowAnchorOffset, 0)
+                : state.sessionStartOffset;
         final boolean shouldResetInitialPosition = hasInitialPositionRequest();
         final boolean completingInitialReflow = initialReflowPending;
         final Boolean previousDoublePageActive = lastAppliedDoublePageActive;
-        style.applyReaderSettings();
+        Log.d(TAG, "[时序] performScheduledReflow 开始 - chapter=" + chapterIndex + " gen=" + generation + " initialReflow=" + completingInitialReflow);
+        // 仅在初始加载早期跳过（动画期间），deferred reflow 时需调用以获取正确的系统 insets
+        if (!initialReflowDeferred) {
+            style.applyReaderSettings();
+        }
         final boolean nextDoublePageActive = isDoublePageActive();
         final boolean doublePageStateChanged = previousDoublePageActive == null
                 || previousDoublePageActive != nextDoublePageActive;
         runAfterNextPageLayout(generation, () -> {
             if (generation != reflowGeneration) {
+                Log.d(TAG, "[时序] performScheduledReflow 回调被丢弃 - gen不匹配");
                 return;
             }
+            Log.d(TAG, "[时序] performScheduledReflow layout就绪 - 检查缓存");
             if (doublePageStateChanged) {
                 clearPageCache();
                 paging.invalidatePreparedPagingSnapshots();
             }
             ensurePaginationCacheMatchesLayout();
+            boolean cacheHit = cachedPageSlicesMap.containsKey(chapterIndex);
+            Log.d(TAG, "[时序] 分页缓存检查 - chapter=" + chapterIndex + " hit=" + cacheHit + " initialReflow=" + completingInitialReflow);
+            if (completingInitialReflow && !cacheHit) {
+                Log.d(TAG, "[时序] 初始排版缓存未命中，等待后台分页...");
+                startBackgroundPagination(chapterIndex);
+                waitingForPaginationChapterIndex = chapterIndex;
+                lastAppliedDoublePageActive = isDoublePageActive();
+                final int savedGeneration = generation;
+                runtime.mainHandler.postDelayed(() -> {
+                    if (waitingForPaginationChapterIndex == chapterIndex) {
+                        Log.d(TAG, "[时序] 等待后台分页超时(800ms)，回退主线程分页");
+                        waitingForPaginationChapterIndex = -1;
+                        if (savedGeneration == reflowGeneration) {
+                            performScheduledReflow();
+                        }
+                    }
+                }, 800L);
+                return;
+            }
             navigation.openChapter(chapterIndex, anchorOffset, false, 0);
             if (shouldResetInitialPosition) {
                 resetInitialPositionRequest();
             }
             if (completingInitialReflow) {
+                Log.d(TAG, "[时序] 初始排版完成 - 触发前景淡入");
                 initialReflowPending = false;
                 if (onInitialReflowComplete != null) {
                     Runnable callback = onInitialReflowComplete;
@@ -965,6 +1282,119 @@ public final class ReaderContentController {
             return views.pageTitleCurrent.getTextSize();
         }
         return views.pageBodyCurrent == null ? 0f : views.pageBodyCurrent.getTextSize();
+    }
+
+    /** 主线程捕获的排版参数快照，供后台线程异步分页使用。 */
+    private static final class PaginationSnapshot {
+        final int pageWidth;
+        final int regularPageHeight;
+        final float lineSpacingExtra;
+        final TextPaint basePaint;
+        final ReaderLayoutSignature layoutSignature;
+        final Typeface titleTypeface;
+        final float titleTextSizePx;
+        final int titleBodyMarginPx;
+        final int indentPx;
+
+        PaginationSnapshot(int pageWidth, int regularPageHeight, float lineSpacingExtra,
+                           TextPaint basePaint, ReaderLayoutSignature layoutSignature,
+                           Typeface titleTypeface, float titleTextSizePx, int titleBodyMarginPx,
+                           int indentPx) {
+            this.pageWidth = pageWidth;
+            this.regularPageHeight = regularPageHeight;
+            this.lineSpacingExtra = lineSpacingExtra;
+            this.basePaint = new TextPaint(basePaint);
+            this.layoutSignature = layoutSignature;
+            this.titleTypeface = titleTypeface;
+            this.titleTextSizePx = titleTextSizePx;
+            this.titleBodyMarginPx = titleBodyMarginPx;
+            this.indentPx = indentPx;
+        }
+    }
+
+    private volatile PaginationSnapshot cachedPaginationSnapshot;
+
+    public void capturePaginationSnapshot() {
+        if (views.pageBodyCurrent == null || views.pageBodyCurrent.getWidth() <= 0) return;
+        cachedPaginationSnapshot = new PaginationSnapshot(
+                getReaderPageTextWidth(),
+                getRegularReaderPageHeight(),
+                views.pageBodyCurrent.getLineSpacingExtra(),
+                views.pageBodyCurrent.getPaint(),
+                captureCurrentLayoutSignature(),
+                resolveChapterTitleTypeface(),
+                resolveChapterTitleTextSizePx(),
+                getChapterTitleBodyMarginPx(),
+                computeParagraphIndentPx()
+        );
+    }
+
+    /** 后台线程安全版 buildDisplayChapterText，使用快照中的 view 参数。 */
+    private DisplayChapterText buildDisplayChapterTextForBackground(int chapterIndex, PaginationSnapshot snapshot) {
+        CharSequence body = buildDisplayBodyTextForBackground(chapterIndex, snapshot.indentPx);
+        ChapterRecord chapter = state.chapters.get(chapterIndex);
+        if (!runtime.settingsStore.isChapterTitleVisible() || !hasDisplayableChapterTitle(chapter)) {
+            return new DisplayChapterText(body, 0);
+        }
+
+        SpannableStringBuilder builder = new SpannableStringBuilder();
+        String title = chapter.title.trim();
+        int titleStart = builder.length();
+        builder.append(title);
+        int titleEnd = builder.length();
+        builder.append('\n');
+        int titleParagraphEnd = builder.length();
+        builder.setSpan(
+                new ReaderTitleSpan(snapshot.titleTypeface, snapshot.titleTextSizePx),
+                titleStart, titleEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        if ("center".equals(runtime.settingsStore.getChapterTitleAlignment())) {
+            builder.setSpan(new AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER),
+                    titleStart, titleParagraphEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+
+        int spacerStart = builder.length();
+        builder.append(' ');
+        int spacerEnd = builder.length();
+        builder.append('\n');
+        builder.setSpan(new ForegroundColorSpan(Color.TRANSPARENT),
+                spacerStart, spacerEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        builder.setSpan(new FixedLineHeightSpan(snapshot.titleBodyMarginPx),
+                spacerStart, spacerEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+        int bodyStartIndex = builder.length();
+        builder.append(body);
+        return new DisplayChapterText(builder, bodyStartIndex);
+    }
+
+    /** 后台线程安全版 buildDisplayBodyText，getProcessedChapterText 已加同步锁。 */
+    private CharSequence buildDisplayBodyTextForBackground(int chapterIndex, int indentPx) {
+        String processed = getProcessedChapterText(chapterIndex);
+        int paragraphSpacingPx = computeParagraphSpacingPx();
+        if (processed.isEmpty()) return processed;
+
+        SpannableString spannable = new SpannableString(processed);
+        int start = 0;
+        int length = processed.length();
+        while (start < length) {
+            int end = start;
+            while (end < length && processed.charAt(end) != '\n') end++;
+            int paragraphLimit = end < length ? end + 1 : end;
+            if (hasVisibleParagraphText(processed, start, end)) {
+                if (indentPx > 0) {
+                    spannable.setSpan(new LeadingMarginSpan.Standard(indentPx, 0),
+                            start, paragraphLimit, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                }
+                if (end < length && isNextLineVisible(processed, paragraphLimit) && paragraphSpacingPx > 0) {
+                    spannable.setSpan(new ReaderParagraphBottomSpacingSpan(paragraphSpacingPx),
+                            end, paragraphLimit, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                }
+            } else if (end < length && paragraphSpacingPx > 0) {
+                spannable.setSpan(new FixedLineHeightSpan(paragraphSpacingPx),
+                        start, paragraphLimit, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            start = paragraphLimit;
+        }
+        return spannable;
     }
 
     private static final class DisplayChapterText {
