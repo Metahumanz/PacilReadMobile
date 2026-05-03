@@ -513,12 +513,8 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         });
         views.themeToggleButton.setOnClickListener(v -> chrome.toggleReaderUiTheme());
         views.ttsButton.setOnClickListener(v -> {
-            if (state.ttsActive || state.ttsPaused) {
-                tts.toggleTts();
-            } else {
-                dialogSupport.setNextDismissSource(v);
-                tts.showTtsDialog();
-            }
+            dialogSupport.setNextDismissSource(v);
+            tts.showTtsDialog();
         });
         views.autoPageButton.setOnClickListener(v -> {
             dialogSupport.setNextDismissSource(v);
@@ -821,12 +817,8 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 autoPage.showAutoPageDialog();
                 break;
             case "听书":
-                if (state.ttsActive || state.ttsPaused) {
-                    tts.toggleTts();
-                } else {
-                    dialogSupport.setNextDismissSource(source);
-                    tts.showTtsDialog();
-                }
+                dialogSupport.setNextDismissSource(source);
+                tts.showTtsDialog();
                 break;
             case "书签":
                 dialogSupport.setNextDismissSource(source);
