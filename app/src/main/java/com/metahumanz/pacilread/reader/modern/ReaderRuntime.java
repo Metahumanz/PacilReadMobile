@@ -16,6 +16,7 @@ import java.util.concurrent.Executors;
 
 public final class ReaderRuntime {
     public final ExecutorService executor = Executors.newSingleThreadExecutor();
+    public final ExecutorService paginationExecutor = Executors.newSingleThreadExecutor();
     public final ExecutorService ttsExecutor = Executors.newSingleThreadExecutor();
     public final ExecutorService synthesisExecutor = Executors.newSingleThreadExecutor();
     public final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -39,6 +40,7 @@ public final class ReaderRuntime {
         mainHandler.removeCallbacksAndMessages(null);
         systemTtsClient.shutdown();
         executor.shutdownNow();
+        paginationExecutor.shutdownNow();
         ttsExecutor.shutdownNow();
         synthesisExecutor.shutdownNow();
         mimoTtsClient.cancel();
