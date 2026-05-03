@@ -26,6 +26,9 @@ public final class LaunchSourceTransition {
     private static final String LEGACY_EXTRA_TOP = "com.metahumanz.pacilread.EXTRA_READER_SOURCE_TOP";
     private static final String LEGACY_EXTRA_RIGHT = "com.metahumanz.pacilread.EXTRA_READER_SOURCE_RIGHT";
     private static final String LEGACY_EXTRA_BOTTOM = "com.metahumanz.pacilread.EXTRA_READER_SOURCE_BOTTOM";
+    private static final long SNAPSHOT_MAX_AGE_MS = 24L * 60L * 60L * 1000L;
+    private static final long SNAPSHOT_CACHE_SOFT_LIMIT_BYTES = 16L * 1024L * 1024L;
+    private static final long SNAPSHOT_CACHE_TARGET_BYTES = 8L * 1024L * 1024L;
 
     private LaunchSourceTransition() {
     }
@@ -159,9 +162,13 @@ public final class LaunchSourceTransition {
         Bitmap snapshot = null;
         String snapshotPath = intent == null ? null : intent.getStringExtra(EXTRA_SNAPSHOT_PATH);
         if (snapshotPath != null && !snapshotPath.isBlank()) {
-            snapshot = BitmapFactory.decodeFile(snapshotPath);
-            if (snapshot != null) {
-                new File(snapshotPath).delete();
+            File snapshotFile = new File(snapshotPath);
+            try {
+                snapshot = BitmapFactory.decodeFile(snapshotPath);
+            } finally {
+                if (snapshotFile.exists()) {
+                    snapshotFile.delete();
+                }
             }
         }
         return new Source(bounds, snapshot);
@@ -581,6 +588,7 @@ public final class LaunchSourceTransition {
         if (!dir.exists() && !dir.mkdirs()) {
             return null;
         }
+        cleanupSnapshotCache(dir);
         File file;
         try {
             file = File.createTempFile("source_", ".png", dir);
@@ -588,10 +596,72 @@ public final class LaunchSourceTransition {
             return null;
         }
         try (FileOutputStream output = new FileOutputStream(file)) {
-            return snapshot.compress(Bitmap.CompressFormat.PNG, 100, output) ? file.getAbsolutePath() : null;
+            if (snapshot.compress(Bitmap.CompressFormat.PNG, 100, output)) {
+                return file.getAbsolutePath();
+            }
+            file.delete();
+            return null;
         } catch (IOException ignored) {
+            file.delete();
             return null;
         }
+    }
+
+    private static void cleanupSnapshotCache(File dir) {
+        File[] files = dir == null ? null : dir.listFiles();
+        if (files == null) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        long total = 0L;
+        for (File file : files) {
+            if (!isSnapshotCacheFile(file)) {
+                continue;
+            }
+            if (now - file.lastModified() > SNAPSHOT_MAX_AGE_MS) {
+                file.delete();
+                continue;
+            }
+            total += file.length();
+        }
+        while (total > SNAPSHOT_CACHE_SOFT_LIMIT_BYTES) {
+            File oldest = findOldestSnapshotCacheFile(dir);
+            if (oldest == null) {
+                return;
+            }
+            long size = oldest.length();
+            if (!oldest.delete()) {
+                return;
+            }
+            total -= size;
+            if (total <= SNAPSHOT_CACHE_TARGET_BYTES) {
+                return;
+            }
+        }
+    }
+
+    private static File findOldestSnapshotCacheFile(File dir) {
+        File[] files = dir == null ? null : dir.listFiles();
+        if (files == null) {
+            return null;
+        }
+        File oldest = null;
+        for (File file : files) {
+            if (!isSnapshotCacheFile(file)) {
+                continue;
+            }
+            if (oldest == null || file.lastModified() < oldest.lastModified()) {
+                oldest = file;
+            }
+        }
+        return oldest;
+    }
+
+    private static boolean isSnapshotCacheFile(File file) {
+        return file != null
+                && file.isFile()
+                && file.getName().startsWith("source_")
+                && file.getName().endsWith(".png");
     }
 
     private static int[] untransformedLocationOnScreen(View targetView) {

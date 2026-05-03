@@ -3,9 +3,11 @@ package com.metahumanz.pacilread.storage;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.os.Build;
 import android.util.Log;
 
 import com.metahumanz.pacilread.importer.EpubChapterParser;
@@ -33,10 +35,12 @@ import java.io.OutputStreamWriter;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -1829,10 +1833,35 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         long shmSize = shmFile.exists() ? shmFile.length() : 0L;
         long dbTotal = dbSize + walSize + shmSize;
 
-        long chapterTextSize = dirSize(getChapterTextDir());
-        long coversSize = dirSize(new File(appContext.getFilesDir(), "covers"));
-        long booksSize = dirSize(new File(appContext.getFilesDir(), "books"));
-        long total = dbTotal + chapterTextSize + coversSize + booksSize;
+        File filesDir = appContext.getFilesDir();
+        File chapterTextDir = getChapterTextDir();
+        File coversDir = new File(filesDir, "covers");
+        File booksDir = new File(filesDir, "books");
+        File backgroundsDir = new File(filesDir, "backgrounds");
+        File databasesDir = new File(appContext.getApplicationInfo().dataDir, "databases");
+        File sharedPrefsDir = new File(appContext.getApplicationInfo().dataDir, "shared_prefs");
+
+        long chapterTextSize = dirSize(chapterTextDir);
+        long coversSize = dirSize(coversDir);
+        long booksSize = dirSize(booksDir);
+        long backgroundsSize = dirSize(backgroundsDir);
+        long otherFilesSize = dirChildrenSizeExcluding(
+                filesDir,
+                chapterTextDir,
+                coversDir,
+                booksDir,
+                backgroundsDir
+        );
+        long otherDatabaseSize = dirChildrenSizeExcluding(databasesDir, dbFile, walFile, shmFile);
+        long cacheSize = dirSize(appContext.getCacheDir());
+        long codeCacheSize = dirSize(getCodeCacheDirCompat());
+        long sharedPrefsSize = dirSize(sharedPrefsDir);
+        long noBackupSize = dirSize(getNoBackupFilesDirCompat());
+        long readingDataTotal = dbTotal + otherDatabaseSize + chapterTextSize + coversSize
+                + booksSize + backgroundsSize + otherFilesSize;
+        long privateDataTotal = readingDataTotal + cacheSize + codeCacheSize
+                + sharedPrefsSize + noBackupSize;
+        long installedPackageSize = installedPackageSizeEstimate();
 
         StringBuilder sb = new StringBuilder();
         sb.append("数据库文件 ").append(formatFileSize(dbTotal))
@@ -1841,8 +1870,22 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 .append(" · SHM ").append(formatFileSize(shmSize)).append("）")
                 .append("\n章节正文文件 ").append(formatFileSize(chapterTextSize))
                 .append("\n封面缓存 ").append(formatFileSize(coversSize))
-                .append("\n源文件缓存 ").append(formatFileSize(booksSize));
-        sb.append("\n本地存储合计 ").append(formatFileSize(total));
+                .append("\n源文件缓存 ").append(formatFileSize(booksSize))
+                .append("\n自定义背景 ").append(formatFileSize(backgroundsSize))
+                .append("\n其它 files ").append(formatFileSize(otherFilesSize));
+        if (otherDatabaseSize > 0L) {
+            sb.append("\n其它数据库文件 ").append(formatFileSize(otherDatabaseSize));
+        }
+        sb.append("\n阅读数据小计 ").append(formatFileSize(readingDataTotal));
+        sb.append("\n──────────────────");
+        sb.append("\n缓存目录 ").append(formatFileSize(cacheSize));
+        appendDirectoryChildrenBreakdown(sb, appContext.getCacheDir(), "  ");
+        sb.append("\n代码缓存 ").append(formatFileSize(codeCacheSize))
+                .append("\n偏好设置 ").append(formatFileSize(sharedPrefsSize))
+                .append("\nNo backup ").append(formatFileSize(noBackupSize));
+        sb.append("\n应用私有数据合计 ").append(formatFileSize(privateDataTotal));
+        sb.append("\n安装包/库文件估算 ").append(formatFileSize(installedPackageSize));
+        sb.append("\n系统口径估算合计 ").append(formatFileSize(privateDataTotal + installedPackageSize));
         sb.append("\n──────────────────");
         sb.append(getDatabaseContentBreakdown());
         return sb.toString();
@@ -1955,22 +1998,170 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     }
 
     private long dirSize(File dir) {
-        if (dir == null || !dir.exists() || !dir.isDirectory()) {
+        return pathSize(dir);
+    }
+
+    private long pathSize(File file) {
+        if (file == null || !file.exists()) {
+            return 0L;
+        }
+        if (file.isFile()) {
+            return file.length();
+        }
+        if (!file.isDirectory()) {
             return 0L;
         }
         long total = 0L;
-        File[] files = dir.listFiles();
+        File[] files = file.listFiles();
         if (files == null) {
             return 0L;
         }
-        for (File f : files) {
-            if (f.isFile()) {
-                total += f.length();
-            } else if (f.isDirectory()) {
-                total += dirSize(f);
-            }
+        for (File child : files) {
+            total += pathSize(child);
         }
         return total;
+    }
+
+    private long dirChildrenSizeExcluding(File parent, File... excluded) {
+        if (parent == null || !parent.exists() || !parent.isDirectory()) {
+            return 0L;
+        }
+        long total = 0L;
+        File[] children = parent.listFiles();
+        if (children == null) {
+            return 0L;
+        }
+        for (File child : children) {
+            if (matchesAnyPath(child, excluded)) {
+                continue;
+            }
+            total += pathSize(child);
+        }
+        return total;
+    }
+
+    private boolean matchesAnyPath(File file, File... candidates) {
+        if (file == null || candidates == null) {
+            return false;
+        }
+        for (File candidate : candidates) {
+            if (samePath(file, candidate)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean samePath(File first, File second) {
+        if (first == null || second == null) {
+            return false;
+        }
+        try {
+            return first.getCanonicalFile().equals(second.getCanonicalFile());
+        } catch (IOException ignored) {
+            return first.getAbsolutePath().equals(second.getAbsolutePath());
+        }
+    }
+
+    private File getCodeCacheDirCompat() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            return appContext.getCodeCacheDir();
+        }
+        return new File(appContext.getApplicationInfo().dataDir, "code_cache");
+    }
+
+    private File getNoBackupFilesDirCompat() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            return appContext.getNoBackupFilesDir();
+        }
+        return new File(appContext.getApplicationInfo().dataDir, "no_backup");
+    }
+
+    private long installedPackageSizeEstimate() {
+        ApplicationInfo info = appContext.getApplicationInfo();
+        Set<String> seenPaths = new HashSet<>();
+        long total = addUniquePathSize(seenPaths, info.sourceDir == null ? null : new File(info.sourceDir));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && info.splitSourceDirs != null) {
+            for (String splitPath : info.splitSourceDirs) {
+                total += addUniquePathSize(seenPaths, splitPath == null ? null : new File(splitPath));
+            }
+        }
+        total += addUniquePathSize(seenPaths, info.nativeLibraryDir == null ? null : new File(info.nativeLibraryDir));
+        return total;
+    }
+
+    private long addUniquePathSize(Set<String> seenPaths, File file) {
+        if (file == null || !file.exists()) {
+            return 0L;
+        }
+        String path;
+        try {
+            path = file.getCanonicalPath();
+        } catch (IOException ignored) {
+            path = file.getAbsolutePath();
+        }
+        if (!seenPaths.add(path)) {
+            return 0L;
+        }
+        return pathSize(file);
+    }
+
+    private void appendDirectoryChildrenBreakdown(StringBuilder sb, File dir, String indent) {
+        if (dir == null || !dir.exists() || !dir.isDirectory()) {
+            return;
+        }
+        File[] children = dir.listFiles();
+        if (children == null || children.length == 0) {
+            return;
+        }
+        List<FileSizeEntry> entries = new ArrayList<>();
+        for (File child : children) {
+            long size = pathSize(child);
+            if (size > 0L) {
+                entries.add(new FileSizeEntry(child, size));
+            }
+        }
+        if (entries.isEmpty()) {
+            return;
+        }
+        entries.sort((left, right) -> Long.compare(right.size, left.size));
+        int limit = Math.min(entries.size(), 8);
+        long hiddenSize = 0L;
+        for (int i = 0; i < entries.size(); i++) {
+            FileSizeEntry entry = entries.get(i);
+            if (i < limit) {
+                sb.append("\n").append(indent)
+                        .append(cacheChildLabel(entry.file))
+                        .append(" ")
+                        .append(formatFileSize(entry.size));
+            } else {
+                hiddenSize += entry.size;
+            }
+        }
+        if (hiddenSize > 0L) {
+            sb.append("\n").append(indent)
+                    .append("其它缓存项 ")
+                    .append(formatFileSize(hiddenSize));
+        }
+    }
+
+    private String cacheChildLabel(File file) {
+        String name = file.getName();
+        if ("backup".equals(name)) return "WebDAV备份临时 backup";
+        if ("backup_restore".equals(name)) return "WebDAV恢复临时 backup_restore";
+        if ("launch_sources".equals(name)) return "阅读页转场截图 launch_sources";
+        if (name.startsWith("restore_")) return "WebDAV恢复临时 " + name;
+        return name;
+    }
+
+    private static final class FileSizeEntry {
+        final File file;
+        final long size;
+
+        FileSizeEntry(File file, long size) {
+            this.file = file;
+            this.size = size;
+        }
     }
 
     private static String formatFileSize(long bytes) {
