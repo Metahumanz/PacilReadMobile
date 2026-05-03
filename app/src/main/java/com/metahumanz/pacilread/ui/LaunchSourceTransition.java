@@ -57,48 +57,56 @@ public final class LaunchSourceTransition {
         final Interpolator interpolator;
         final boolean enterUsesSnapshotOverlay;
         final boolean enterFadesContent;
+        final boolean enterAnimatesLiveContent;
 
         private Options(
                 long durationMs,
                 float snapshotFadeStartFraction,
                 Interpolator interpolator,
                 boolean enterUsesSnapshotOverlay,
-                boolean enterFadesContent
+                boolean enterFadesContent,
+                boolean enterAnimatesLiveContent
         ) {
             this.durationMs = durationMs;
             this.snapshotFadeStartFraction = clampOption(snapshotFadeStartFraction, 0f, 1f);
             this.interpolator = interpolator;
             this.enterUsesSnapshotOverlay = enterUsesSnapshotOverlay;
             this.enterFadesContent = enterFadesContent;
+            this.enterAnimatesLiveContent = enterAnimatesLiveContent;
         }
 
         public static Options defaults() {
-            return new Options(260L, 0.5f, new DecelerateInterpolator(), true, true);
+            return new Options(260L, 0.5f, new DecelerateInterpolator(), true, true, true);
         }
 
         public Options withDuration(long durationMs) {
             return new Options(durationMs, snapshotFadeStartFraction, interpolator,
-                    enterUsesSnapshotOverlay, enterFadesContent);
+                    enterUsesSnapshotOverlay, enterFadesContent, enterAnimatesLiveContent);
         }
 
         public Options withSnapshotFadeStartFraction(float fraction) {
             return new Options(durationMs, fraction, interpolator,
-                    enterUsesSnapshotOverlay, enterFadesContent);
+                    enterUsesSnapshotOverlay, enterFadesContent, enterAnimatesLiveContent);
         }
 
         public Options withEnterSnapshotOverlay(boolean useSnapshotOverlay) {
             return new Options(durationMs, snapshotFadeStartFraction, interpolator,
-                    useSnapshotOverlay, enterFadesContent);
+                    useSnapshotOverlay, enterFadesContent, enterAnimatesLiveContent);
         }
 
         public Options withEnterContentFade(boolean fadeContent) {
             return new Options(durationMs, snapshotFadeStartFraction, interpolator,
-                    enterUsesSnapshotOverlay, fadeContent);
+                    enterUsesSnapshotOverlay, fadeContent, enterAnimatesLiveContent);
         }
 
         public Options withInterpolator(Interpolator newInterpolator) {
             return new Options(durationMs, snapshotFadeStartFraction, newInterpolator,
-                    enterUsesSnapshotOverlay, enterFadesContent);
+                    enterUsesSnapshotOverlay, enterFadesContent, enterAnimatesLiveContent);
+        }
+
+        public Options withEnterAnimatesLiveContent(boolean animatesLiveContent) {
+            return new Options(durationMs, snapshotFadeStartFraction, interpolator,
+                    enterUsesSnapshotOverlay, enterFadesContent, animatesLiveContent);
         }
 
         private static float clampOption(float value, float min, float max) {
@@ -441,7 +449,69 @@ public final class LaunchSourceTransition {
         float startTranslationX = sourceCenterX - pivotX;
         float startTranslationY = sourceCenterY - pivotY;
 
-        // 设置起始状态：从来源位置/尺寸开始
+        // 快照独享模式：前台只动画 snapshot 从卡片放大到全屏，真实阅读页保持静止透明在背后准备
+        boolean snapshotOnly = options.enterUsesSnapshotOverlay
+                && !options.enterAnimatesLiveContent
+                && source.snapshot != null;
+
+        if (snapshotOnly) {
+            targetView.setScaleX(1f);
+            targetView.setScaleY(1f);
+            targetView.setTranslationX(0f);
+            targetView.setTranslationY(0f);
+            targetView.setAlpha(0f);
+            targetView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+
+            ImageView snapshotView = createEnterSnapshotOverlay(
+                    targetView, source, targetLocation, sourceScaleX, sourceScaleY,
+                    startTranslationX, startTranslationY, pivotX, pivotY);
+            if (snapshotView != null) {
+                snapshotView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+                float fadeStart = options.snapshotFadeStartFraction;
+
+                ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+                animator.setDuration(options.durationMs);
+                animator.setInterpolator(options.interpolator);
+                animator.addUpdateListener(animation -> {
+                    float fraction = animation.getAnimatedFraction();
+
+                    // snapshot 从来源 bounds 放大到全屏
+                    snapshotView.setScaleX(lerp(sourceScaleX, 1f, fraction));
+                    snapshotView.setScaleY(lerp(sourceScaleY, 1f, fraction));
+                    snapshotView.setTranslationX(lerp(startTranslationX, 0f, fraction));
+                    snapshotView.setTranslationY(lerp(startTranslationY, 0f, fraction));
+
+                    // snapshot 后段淡出，真实阅读页同一阶段淡入
+                    float snapshotAlpha = fraction < fadeStart
+                            ? 1f
+                            : lerp(1f, 0f, (fraction - fadeStart) / Math.max(1f - fadeStart, 0.001f));
+                    snapshotView.setAlpha(clampAlpha(snapshotAlpha));
+                    targetView.setAlpha(clampAlpha(1f - snapshotAlpha));
+                });
+                animator.addListener(new android.animation.AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(android.animation.Animator animation) {
+                        if (snapshotView.getParent() instanceof ViewGroup) {
+                            ((ViewGroup) snapshotView.getParent()).getOverlay().remove(snapshotView);
+                        }
+                        targetView.setAlpha(1f);
+                        targetView.setScaleX(1f);
+                        targetView.setScaleY(1f);
+                        targetView.setTranslationX(0f);
+                        targetView.setTranslationY(0f);
+                        targetView.setLayerType(View.LAYER_TYPE_NONE, null);
+                        if (onComplete != null) {
+                            onComplete.run();
+                        }
+                    }
+                });
+                animator.start();
+                return true;
+            }
+            // snapshot overlay 创建失败，回退到下方 live-root 缩放路径
+        }
+
+        // 设置起始状态：从来源位置/尺寸开始（原有 live-root 缩放路径）
         targetView.setScaleX(sourceScaleX);
         targetView.setScaleY(sourceScaleY);
         targetView.setTranslationX(startTranslationX);

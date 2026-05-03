@@ -309,22 +309,29 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         readerEnterAnimationStarted = true;
         Log.d("PacilReadReader", "[时序] 流体进入动画开始");
         views.readerRoot.setVisibility(View.VISIBLE);
-        // 不再隐藏前景：文字与背景一起缩放，正文就绪后直接显示
-        if (content != null) {
-            content.capturePaginationSnapshot();
-            content.prewarmChapterTextAfterSnapshot();
-        }
+        // 初始透明：前台由 snapshot overlay 承揽放大动画，真实阅读页在背后准备正文
+        views.readerRoot.setAlpha(0f);
         boolean started = LaunchSourceTransition.animateEnterFromSource(
                 views.readerRoot,
                 launchSource,
                 LaunchSourceTransition.Options.defaults()
                         .withDuration(ENTER_TRANSITION_DURATION_MS)
-                        .withEnterSnapshotOverlay(false)
-                        .withEnterContentFade(false)
+                        .withEnterSnapshotOverlay(true)
+                        .withEnterContentFade(true)
+                        .withEnterAnimatesLiveContent(false)
+                        .withSnapshotFadeStartFraction(0.72f)
                         .withInterpolator(new android.view.animation.PathInterpolator(0.25f, 0.1f, 0.25f, 1.0f)),
                 this::finishReaderEnterForegroundFade
         );
-        if (!started) {
+        if (started) {
+            // 动画启动后再触发分页准备，避免首帧被分页快照/布局工作抢占
+            views.readerRoot.postOnAnimation(() -> {
+                if (content != null) {
+                    content.capturePaginationSnapshot();
+                    content.prewarmChapterTextAfterSnapshot();
+                }
+            });
+        } else {
             finishReaderEnterForegroundFade();
         }
         return started;
