@@ -26,6 +26,9 @@ public final class LaunchSourceTransition {
     private static final String LEGACY_EXTRA_TOP = "com.metahumanz.pacilread.EXTRA_READER_SOURCE_TOP";
     private static final String LEGACY_EXTRA_RIGHT = "com.metahumanz.pacilread.EXTRA_READER_SOURCE_RIGHT";
     private static final String LEGACY_EXTRA_BOTTOM = "com.metahumanz.pacilread.EXTRA_READER_SOURCE_BOTTOM";
+    private static final long SNAPSHOT_MAX_AGE_MS = 24L * 60L * 60L * 1000L;
+    private static final long SNAPSHOT_CACHE_SOFT_LIMIT_BYTES = 16L * 1024L * 1024L;
+    private static final long SNAPSHOT_CACHE_TARGET_BYTES = 8L * 1024L * 1024L;
 
     private LaunchSourceTransition() {
     }
@@ -54,43 +57,56 @@ public final class LaunchSourceTransition {
         final Interpolator interpolator;
         final boolean enterUsesSnapshotOverlay;
         final boolean enterFadesContent;
+        final boolean enterAnimatesLiveContent;
 
         private Options(
                 long durationMs,
                 float snapshotFadeStartFraction,
                 Interpolator interpolator,
                 boolean enterUsesSnapshotOverlay,
-                boolean enterFadesContent
+                boolean enterFadesContent,
+                boolean enterAnimatesLiveContent
         ) {
             this.durationMs = durationMs;
             this.snapshotFadeStartFraction = clampOption(snapshotFadeStartFraction, 0f, 1f);
             this.interpolator = interpolator;
             this.enterUsesSnapshotOverlay = enterUsesSnapshotOverlay;
             this.enterFadesContent = enterFadesContent;
+            this.enterAnimatesLiveContent = enterAnimatesLiveContent;
         }
 
         public static Options defaults() {
-            return new Options(260L, 0.5f, new DecelerateInterpolator(), true, true);
+            return new Options(260L, 0.5f, new DecelerateInterpolator(), true, true, true);
         }
 
         public Options withDuration(long durationMs) {
             return new Options(durationMs, snapshotFadeStartFraction, interpolator,
-                    enterUsesSnapshotOverlay, enterFadesContent);
+                    enterUsesSnapshotOverlay, enterFadesContent, enterAnimatesLiveContent);
         }
 
         public Options withSnapshotFadeStartFraction(float fraction) {
             return new Options(durationMs, fraction, interpolator,
-                    enterUsesSnapshotOverlay, enterFadesContent);
+                    enterUsesSnapshotOverlay, enterFadesContent, enterAnimatesLiveContent);
         }
 
         public Options withEnterSnapshotOverlay(boolean useSnapshotOverlay) {
             return new Options(durationMs, snapshotFadeStartFraction, interpolator,
-                    useSnapshotOverlay, enterFadesContent);
+                    useSnapshotOverlay, enterFadesContent, enterAnimatesLiveContent);
         }
 
         public Options withEnterContentFade(boolean fadeContent) {
             return new Options(durationMs, snapshotFadeStartFraction, interpolator,
-                    enterUsesSnapshotOverlay, fadeContent);
+                    enterUsesSnapshotOverlay, fadeContent, enterAnimatesLiveContent);
+        }
+
+        public Options withInterpolator(Interpolator newInterpolator) {
+            return new Options(durationMs, snapshotFadeStartFraction, newInterpolator,
+                    enterUsesSnapshotOverlay, enterFadesContent, enterAnimatesLiveContent);
+        }
+
+        public Options withEnterAnimatesLiveContent(boolean animatesLiveContent) {
+            return new Options(durationMs, snapshotFadeStartFraction, interpolator,
+                    enterUsesSnapshotOverlay, enterFadesContent, animatesLiveContent);
         }
 
         private static float clampOption(float value, float min, float max) {
@@ -154,9 +170,13 @@ public final class LaunchSourceTransition {
         Bitmap snapshot = null;
         String snapshotPath = intent == null ? null : intent.getStringExtra(EXTRA_SNAPSHOT_PATH);
         if (snapshotPath != null && !snapshotPath.isBlank()) {
-            snapshot = BitmapFactory.decodeFile(snapshotPath);
-            if (snapshot != null) {
-                new File(snapshotPath).delete();
+            File snapshotFile = new File(snapshotPath);
+            try {
+                snapshot = BitmapFactory.decodeFile(snapshotPath);
+            } finally {
+                if (snapshotFile.exists()) {
+                    snapshotFile.delete();
+                }
             }
         }
         return new Source(bounds, snapshot);
@@ -429,50 +449,117 @@ public final class LaunchSourceTransition {
         float startTranslationX = sourceCenterX - pivotX;
         float startTranslationY = sourceCenterY - pivotY;
 
-        // 设置起始状态：从来源位置/尺寸开始
+        // 快照独享模式：前台只动画 snapshot 从卡片放大到全屏，真实阅读页保持静止透明在背后准备
+        boolean snapshotOnly = options.enterUsesSnapshotOverlay
+                && !options.enterAnimatesLiveContent
+                && source.snapshot != null;
+
+        if (snapshotOnly) {
+            targetView.setScaleX(1f);
+            targetView.setScaleY(1f);
+            targetView.setTranslationX(0f);
+            targetView.setTranslationY(0f);
+            targetView.setAlpha(0f);
+            targetView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+
+            ImageView snapshotView = createEnterSnapshotOverlay(
+                    targetView, source, targetLocation, sourceScaleX, sourceScaleY,
+                    startTranslationX, startTranslationY, pivotX, pivotY);
+            if (snapshotView != null) {
+                snapshotView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+                float fadeStart = options.snapshotFadeStartFraction;
+
+                ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+                animator.setDuration(options.durationMs);
+                animator.setInterpolator(options.interpolator);
+                animator.addUpdateListener(animation -> {
+                    float fraction = animation.getAnimatedFraction();
+
+                    // snapshot 从来源 bounds 放大到全屏
+                    snapshotView.setScaleX(lerp(sourceScaleX, 1f, fraction));
+                    snapshotView.setScaleY(lerp(sourceScaleY, 1f, fraction));
+                    snapshotView.setTranslationX(lerp(startTranslationX, 0f, fraction));
+                    snapshotView.setTranslationY(lerp(startTranslationY, 0f, fraction));
+
+                    // snapshot 后段淡出，真实阅读页同一阶段淡入
+                    float snapshotAlpha = fraction < fadeStart
+                            ? 1f
+                            : lerp(1f, 0f, (fraction - fadeStart) / Math.max(1f - fadeStart, 0.001f));
+                    snapshotView.setAlpha(clampAlpha(snapshotAlpha));
+                    targetView.setAlpha(clampAlpha(1f - snapshotAlpha));
+                });
+                animator.addListener(new android.animation.AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(android.animation.Animator animation) {
+                        if (snapshotView.getParent() instanceof ViewGroup) {
+                            ((ViewGroup) snapshotView.getParent()).getOverlay().remove(snapshotView);
+                        }
+                        targetView.setAlpha(1f);
+                        targetView.setScaleX(1f);
+                        targetView.setScaleY(1f);
+                        targetView.setTranslationX(0f);
+                        targetView.setTranslationY(0f);
+                        targetView.setLayerType(View.LAYER_TYPE_NONE, null);
+                        if (onComplete != null) {
+                            onComplete.run();
+                        }
+                    }
+                });
+                animator.start();
+                return true;
+            }
+            // snapshot overlay 创建失败，回退到下方 live-root 缩放路径
+        }
+
+        // 设置起始状态：从来源位置/尺寸开始（原有 live-root 缩放路径）
         targetView.setScaleX(sourceScaleX);
         targetView.setScaleY(sourceScaleY);
         targetView.setTranslationX(startTranslationX);
         targetView.setTranslationY(startTranslationY);
         targetView.setAlpha(options.enterFadesContent ? 0f : 1f);
 
-        ImageView snapshotView = options.enterUsesSnapshotOverlay
+        // 预先创建硬件层纹理，避免动画首帧的纹理上传开销
+        targetView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+
+        final ImageView snapshotView = options.enterUsesSnapshotOverlay
                 ? createEnterSnapshotOverlay(
                         targetView, source, targetLocation, sourceScaleX, sourceScaleY,
                         startTranslationX, startTranslationY, pivotX, pivotY)
                 : null;
 
-        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
-        animator.setDuration(options.durationMs);
-        animator.setInterpolator(options.interpolator);
-        animator.addUpdateListener(animation -> {
-            float fraction = animation.getAnimatedFraction();
-            targetView.setScaleX(lerp(sourceScaleX, 1f, fraction));
-            targetView.setScaleY(lerp(sourceScaleY, 1f, fraction));
-            targetView.setTranslationX(lerp(startTranslationX, 0f, fraction));
-            targetView.setTranslationY(lerp(startTranslationY, 0f, fraction));
-            targetView.setAlpha(options.enterFadesContent ? clampAlpha(fraction) : 1f);
+        // 使用 ViewPropertyAnimator + withLayer()，动画在 GPU 上驱动，不阻塞主线程
+        android.view.ViewPropertyAnimator animator = targetView.animate()
+                .scaleX(1f)
+                .scaleY(1f)
+                .translationX(0f)
+                .translationY(0f)
+                .setDuration(options.durationMs)
+                .setInterpolator(options.interpolator)
+                .withLayer();
 
-            if (snapshotView != null) {
-                snapshotView.setScaleX(targetView.getScaleX());
-                snapshotView.setScaleY(targetView.getScaleY());
-                snapshotView.setTranslationX(targetView.getTranslationX());
-                snapshotView.setTranslationY(targetView.getTranslationY());
-                snapshotView.setAlpha(clampAlpha(1f - fraction));
+        if (options.enterFadesContent) {
+            animator.alpha(1f);
+        }
+
+        animator.withEndAction(() -> {
+            if (snapshotView != null && snapshotView.getParent() instanceof ViewGroup) {
+                ((ViewGroup) snapshotView.getParent()).getOverlay().remove(snapshotView);
             }
-        });
-        animator.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override
-            public void onAnimationEnd(android.animation.Animator animation) {
-                if (snapshotView != null && snapshotView.getParent() instanceof ViewGroup) {
-                    ((ViewGroup) snapshotView.getParent()).getOverlay().remove(snapshotView);
-                }
-                if (onComplete != null) {
-                    onComplete.run();
-                }
+            if (onComplete != null) {
+                onComplete.run();
             }
-        });
-        animator.start();
+        }).start();
+
+        if (snapshotView != null) {
+            snapshotView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+            snapshotView.animate()
+                    .alpha(0f)
+                    .setDuration(options.durationMs)
+                    .setInterpolator(options.interpolator)
+                    .withLayer()
+                    .start();
+        }
+
         return true;
     }
 
@@ -571,6 +658,7 @@ public final class LaunchSourceTransition {
         if (!dir.exists() && !dir.mkdirs()) {
             return null;
         }
+        cleanupSnapshotCache(dir);
         File file;
         try {
             file = File.createTempFile("source_", ".png", dir);
@@ -578,10 +666,72 @@ public final class LaunchSourceTransition {
             return null;
         }
         try (FileOutputStream output = new FileOutputStream(file)) {
-            return snapshot.compress(Bitmap.CompressFormat.PNG, 100, output) ? file.getAbsolutePath() : null;
+            if (snapshot.compress(Bitmap.CompressFormat.PNG, 100, output)) {
+                return file.getAbsolutePath();
+            }
+            file.delete();
+            return null;
         } catch (IOException ignored) {
+            file.delete();
             return null;
         }
+    }
+
+    private static void cleanupSnapshotCache(File dir) {
+        File[] files = dir == null ? null : dir.listFiles();
+        if (files == null) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        long total = 0L;
+        for (File file : files) {
+            if (!isSnapshotCacheFile(file)) {
+                continue;
+            }
+            if (now - file.lastModified() > SNAPSHOT_MAX_AGE_MS) {
+                file.delete();
+                continue;
+            }
+            total += file.length();
+        }
+        while (total > SNAPSHOT_CACHE_SOFT_LIMIT_BYTES) {
+            File oldest = findOldestSnapshotCacheFile(dir);
+            if (oldest == null) {
+                return;
+            }
+            long size = oldest.length();
+            if (!oldest.delete()) {
+                return;
+            }
+            total -= size;
+            if (total <= SNAPSHOT_CACHE_TARGET_BYTES) {
+                return;
+            }
+        }
+    }
+
+    private static File findOldestSnapshotCacheFile(File dir) {
+        File[] files = dir == null ? null : dir.listFiles();
+        if (files == null) {
+            return null;
+        }
+        File oldest = null;
+        for (File file : files) {
+            if (!isSnapshotCacheFile(file)) {
+                continue;
+            }
+            if (oldest == null || file.lastModified() < oldest.lastModified()) {
+                oldest = file;
+            }
+        }
+        return oldest;
+    }
+
+    private static boolean isSnapshotCacheFile(File file) {
+        return file != null
+                && file.isFile()
+                && file.getName().startsWith("source_")
+                && file.getName().endsWith(".png");
     }
 
     private static int[] untransformedLocationOnScreen(View targetView) {

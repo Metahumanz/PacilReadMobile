@@ -19,7 +19,6 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 
 import com.metahumanz.pacilread.R;
-import com.metahumanz.pacilread.reader.PageSlice;
 import com.metahumanz.pacilread.reader.modern.ModernReaderActivity;
 import com.metahumanz.pacilread.reader.modern.ReaderRuntime;
 import com.metahumanz.pacilread.reader.modern.ReaderSessionState;
@@ -34,7 +33,6 @@ import com.metahumanz.pacilread.ui.GlassUiHelper;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.List;
 import java.util.Locale;
 
 public final class ReaderChromeController {
@@ -126,11 +124,11 @@ public final class ReaderChromeController {
                 state.systemInsetBottom = windowInsets.getSystemWindowInsetBottom();
             }
             updateReaderLayoutInsets();
-            if ((previousInsetTop != state.systemInsetTop || previousInsetBottom != state.systemInsetBottom)
-                    && state.book != null
-                    && !state.chapters.isEmpty()
-                    && !shouldSuppressInsetDrivenReflow()) {
-                content.scheduleReflowAfterLayout(state.currentChapterIndex, content.currentCharOffset());
+            if (previousInsetTop != state.systemInsetTop || previousInsetBottom != state.systemInsetBottom) {
+                boolean suppressReflow = shouldSuppressInsetDrivenReflow();
+                if (content != null) {
+                    content.onReaderInsetsChanged(suppressReflow);
+                }
             }
             return windowInsets;
         });
@@ -183,9 +181,9 @@ public final class ReaderChromeController {
         if (state.book == null || state.chapters.isEmpty()) {
             return;
         }
-        List<PageSlice> pages = content.getPagesForChapter(state.currentChapterIndex);
         com.metahumanz.pacilread.model.ChapterRecord chapter = state.chapters.get(state.currentChapterIndex);
-        int safePageCount = Math.max(pages.size(), 1);
+        int safePageCount = Math.max(content.getKnownPageCountForChapter(state.currentChapterIndex), 1);
+        boolean pageCountComplete = content.isPageCountCompleteForChapter(state.currentChapterIndex);
         boolean statsEnabled = runtime.settingsStore.isReadingTimeTrackingEnabled();
         String bookTitle = state.book.title == null || state.book.title.isBlank()
                 ? "未命名书籍"
@@ -208,7 +206,10 @@ public final class ReaderChromeController {
             views.progressSeekBar.setProgress(state.currentChapterIndex);
         } else {
             views.pageMeta.setText(currentChapterPageText() + " · 本章页数");
-            views.progressSeekBar.setMax(Math.max(safePageCount - 1, 0));
+            int pageSliderMax = pageCountComplete
+                    ? Math.max(safePageCount - 1, 0)
+                    : Math.max(Math.max(safePageCount - 1, 0), state.currentPageIndex);
+            views.progressSeekBar.setMax(pageSliderMax);
             views.progressSeekBar.setProgress(state.currentPageIndex);
         }
         updateReaderHud();
@@ -625,13 +626,22 @@ public final class ReaderChromeController {
     }
 
     private String currentChapterPageText() {
-        int safePageCount = Math.max(content.getPagesForChapter(state.currentChapterIndex).size(), 1);
+        int safePageCount = Math.max(content.getKnownPageCountForChapter(state.currentChapterIndex), 1);
+        boolean pageCountComplete = content.isPageCountCompleteForChapter(state.currentChapterIndex);
         int pagesPerScreen = ReaderDisplayModeHelper.pagesPerScreen(
                 activity,
                 runtime.settingsStore,
                 views.pageStage == null ? 0 : views.pageStage.getWidth(),
                 views.pageStage == null ? 0 : views.pageStage.getHeight()
         );
+        if (!pageCountComplete) {
+            int startPage = Math.max(state.currentPageIndex + 1, 1);
+            int endPage = Math.max(startPage, state.currentPageIndex + pagesPerScreen);
+            if (pagesPerScreen > 1 && endPage > startPage) {
+                return String.format(Locale.SIMPLIFIED_CHINESE, "第 %d-%d 页 / 计算中", startPage, endPage);
+            }
+            return String.format(Locale.SIMPLIFIED_CHINESE, "第 %d 页 / 计算中", startPage);
+        }
         int startPage = Math.min(state.currentPageIndex + 1, safePageCount);
         int endPage = Math.min(state.currentPageIndex + pagesPerScreen, safePageCount);
         if (pagesPerScreen > 1 && endPage > startPage) {

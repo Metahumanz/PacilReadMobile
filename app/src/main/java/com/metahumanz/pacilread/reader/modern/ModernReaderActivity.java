@@ -9,6 +9,7 @@ import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.os.BatteryManager;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.InputDevice;
@@ -126,39 +127,30 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         setupControls();
         installPredictiveBack();
 
-        if (hasLaunchSource() && com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(runtime.settingsStore)) {
+        boolean useFluidEnter = hasLaunchSource() && com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(runtime.settingsStore);
+        if (useFluidEnter) {
             ActivityTransitionCompat.overrideOpen(this, 0, 0);
+            // 先隐藏，等 layout 就绪后再显示并启动动画，防止未就绪时闪现全屏
+            views.readerRoot.setVisibility(View.INVISIBLE);
             views.readerRoot.setAlpha(1f);
-            views.readerRoot.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+            views.readerRoot.getViewTreeObserver().addOnGlobalLayoutListener(new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
                 @Override
-                public boolean onPreDraw() {
-                    views.readerRoot.getViewTreeObserver().removeOnPreDrawListener(this);
-                    if (readerExitFinishing || readerEnterAnimationStarted) return true;
-                    readerEnterAnimationStarted = true;
-                    setReaderTransitionForegroundAlpha(0f);
-                    boolean started = LaunchSourceTransition.animateEnterFromSource(
-                            views.readerRoot,
-                            launchSource,
-                            LaunchSourceTransition.Options.defaults()
-                                    .withDuration(ENTER_TRANSITION_DURATION_MS)
-                                    .withEnterSnapshotOverlay(false)
-                                    .withEnterContentFade(false),
-                            ModernReaderActivity.this::finishReaderEnterForegroundFade
-                    );
-                    if (started) {
-                        scheduleReaderEnterForegroundFade();
-                    } else {
-                        finishReaderEnterForegroundFade();
-                    }
-                    return true;
+                public void onGlobalLayout() {
+                    views.readerRoot.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                    startFluidEnterAnimation();
                 }
             });
+            // 安全兜底：如果 GlobalLayoutListener 一直没触发，100ms 后强制启动
+            views.readerRoot.postDelayed(this::startFluidEnterAnimation, 100L);
         }
 
         state.sessionStartTime = System.currentTimeMillis();
         state.sessionStartOffset = 0;
 
         views.pageBodyCurrent.setText("正在载入...");
+        if (useFluidEnter) {
+            content.setDeferReflow(true);
+        }
         content.loadBook();
     }
 
@@ -309,9 +301,49 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         animateReaderTransitionForegroundToAlpha(1f, ENTER_TEXT_FADE_DURATION_MS, null);
     }
 
+    /** 启动流动进入动画。前提：readerRoot 已完成 layout 且 bounds 有效。 */
+    private boolean startFluidEnterAnimation() {
+        if (readerEnterAnimationStarted || readerExitFinishing) return false;
+        if (views == null || views.readerRoot == null) return false;
+        if (views.readerRoot.getWidth() <= 0 || views.readerRoot.getHeight() <= 0) return false;
+        readerEnterAnimationStarted = true;
+        Log.d("PacilReadReader", "[时序] 流体进入动画开始");
+        views.readerRoot.setVisibility(View.VISIBLE);
+        // 初始透明：前台由 snapshot overlay 承揽放大动画，真实阅读页在背后准备正文
+        views.readerRoot.setAlpha(0f);
+        boolean started = LaunchSourceTransition.animateEnterFromSource(
+                views.readerRoot,
+                launchSource,
+                LaunchSourceTransition.Options.defaults()
+                        .withDuration(ENTER_TRANSITION_DURATION_MS)
+                        .withEnterSnapshotOverlay(true)
+                        .withEnterContentFade(true)
+                        .withEnterAnimatesLiveContent(false)
+                        .withSnapshotFadeStartFraction(0.72f)
+                        .withInterpolator(new android.view.animation.PathInterpolator(0.25f, 0.1f, 0.25f, 1.0f)),
+                this::finishReaderEnterForegroundFade
+        );
+        if (started) {
+            // 动画启动后再触发分页准备，避免首帧被分页快照/布局工作抢占
+            views.readerRoot.postOnAnimation(() -> {
+                if (content != null) {
+                    content.capturePaginationSnapshot();
+                    content.prewarmChapterTextAfterSnapshot();
+                }
+            });
+        } else {
+            finishReaderEnterForegroundFade();
+        }
+        return started;
+    }
+
     private void finishReaderEnterForegroundFade() {
+        Log.d("PacilReadReader", "[时序] 动画结束 finishReaderEnterForegroundFade - cacheHit=" + (content != null && content.isCacheHit()));
         cancelScheduledReaderEnterForegroundFade();
-        animateReaderTransitionForegroundToAlpha(1f, 60L, null);
+        if (content != null) {
+            // 正文与背景一起缩放，动画结束时文字大概率已就绪，直接完成排版即可
+            content.performDeferredInitialReflow(() -> {});
+        }
     }
 
     private void fadeReaderForegroundForExit(Runnable onComplete) {
@@ -488,12 +520,8 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         });
         views.themeToggleButton.setOnClickListener(v -> chrome.toggleReaderUiTheme());
         views.ttsButton.setOnClickListener(v -> {
-            if (state.ttsActive || state.ttsPaused) {
-                tts.toggleTts();
-            } else {
-                dialogSupport.setNextDismissSource(v);
-                tts.showTtsDialog();
-            }
+            dialogSupport.setNextDismissSource(v);
+            tts.showTtsDialog();
         });
         views.autoPageButton.setOnClickListener(v -> {
             dialogSupport.setNextDismissSource(v);
@@ -796,12 +824,8 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 autoPage.showAutoPageDialog();
                 break;
             case "听书":
-                if (state.ttsActive || state.ttsPaused) {
-                    tts.toggleTts();
-                } else {
-                    dialogSupport.setNextDismissSource(source);
-                    tts.showTtsDialog();
-                }
+                dialogSupport.setNextDismissSource(source);
+                tts.showTtsDialog();
                 break;
             case "书签":
                 dialogSupport.setNextDismissSource(source);

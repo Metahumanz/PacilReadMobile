@@ -13,6 +13,7 @@ import com.metahumanz.pacilread.model.ReplacementRuleRecord;
 import org.json.JSONArray;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.zip.GZIPOutputStream;
@@ -32,14 +33,14 @@ public class JsonDatabaseMigrator {
     }
 
     /**
-     * @return true 表示需要迁移（SQLite 存在且 JSON 尚未初始化）
+     * @return true 表示需要迁移（SQLite 存在且迁移标记不存在）
+     * 注意：不能检查 books.json 是否存在，因为上次迁移可能在 books 后 chapters 前失败，
+     * books.json 已存在但数据不完整，必须重试。
      */
     public boolean needsMigration() {
         File dbFile = appContext.getDatabasePath("reader.db");
-        File jsonDir = new File(appContext.getFilesDir(), "database");
-        File marker = new File(jsonDir, MIGRATION_MARKER);
-        File booksJson = new File(jsonDir, "books.json");
-        return dbFile.exists() && !booksJson.exists() && !marker.exists();
+        File marker = new File(new File(appContext.getFilesDir(), "database"), MIGRATION_MARKER);
+        return dbFile.exists() && !marker.exists();
     }
 
     /**
@@ -172,16 +173,14 @@ public class JsonDatabaseMigrator {
         }
     }
 
-    private void writeJsonFile(File file, JSONArray data) {
+    private void writeJsonFile(File file, JSONArray data) throws Exception {
         File tmp = new File(file.getParentFile(), file.getName() + ".tmp");
-        try {
-            try (java.io.FileWriter writer = new java.io.FileWriter(tmp)) {
-                writer.write(data.toString(2));
-            }
-            file.delete();
-            tmp.renameTo(file);
-        } catch (Exception e) {
-            Log.e(TAG, "写入 " + file.getName() + " 失败", e);
+        try (java.io.FileWriter writer = new java.io.FileWriter(tmp)) {
+            writer.write(data.toString(2));
+        }
+        file.delete();
+        if (!tmp.renameTo(file)) {
+            throw new IOException("原子写入失败：" + file.getName());
         }
     }
 

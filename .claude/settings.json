@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(./gradlew.bat assembleDebug --no-daemon --console plain)",
-      "Bash(./gradlew.bat assembleDebug --no-daemon --offline --console plain)"
+      "Bash(./gradlew.bat assembleDebug --no-daemon --offline --console plain)",
+      "Bash(adb logcat *)",
+      "Read(//c/VScodework//**)",
+      "Read(//c/VScodework/**)",
+      "Read(//c//**)",
+      "Bash(./pack.bat debug *)"
     ]
   }
 }

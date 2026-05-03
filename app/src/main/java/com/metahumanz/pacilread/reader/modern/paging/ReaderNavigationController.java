@@ -109,6 +109,37 @@ public final class ReaderNavigationController {
         paging.animateTransition(safeChapterIndex, safePageIndex, direction == 0 ? 1 : direction);
     }
 
+    public void openChapterWithPartialPages(
+            int chapterIndex,
+            int pageIndex,
+            List<PageSlice> pages,
+            boolean complete
+    ) {
+        if (state.chapters.isEmpty() || pages == null || pages.isEmpty()) {
+            return;
+        }
+        if (!paging.ensurePageAreaReady(() -> openChapterWithPartialPages(chapterIndex, pageIndex, pages, complete))) {
+            return;
+        }
+        activity.clearTextSelection();
+        int safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size() - 1);
+        int safePageIndex = ui.clamp(pageIndex, 0, pages.size() - 1);
+        state.pendingTapPagingDelta = 0;
+        paging.invalidatePreparedPagingSnapshots();
+        bindCurrentSpreadFromPages(safeChapterIndex, safePageIndex, pages, complete);
+        state.currentChapterIndex = safeChapterIndex;
+        state.currentPageIndex = safePageIndex;
+        activity.markReadingActivity();
+        paging.restoreLivePageLayers(false);
+        paging.resetAnimatedPage(views.pageCurrent);
+        paging.resetAnimatedPage(views.pageIncoming);
+        views.pageIncoming.setVisibility(View.GONE);
+        chrome.updateUiAfterPageChange();
+        content.scheduleProgressSave();
+        chrome.scheduleAutoHide();
+        views.pageCurrent.post(activity::onReaderPageReadyForLaunchPreview);
+    }
+
     public boolean pageDown() {
         if (state.chapters.isEmpty() || state.isAnimating) {
             return false;
@@ -199,6 +230,26 @@ public final class ReaderNavigationController {
         );
     }
 
+    private void bindCurrentSpreadFromPages(
+            int chapterIndex,
+            int pageIndex,
+            List<PageSlice> pages,
+            boolean complete
+    ) {
+        bindSpreadFromPages(
+                views.pageTitleCurrent,
+                views.pageBodyCurrent,
+                views.pageTitleCurrentRight,
+                views.pageBodyCurrentRight,
+                views.pageCurrentRightPane,
+                views.pageCurrentGutter,
+                chapterIndex,
+                pageIndex,
+                pages,
+                complete
+        );
+    }
+
     public int pageStep() {
         if (content == null || !content.isDoublePageActive()) {
             return 1;
@@ -214,11 +265,22 @@ public final class ReaderNavigationController {
     public void bindPage(TextView titleView, JustifiedPageTextView bodyView, int chapterIndex, int pageIndex) {
         List<PageSlice> pages = content.getPagesForChapter(chapterIndex);
         int safePageIndex = ui.clamp(pageIndex, 0, pages.size() - 1);
+        bindPageFromPages(titleView, bodyView, pages, safePageIndex, true);
+    }
+
+    private void bindPageFromPages(
+            TextView titleView,
+            JustifiedPageTextView bodyView,
+            List<PageSlice> pages,
+            int pageIndex,
+            boolean complete
+    ) {
+        int safePageIndex = ui.clamp(pageIndex, 0, pages.size() - 1);
         PageSlice slice = pages.get(safePageIndex);
         titleView.setVisibility(View.GONE);
         titleView.setText(null);
         paging.updateBodyTopMargin(bodyView, 0);
-        bodyView.setTreatFinalLineAsParagraphEnd(safePageIndex >= pages.size() - 1);
+        bodyView.setTreatFinalLineAsParagraphEnd(complete && safePageIndex >= pages.size() - 1);
         bodyView.setText(slice.text == null ? "" : slice.text);
     }
 
@@ -251,6 +313,39 @@ public final class ReaderNavigationController {
             gutter.setVisibility(View.VISIBLE);
         }
         bindPage(rightTitleView, rightBodyView, chapterIndex, rightPageIndex);
+    }
+
+    private void bindSpreadFromPages(
+            TextView leftTitleView,
+            JustifiedPageTextView leftBodyView,
+            TextView rightTitleView,
+            JustifiedPageTextView rightBodyView,
+            View rightPane,
+            View gutter,
+            int chapterIndex,
+            int pageIndex,
+            List<PageSlice> pages,
+            boolean complete
+    ) {
+        int safePageIndex = ui.clamp(pageIndex, 0, pages.size() - 1);
+        bindPageFromPages(leftTitleView, leftBodyView, pages, safePageIndex, complete);
+        boolean showRight = content.isDoublePageActive();
+        if (!showRight) {
+            clearRightPane(rightTitleView, rightBodyView, rightPane, gutter, false);
+            return;
+        }
+        int rightPageIndex = safePageIndex + 1;
+        if (rightPageIndex >= pages.size()) {
+            clearRightPane(rightTitleView, rightBodyView, rightPane, gutter, true);
+            return;
+        }
+        if (rightPane != null) {
+            rightPane.setVisibility(View.VISIBLE);
+        }
+        if (gutter != null) {
+            gutter.setVisibility(View.VISIBLE);
+        }
+        bindPageFromPages(rightTitleView, rightBodyView, pages, rightPageIndex, complete);
     }
 
     private void clearRightPane(

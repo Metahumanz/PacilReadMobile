@@ -65,15 +65,10 @@ final class ReaderLayoutSignature {
         this.doublePageActive = doublePageActive;
     }
 
-    @Override
-    public boolean equals(Object other) {
-        if (this == other) {
-            return true;
-        }
-        if (!(other instanceof ReaderLayoutSignature)) {
+    boolean isPaginationCompatibleWith(ReaderLayoutSignature that) {
+        if (that == null) {
             return false;
         }
-        ReaderLayoutSignature that = (ReaderLayoutSignature) other;
         return availableWidthPx == that.availableWidthPx
                 && availableHeightPx == that.availableHeightPx
                 && chapterTitleVisible == that.chapterTitleVisible
@@ -88,11 +83,23 @@ final class ReaderLayoutSignature {
                 && rightPaddingDp == that.rightPaddingDp
                 && topPaddingDp == that.topPaddingDp
                 && bottomPaddingDp == that.bottomPaddingDp
-                && systemInsetTopPx == that.systemInsetTopPx
-                && systemInsetBottomPx == that.systemInsetBottomPx
                 && doublePageActive == that.doublePageActive
                 && Objects.equals(chapterTitleAlignment, that.chapterTitleAlignment)
                 && Objects.equals(bodyFontFamily, that.bodyFontFamily);
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (!(other instanceof ReaderLayoutSignature)) {
+            return false;
+        }
+        ReaderLayoutSignature that = (ReaderLayoutSignature) other;
+        return isPaginationCompatibleWith(that)
+                && systemInsetTopPx == that.systemInsetTopPx
+                && systemInsetBottomPx == that.systemInsetBottomPx;
     }
 
     @Override

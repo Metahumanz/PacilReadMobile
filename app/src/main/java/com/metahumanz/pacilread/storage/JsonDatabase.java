@@ -1,7 +1,10 @@
 package com.metahumanz.pacilread.storage;
 
 import android.content.Context;
+import android.content.pm.ApplicationInfo;
+import android.os.Build;
 import android.util.Log;
+import android.util.LruCache;
 
 import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.model.BookmarkRecord;
@@ -55,6 +58,8 @@ public class JsonDatabase {
     private List<BookRecord> bookCache = new ArrayList<>();
     private List<ChapterRecord> chapterCache = new ArrayList<>();
     private List<ReplacementRuleRecord> ruleCache = new ArrayList<>();
+    // 解压后的章节正文缓存（chapterId → 正文），避免重复解压 gzip 文件
+    private final LruCache<Long, String> decompressedTextCache = new LruCache<>(20);
     private List<ReaderThemeRecord> themeCache = new ArrayList<>();
     private List<BookmarkRecord> bookmarkCache = new ArrayList<>();
     private List<ReadingTimeEntryRecord> readingStatsCache = new ArrayList<>();
@@ -73,15 +78,43 @@ public class JsonDatabase {
             JsonDatabaseMigrator migrator = new JsonDatabaseMigrator(context);
             if (migrator.needsMigration()) {
                 Log.i(TAG, "检测到旧版 SQLite 数据库，开始迁移...");
+                // 删除可能残留的不完整 JSON 文件（上次迁移中断）
+                instance.purgeDataDir();
                 if (migrator.migrate()) {
-                    // 迁移完成后重新加载 JSON 并重定位路径
-                    instance.loadAll();
-                    instance.rebaseLocalAssetPaths();
-                    Log.i(TAG, "迁移完成，路径已重定位");
+                    // 验证所有关键文件均已写入
+                    String[] requiredFiles = {FILE_BOOKS, FILE_CHAPTERS, FILE_RULES,
+                            FILE_THEMES, FILE_BOOKMARKS, FILE_READING_STATS};
+                    boolean allExist = true;
+                    for (String f : requiredFiles) {
+                        if (!new File(instance.dataDir, f).exists()) {
+                            Log.e(TAG, "迁移后文件缺失：" + f);
+                            allExist = false;
+                        }
+                    }
+                    if (!allExist) {
+                        Log.e(TAG, "迁移不完整，清理 JSON 并将在下次启动重试");
+                        instance.purgeDataDir();
+                    } else {
+                        instance.loadAll();
+                        instance.rebaseLocalAssetPaths();
+                        Log.i(TAG, "迁移完成，路径已重定位");
+                    }
                 }
             }
         }
         return instance;
+    }
+
+    private void purgeDataDir() {
+        if (dataDir.exists()) {
+            File[] files = dataDir.listFiles();
+            if (files != null) {
+                for (File f : files) {
+                    f.delete();
+                }
+            }
+        }
+        dataDir.mkdirs();
     }
 
     // ========== 初始化 / 加载 ==========
@@ -349,6 +382,12 @@ public class JsonDatabase {
             }
             if (target != null) {
                 bookCache.remove(target);
+            }
+            // 驱逐该书籍所有章节的解压缓存（必须在 removeIf 之前，否则章节已移除）
+            for (ChapterRecord ch : chapterCache) {
+                if (ch.bookId == bookId) {
+                    decompressedTextCache.remove(ch.id);
+                }
             }
             chapterCache.removeIf(c -> c.bookId == bookId);
             ruleCache.removeIf(r -> r.bookId != null && r.bookId == bookId);
@@ -960,7 +999,7 @@ public class JsonDatabase {
     }
 
     public void triggerStorageMaintenance() {
-        // JSON 不需要维护操作
+        cleanupTemporaryCacheFiles();
     }
 
     public interface MaintenanceProgressListener {
@@ -971,15 +1010,26 @@ public class JsonDatabase {
     }
 
     public String getPendingMaintenanceSummary() {
+        long temporaryCacheSize = temporaryCacheSize();
+        if (temporaryCacheSize > 0L) {
+            return "可清理临时缓存 " + formatFileSize(temporaryCacheSize);
+        }
         return "无需维护（JSON 存储）";
     }
 
     public boolean hasPendingMaintenanceWork() {
-        return false;
+        return temporaryCacheSize() > 0L;
     }
 
     public void runStorageMaintenanceWithProgress(MaintenanceProgressListener listener) {
-        if (listener != null) listener.onAllDone();
+        try {
+            if (listener != null) listener.onPhaseStart("清理临时缓存");
+            cleanupTemporaryCacheFiles();
+            if (listener != null) listener.onPhaseDone("清理临时缓存");
+            if (listener != null) listener.onAllDone();
+        } catch (Exception error) {
+            if (listener != null) listener.onError(error.getMessage());
+        }
     }
 
     // ========== 数据库文件信息 ==========
@@ -994,18 +1044,58 @@ public class JsonDatabase {
 
     public String getDatabaseSizeInfo() {
         ensureLoaded();
+        File filesDir = appContext.getFilesDir();
+        File chapterTextDir = getChapterTextDir();
+        File coversDir = new File(filesDir, "covers");
+        File booksDir = new File(filesDir, "books");
+        File backgroundsDir = new File(filesDir, "backgrounds");
+        File databasesDir = new File(appContext.getApplicationInfo().dataDir, "databases");
+        File sharedPrefsDir = new File(appContext.getApplicationInfo().dataDir, "shared_prefs");
+
         long jsonSize = dirSize(dataDir);
-        long chapterTextSize = dirSize(getChapterTextDir());
-        long coversSize = dirSize(new File(appContext.getFilesDir(), "covers"));
-        long booksSize = dirSize(new File(appContext.getFilesDir(), "books"));
-        long total = jsonSize + chapterTextSize + coversSize + booksSize;
+        long chapterTextSize = dirSize(chapterTextDir);
+        long coversSize = dirSize(coversDir);
+        long booksSize = dirSize(booksDir);
+        long backgroundsSize = dirSize(backgroundsDir);
+        long otherFilesSize = dirChildrenSizeExcluding(
+                filesDir,
+                dataDir,
+                chapterTextDir,
+                coversDir,
+                booksDir,
+                backgroundsDir
+        );
+        long databasesSize = dirSize(databasesDir);
+        long cacheSize = dirSize(appContext.getCacheDir());
+        long codeCacheSize = dirSize(getCodeCacheDirCompat());
+        long sharedPrefsSize = dirSize(sharedPrefsDir);
+        long noBackupSize = dirSize(getNoBackupFilesDirCompat());
+        long readingDataTotal = jsonSize + chapterTextSize + coversSize + booksSize
+                + backgroundsSize + otherFilesSize + databasesSize;
+        long privateDataTotal = readingDataTotal + cacheSize + codeCacheSize
+                + sharedPrefsSize + noBackupSize;
+        long installedPackageSize = installedPackageSizeEstimate();
 
         StringBuilder sb = new StringBuilder();
         sb.append("JSON 数据文件 ").append(formatFileSize(jsonSize))
                 .append("\n章节正文文件 ").append(formatFileSize(chapterTextSize))
                 .append("\n封面缓存 ").append(formatFileSize(coversSize))
-                .append("\n源文件缓存 ").append(formatFileSize(booksSize));
-        sb.append("\n本地存储合计 ").append(formatFileSize(total));
+                .append("\n源文件缓存 ").append(formatFileSize(booksSize))
+                .append("\n自定义背景 ").append(formatFileSize(backgroundsSize))
+                .append("\n其它 files ").append(formatFileSize(otherFilesSize));
+        if (databasesSize > 0L) {
+            sb.append("\n旧数据库/迁移残留 ").append(formatFileSize(databasesSize));
+        }
+        sb.append("\n阅读数据小计 ").append(formatFileSize(readingDataTotal));
+        sb.append("\n──────────────────");
+        sb.append("\n缓存目录 ").append(formatFileSize(cacheSize));
+        appendDirectoryChildrenBreakdown(sb, appContext.getCacheDir(), "  ");
+        sb.append("\n代码缓存 ").append(formatFileSize(codeCacheSize))
+                .append("\n偏好设置 ").append(formatFileSize(sharedPrefsSize))
+                .append("\nNo backup ").append(formatFileSize(noBackupSize));
+        sb.append("\n应用私有数据合计 ").append(formatFileSize(privateDataTotal));
+        sb.append("\n安装包/库文件估算 ").append(formatFileSize(installedPackageSize));
+        sb.append("\n系统口径估算合计 ").append(formatFileSize(privateDataTotal + installedPackageSize));
         sb.append("\n──────────────────");
         sb.append("\nbooks: ").append(bookCache.size()).append(" 条");
         sb.append("\nchapters: ").append(chapterCache.size()).append(" 条");
@@ -1080,20 +1170,43 @@ public class JsonDatabase {
 
     public File resolveChapterTextFile(String bodyTextPath) {
         if (bodyTextPath == null || bodyTextPath.isEmpty()) return null;
-        return new File(appContext.getFilesDir(), bodyTextPath);
+        // 如果路径已经包含 chapter_text/ 前缀，直接拼 filesDir
+        // 否则拼 chapter_text 目录（兼容旧数据库中的短格式路径 book_X/chapter_Y.txt.gz）
+        if (bodyTextPath.startsWith("chapter_text/") || bodyTextPath.startsWith("chapter_text\\")) {
+            return new File(appContext.getFilesDir(), bodyTextPath);
+        }
+        return new File(getChapterTextDir(), bodyTextPath);
     }
 
     public String resolveChapterText(long bookId, long chapterId, String bodyText,
                                      String bodyTextPath, String bodyTextStorage) {
         if ("file_gzip".equals(bodyTextStorage) && bodyTextPath != null && !bodyTextPath.isEmpty()) {
+            // 先查解压缓存，避免重复 IO + 解压
+            String cached = decompressedTextCache.get(chapterId);
+            if (cached != null) {
+                return cached;
+            }
             File file = resolveChapterTextFile(bodyTextPath);
             if (file != null && file.exists()) {
-                return readGzipFile(file);
+                String text = readGzipFile(file);
+                if (text.isEmpty()) {
+                    Log.w(TAG, "章节正文文件为空: book=" + bookId + " chapter=" + chapterId + " path=" + bodyTextPath);
+                } else {
+                    decompressedTextCache.put(chapterId, text);
+                }
+                return text;
+            } else {
+                Log.w(TAG, "章节外置正文缺失: book=" + bookId + " chapter=" + chapterId +
+                        " storage=" + bodyTextStorage + " path=" + bodyTextPath);
             }
         }
         // 回退：body_text 可能在 JSON/数据库中（"db" 模式），或文件缺失时的 fallback
         if (bodyText != null && !bodyText.isEmpty()) {
             return bodyText;
+        }
+        if (!"file_gzip".equals(bodyTextStorage) && (bodyTextPath == null || bodyTextPath.isEmpty())) {
+            Log.w(TAG, "章节正文不可用: book=" + bookId + " chapter=" + chapterId +
+                    " storage=" + bodyTextStorage + " path=" + bodyTextPath);
         }
         return "";
     }
@@ -1117,7 +1230,7 @@ public class JsonDatabase {
             java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
             try (java.io.FileInputStream fis = new java.io.FileInputStream(file);
                  java.util.zip.GZIPInputStream gzIn = new java.util.zip.GZIPInputStream(fis)) {
-                byte[] buffer = new byte[8192];
+                byte[] buffer = new byte[32768];
                 int read;
                 while ((read = gzIn.read(buffer)) != -1) {
                     baos.write(buffer, 0, read);
@@ -1155,14 +1268,190 @@ public class JsonDatabase {
     }
 
     private long dirSize(File dir) {
-        if (dir == null || !dir.exists()) return 0;
-        long size = 0;
-        File[] files = dir.listFiles();
-        if (files == null) return 0;
-        for (File f : files) {
-            if (f.isFile()) size += f.length();
+        return pathSize(dir);
+    }
+
+    private long pathSize(File file) {
+        if (file == null || !file.exists()) return 0L;
+        if (file.isFile()) return file.length();
+        if (!file.isDirectory()) return 0L;
+        long size = 0L;
+        File[] files = file.listFiles();
+        if (files == null) return 0L;
+        for (File child : files) {
+            size += pathSize(child);
         }
         return size;
+    }
+
+    private long dirChildrenSizeExcluding(File parent, File... excluded) {
+        if (parent == null || !parent.exists() || !parent.isDirectory()) return 0L;
+        long total = 0L;
+        File[] children = parent.listFiles();
+        if (children == null) return 0L;
+        for (File child : children) {
+            if (matchesAnyPath(child, excluded)) {
+                continue;
+            }
+            total += pathSize(child);
+        }
+        return total;
+    }
+
+    private boolean matchesAnyPath(File file, File... candidates) {
+        if (file == null || candidates == null) return false;
+        for (File candidate : candidates) {
+            if (samePath(file, candidate)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean samePath(File first, File second) {
+        if (first == null || second == null) return false;
+        try {
+            return first.getCanonicalFile().equals(second.getCanonicalFile());
+        } catch (IOException ignored) {
+            return first.getAbsolutePath().equals(second.getAbsolutePath());
+        }
+    }
+
+    private File getCodeCacheDirCompat() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            return appContext.getCodeCacheDir();
+        }
+        return new File(appContext.getApplicationInfo().dataDir, "code_cache");
+    }
+
+    private File getNoBackupFilesDirCompat() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            return appContext.getNoBackupFilesDir();
+        }
+        return new File(appContext.getApplicationInfo().dataDir, "no_backup");
+    }
+
+    private long installedPackageSizeEstimate() {
+        ApplicationInfo info = appContext.getApplicationInfo();
+        Set<String> seenPaths = new HashSet<>();
+        long total = addUniquePathSize(seenPaths, info.sourceDir == null ? null : new File(info.sourceDir));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && info.splitSourceDirs != null) {
+            for (String splitPath : info.splitSourceDirs) {
+                total += addUniquePathSize(seenPaths, splitPath == null ? null : new File(splitPath));
+            }
+        }
+        total += addUniquePathSize(seenPaths, info.nativeLibraryDir == null ? null : new File(info.nativeLibraryDir));
+        return total;
+    }
+
+    private long addUniquePathSize(Set<String> seenPaths, File file) {
+        if (file == null || !file.exists()) return 0L;
+        String path;
+        try {
+            path = file.getCanonicalPath();
+        } catch (IOException ignored) {
+            path = file.getAbsolutePath();
+        }
+        if (!seenPaths.add(path)) return 0L;
+        return pathSize(file);
+    }
+
+    private long temporaryCacheSize() {
+        File cacheDir = appContext.getCacheDir();
+        if (cacheDir == null) return 0L;
+        long total = 0L;
+        total += pathSize(new File(cacheDir, "backup"));
+        total += pathSize(new File(cacheDir, "backup_restore"));
+        total += pathSize(new File(cacheDir, "launch_sources"));
+        File[] files = cacheDir.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                if (file.isFile() && file.getName().startsWith("restore_")) {
+                    total += file.length();
+                }
+            }
+        }
+        return total;
+    }
+
+    private void cleanupTemporaryCacheFiles() {
+        File cacheDir = appContext.getCacheDir();
+        if (cacheDir == null) return;
+        deletePathRecursively(new File(cacheDir, "backup"));
+        deletePathRecursively(new File(cacheDir, "backup_restore"));
+        deletePathRecursively(new File(cacheDir, "launch_sources"));
+        File[] files = cacheDir.listFiles();
+        if (files == null) return;
+        for (File file : files) {
+            if (file.isFile() && file.getName().startsWith("restore_")) {
+                file.delete();
+            }
+        }
+    }
+
+    private void appendDirectoryChildrenBreakdown(StringBuilder sb, File dir, String indent) {
+        if (dir == null || !dir.exists() || !dir.isDirectory()) return;
+        File[] children = dir.listFiles();
+        if (children == null || children.length == 0) return;
+        List<FileSizeEntry> entries = new ArrayList<>();
+        for (File child : children) {
+            long size = pathSize(child);
+            if (size > 0L) {
+                entries.add(new FileSizeEntry(child, size));
+            }
+        }
+        if (entries.isEmpty()) return;
+        entries.sort((left, right) -> Long.compare(right.size, left.size));
+        int limit = Math.min(entries.size(), 8);
+        long hiddenSize = 0L;
+        for (int i = 0; i < entries.size(); i++) {
+            FileSizeEntry entry = entries.get(i);
+            if (i < limit) {
+                sb.append("\n").append(indent)
+                        .append(cacheChildLabel(entry.file))
+                        .append(" ")
+                        .append(formatFileSize(entry.size));
+            } else {
+                hiddenSize += entry.size;
+            }
+        }
+        if (hiddenSize > 0L) {
+            sb.append("\n").append(indent)
+                    .append("其它缓存项 ")
+                    .append(formatFileSize(hiddenSize));
+        }
+    }
+
+    private String cacheChildLabel(File file) {
+        String name = file.getName();
+        if ("backup".equals(name)) return "WebDAV备份临时 backup";
+        if ("backup_restore".equals(name)) return "WebDAV恢复临时 backup_restore";
+        if ("launch_sources".equals(name)) return "阅读页转场截图 launch_sources";
+        if (name.startsWith("restore_")) return "WebDAV恢复临时 " + name;
+        return name;
+    }
+
+    private void deletePathRecursively(File file) {
+        if (file == null || !file.exists()) return;
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    deletePathRecursively(child);
+                }
+            }
+        }
+        file.delete();
+    }
+
+    private static final class FileSizeEntry {
+        final File file;
+        final long size;
+
+        FileSizeEntry(File file, long size) {
+            this.file = file;
+            this.size = size;
+        }
     }
 
     static String formatFileSize(long size) {

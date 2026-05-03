@@ -58,6 +58,7 @@ public class WebDavBackupManager {
     // ==================== 全量备份 ====================
 
     public void fullBackup(StatusListener listener) throws Exception {
+        cleanupLocalTempCache();
         ensureAnySyncScopeSelected();
         databaseHelper.flush();
         boolean includeChapterText = settingsStore.isWebDavSyncBookshelfEnabled();
@@ -116,12 +117,14 @@ public class WebDavBackupManager {
         uploadLocalAssets(listener, includeChapterText, includeFiles, includeBackgrounds);
         cleanupRemoteUnreferencedAssetsIfEnabled(listener, includeChapterText, includeFiles, includeBackgrounds);
         settingsStore.setWebDavLastFullBackupAt(System.currentTimeMillis());
+        cleanupLocalTempCache();
         listener.onStatus("全量备份完成");
     }
 
     // ==================== 增量备份 ====================
 
     public void incrementalBackup(StatusListener listener) throws Exception {
+        cleanupLocalTempCache();
         ensureAnySyncScopeSelected();
         databaseHelper.flush();
         boolean includeChapterText = settingsStore.isWebDavSyncBookshelfEnabled();
@@ -202,12 +205,14 @@ public class WebDavBackupManager {
 
         cleanupRemoteUnreferencedAssetsIfEnabled(listener, includeChapterText, includeFiles, includeBackgrounds);
         settingsStore.setWebDavLastLiteBackupAt(System.currentTimeMillis());
+        cleanupLocalTempCache();
         listener.onStatus("增量备份完成");
     }
 
     // ==================== 全量恢复 ====================
 
     public void fullRestore(StatusListener listener) throws Exception {
+        cleanupLocalTempCache();
         ensureRestoreScopeSelected();
 
         if (shouldSyncDatabaseSnapshot()) {
@@ -260,12 +265,14 @@ public class WebDavBackupManager {
         }
 
         restoreSettingsJsonIfPresent(listener);
+        cleanupLocalTempCache();
         listener.onStatus("全量恢复完成");
     }
 
     // ==================== 增量恢复 ====================
 
     public void incrementalRestore(StatusListener listener) throws Exception {
+        cleanupLocalTempCache();
         ensureRestoreScopeSelected();
 
         if (shouldSyncDatabaseSnapshot()) {
@@ -293,6 +300,7 @@ public class WebDavBackupManager {
                         localManifest != null ? localManifest.optJSONObject("files") : null);
                 if (changedFiles.isEmpty()) {
                     listener.onStatus("已是最新，无需恢复");
+                    cleanupLocalTempCache();
                     return;
                 }
 
@@ -367,6 +375,7 @@ public class WebDavBackupManager {
         }
 
         restoreSettingsJsonIfPresent(listener);
+        cleanupLocalTempCache();
         listener.onStatus("增量恢复完成");
     }
 
@@ -1341,6 +1350,33 @@ public class WebDavBackupManager {
     private boolean shouldSyncSettingsSnapshot() {
         return settingsStore.isWebDavSyncUiSettingsEnabled() || settingsStore.isWebDavSyncThemesEnabled()
                 || settingsStore.isWebDavSyncBackgroundsEnabled();
+    }
+
+    private void cleanupLocalTempCache() {
+        File cacheDir = context.getCacheDir();
+        if (cacheDir == null) return;
+        deletePathRecursively(new File(cacheDir, "backup"));
+        deletePathRecursively(new File(cacheDir, "backup_restore"));
+        File[] files = cacheDir.listFiles();
+        if (files == null) return;
+        for (File file : files) {
+            if (file.isFile() && file.getName().startsWith("restore_")) {
+                file.delete();
+            }
+        }
+    }
+
+    private void deletePathRecursively(File file) {
+        if (file == null || !file.exists()) return;
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    deletePathRecursively(child);
+                }
+            }
+        }
+        file.delete();
     }
 
     // ==================== 接口与内部类 ====================
