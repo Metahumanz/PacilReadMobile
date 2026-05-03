@@ -371,6 +371,7 @@ public final class ReaderStyleController {
         textView.setLineSpacing(runtime.settingsStore.getLineSpacingExtraSp(), 1f);
         textView.setLetterSpacing(runtime.settingsStore.getLetterSpacing());
         textView.setFullJustifyEnabled(runtime.settingsStore.isBodyTextJustified());
+        textView.setGravity(Gravity.START | Gravity.TOP);
         textView.setPadding(0, 0, 0, 0);
     }
 
