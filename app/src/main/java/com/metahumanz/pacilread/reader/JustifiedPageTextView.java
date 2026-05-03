@@ -1,5 +1,6 @@
 package com.metahumanz.pacilread.reader;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
@@ -44,6 +45,7 @@ public class JustifiedPageTextView extends AppCompatTextView {
         init();
     }
 
+    @SuppressLint("WrongConstant")
     private void init() {
         setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE);
         setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE);

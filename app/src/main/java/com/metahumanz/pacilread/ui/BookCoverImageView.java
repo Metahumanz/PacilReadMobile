@@ -6,11 +6,12 @@ import android.graphics.Path;
 import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.util.TypedValue;
-import android.widget.ImageView;
+
+import androidx.appcompat.widget.AppCompatImageView;
 
 import com.metahumanz.pacilread.R;
 
-public class BookCoverImageView extends ImageView {
+public class BookCoverImageView extends AppCompatImageView {
     private final Path clipPath = new Path();
     private final RectF clipRect = new RectF();
     private float cornerRadiusPx;

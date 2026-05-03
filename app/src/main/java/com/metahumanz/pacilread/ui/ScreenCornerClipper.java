@@ -1,5 +1,6 @@
 package com.metahumanz.pacilread.ui;
 
+import android.annotation.TargetApi;
 import android.graphics.Outline;
 import android.graphics.Rect;
 import android.os.Build;
@@ -71,6 +72,7 @@ public final class ScreenCornerClipper {
         return FALLBACK_RADIUS_DP * view.getResources().getDisplayMetrics().density;
     }
 
+    @TargetApi(Build.VERSION_CODES.S)
     private static int roundedCornerRadius(WindowInsets insets, int position) {
         RoundedCorner corner = insets.getRoundedCorner(position);
         return corner == null ? 0 : corner.getRadius();
