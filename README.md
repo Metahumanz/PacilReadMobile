@@ -140,7 +140,7 @@ keyAlias=pacilread
 keyPassword=你的 key 密码
 ```
 
-`keystore.properties` 和 `*.jks` 都不会提交到 Git。多台电脑开发时，不要每台电脑各生成一把新 key；要安全保存并复用同一个 `pacilread-release.jks`，否则同一个包名的 APK 以后无法互相覆盖更新。
+`keystore.properties` 和 `*.jks` 都不会提交到 Git。要安全保存并复用同一个 `pacilread-release.jks`，否则同一个包名的 APK 以后无法互相覆盖更新。
 
 ## 听书说明
 
