@@ -292,6 +292,7 @@ public final class ReaderNavigationController {
         titleView.setText(null);
         paging.updateBodyTopMargin(bodyView, 0);
         bodyView.setTreatFinalLineAsParagraphEnd(complete && safePageIndex >= pages.size() - 1);
+        bodyView.setBottomJustifyEnabled(slice.hasBodyText() && safePageIndex < pages.size() - 1);
         bodyView.setText(slice.text == null ? "" : slice.text);
     }
 
@@ -372,6 +373,7 @@ public final class ReaderNavigationController {
         }
         if (rightBodyView != null) {
             rightBodyView.setTreatFinalLineAsParagraphEnd(true);
+            rightBodyView.setBottomJustifyEnabled(false);
             rightBodyView.setText("");
         }
         if (rightPane != null) {

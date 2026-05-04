@@ -278,13 +278,13 @@ public final class ReaderPaginator {
         return Math.max(windowStart, Math.min(absoluteOffset, windowEnd));
     }
 
-    private static int lineBottomForPageEnd(CharSequence source, StaticLayout layout, int lineIndex) {
+    static int lineBottomForPageEnd(CharSequence source, Layout layout, int lineIndex) {
         return lineBottomForPageEnd(source, layout, lineIndex, 0, source.length(), false);
     }
 
-    private static int lineBottomForPageEnd(
+    static int lineBottomForPageEnd(
             CharSequence source,
-            StaticLayout layout,
+            Layout layout,
             int lineIndex,
             int windowStart,
             int windowEnd,
