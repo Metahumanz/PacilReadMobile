@@ -28,6 +28,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -60,6 +61,7 @@ public class WebDavBackupManager {
     public void fullBackup(StatusListener listener) throws Exception {
         cleanupLocalTempCache();
         ensureAnySyncScopeSelected();
+        normalizeReplacementRules(databaseHelper.getRulesMutable());
         databaseHelper.flush();
         boolean includeChapterText = settingsStore.isWebDavSyncBookshelfEnabled();
         boolean includeFiles = settingsStore.isWebDavSyncFilesEnabled();
@@ -126,6 +128,7 @@ public class WebDavBackupManager {
     public void incrementalBackup(StatusListener listener) throws Exception {
         cleanupLocalTempCache();
         ensureAnySyncScopeSelected();
+        normalizeReplacementRules(databaseHelper.getRulesMutable());
         databaseHelper.flush();
         boolean includeChapterText = settingsStore.isWebDavSyncBookshelfEnabled();
         boolean includeFiles = settingsStore.isWebDavSyncFilesEnabled();
@@ -252,6 +255,8 @@ public class WebDavBackupManager {
                     }
                 }
                 databaseHelper.reloadFromDisk();
+                normalizeReplacementRules(databaseHelper.getRulesMutable());
+                databaseHelper.flush();
                 databaseHelper.rebaseLocalAssetPaths();
 
                 listener.onStatus("恢复书籍资源文件...");
@@ -309,9 +314,10 @@ public class WebDavBackupManager {
 
                 boolean mergedBooks = false;
                 boolean mergedChapters = false;
+                Map<Long, Long> restoredBookIdMap = new HashMap<>();
 
-                for (String fileName : changedFiles) {
-                    if (fileName.equals("reading_stats.json")) continue; // reading_stats 单独处理
+                for (String fileName : SYNC_JSON_FILES) {
+                    if (!changedFiles.contains(fileName)) continue;
                     File tempFile = new File(context.getCacheDir(), "restore_" + fileName);
                     listener.onStatus("下载 " + fileName + "...");
                     webDavClient.downloadBinaryFile(webDavClient.syncBaseUrl() + fileName, tempFile);
@@ -332,15 +338,15 @@ public class WebDavBackupManager {
 
                     switch (fileName) {
                         case "books.json":
-                            mergeBooks(array);
+                            restoredBookIdMap.putAll(mergeBooks(array));
                             mergedBooks = true;
                             break;
                         case "chapters.json":
-                            mergeChapters(array);
+                            mergeChapters(array, restoredBookIdMap);
                             mergedChapters = true;
                             break;
                         case "rules.json":
-                            mergeRules(array);
+                            mergeRules(array, restoredBookIdMap);
                             break;
                         case "themes.json":
                             mergeThemes(array);
@@ -779,6 +785,8 @@ public class WebDavBackupManager {
         listener.onStatus("应用旧格式数据库...");
         databaseHelper.stripPlatformSettingsTable(fullDb);
         databaseHelper.importDatabase(fullDb);
+        normalizeReplacementRules(databaseHelper.getRulesMutable());
+        databaseHelper.flush();
         databaseHelper.rebaseLocalAssetPaths();
         restoreBookAssetFiles(listener, settingsStore.isWebDavSyncFilesEnabled());
         listener.onStatus("恢复章节正文...");
@@ -797,13 +805,16 @@ public class WebDavBackupManager {
         listener.onStatus("合并旧格式数据...");
         databaseHelper.stripPlatformSettingsTable(liteDb);
         databaseHelper.mergeLiteDatabase(liteDb);
+        normalizeReplacementRules(databaseHelper.getRulesMutable());
+        databaseHelper.flush();
         restoreBookAssetFiles(listener, settingsStore.isWebDavSyncFilesEnabled());
     }
 
     // ==================== 实体合并逻辑 ====================
 
-    private void mergeBooks(JSONArray remoteBooks) {
+    private Map<Long, Long> mergeBooks(JSONArray remoteBooks) {
         List<BookRecord> localBooks = databaseHelper.getBooksMutable();
+        Map<Long, Long> remoteToLocalBookIds = new HashMap<>();
         Map<String, BookRecord> localByKey = new HashMap<>();
         Map<String, BookRecord> localByTitleAuthor = new HashMap<>();
         for (BookRecord book : localBooks) {
@@ -820,6 +831,7 @@ public class WebDavBackupManager {
         for (int i = 0; i < remoteBooks.length(); i++) {
             JSONObject remoteJson = remoteBooks.optJSONObject(i);
             if (remoteJson == null) continue;
+            long remoteId = remoteJson.optLong("id", 0);
             String remoteKey = remoteJson.optString("readingStatsKey", "");
             String remoteTitle = remoteJson.optString("title", "");
             String remoteAuthor = remoteJson.optString("author", "");
@@ -839,8 +851,16 @@ public class WebDavBackupManager {
             if (localMatch == null) {
                 // 新书：插入
                 BookRecord newBook = BookRecord.fromJson(remoteJson);
-                newBook.id = 0; // 由 JsonDatabase 分配 ID
+                newBook.id = nextRecordId(localBooks, remoteId);
                 localBooks.add(newBook);
+                localMatch = newBook;
+                if (!remoteKey.isEmpty()) {
+                    localByKey.put(remoteKey, newBook);
+                }
+                String taKey = normalizeTitleAuthor(remoteTitle, remoteAuthor);
+                if (!taKey.isEmpty()) {
+                    localByTitleAuthor.put(taKey, newBook);
+                }
             } else if (remoteUpdatedAt > localMatch.updatedAt) {
                 // 远程较新：更新本地
                 matchedIds.add(localMatch.id);
@@ -857,10 +877,14 @@ public class WebDavBackupManager {
                 localMatch.updatedAt = remoteUpdatedAt;
                 // 保留本地路径（不覆盖 coverPath/localPath）
             }
+            if (remoteId > 0 && localMatch != null) {
+                remoteToLocalBookIds.put(remoteId, localMatch.id);
+            }
         }
+        return remoteToLocalBookIds;
     }
 
-    private void mergeChapters(JSONArray remoteChapters) {
+    private void mergeChapters(JSONArray remoteChapters, Map<Long, Long> restoredBookIdMap) {
         List<ChapterRecord> localChapters = databaseHelper.getChaptersMutable();
         // 按 (bookId, orderIndex) 构建索引
         Map<String, ChapterRecord> localByKey = new HashMap<>();
@@ -872,15 +896,18 @@ public class WebDavBackupManager {
         for (int i = 0; i < remoteChapters.length(); i++) {
             JSONObject remoteJson = remoteChapters.optJSONObject(i);
             if (remoteJson == null) continue;
-            long bookId = remoteJson.optLong("bookId", 0);
+            long remoteBookId = remoteJson.optLong("bookId", 0);
+            long bookId = restoredBookIdMap.getOrDefault(remoteBookId, remoteBookId);
             int orderIndex = remoteJson.optInt("orderIndex", 0);
             String key = bookId + ":" + orderIndex;
             ChapterRecord localMatch = localByKey.get(key);
 
             if (localMatch == null) {
                 ChapterRecord newChapter = ChapterRecord.fromJson(remoteJson);
-                newChapter.id = 0; // 由 JsonDatabase 分配 ID
+                newChapter.bookId = bookId;
+                newChapter.id = nextRecordId(localChapters, newChapter.id);
                 localChapters.add(newChapter);
+                localByKey.put(key, newChapter);
             } else {
                 // 更新章节元数据
                 localMatch.title = remoteJson.optString("title", "");
@@ -897,8 +924,9 @@ public class WebDavBackupManager {
         }
     }
 
-    private void mergeRules(JSONArray remoteRules) {
+    private void mergeRules(JSONArray remoteRules, Map<Long, Long> restoredBookIdMap) {
         List<ReplacementRuleRecord> localRules = databaseHelper.getRulesMutable();
+        normalizeReplacementRules(localRules);
         Map<String, ReplacementRuleRecord> localByKey = new HashMap<>();
         for (ReplacementRuleRecord rule : localRules) {
             String key = buildRuleKey(rule);
@@ -909,22 +937,22 @@ public class WebDavBackupManager {
             JSONObject remoteJson = remoteRules.optJSONObject(i);
             if (remoteJson == null) continue;
             ReplacementRuleRecord remoteRule = ReplacementRuleRecord.fromJson(remoteJson);
+            normalizeRuleScope(remoteRule);
+            if ("book".equals(remoteRule.scope) && remoteRule.bookId != null) {
+                remoteRule.bookId = restoredBookIdMap.getOrDefault(remoteRule.bookId, remoteRule.bookId);
+            }
             String key = buildRuleKey(remoteRule);
             ReplacementRuleRecord localMatch = localByKey.get(key);
 
             if (localMatch == null) {
-                remoteRule.id = 0;
+                remoteRule.id = nextRecordId(localRules, remoteRule.id);
                 localRules.add(remoteRule);
+                localByKey.put(key, remoteRule);
             } else if (remoteRule.updatedAt > localMatch.updatedAt) {
-                localMatch.pattern = remoteRule.pattern;
-                localMatch.replacement = remoteRule.replacement;
-                localMatch.scope = remoteRule.scope;
-                localMatch.bookId = remoteRule.bookId;
-                localMatch.regex = remoteRule.regex;
-                localMatch.active = remoteRule.active;
-                localMatch.updatedAt = remoteRule.updatedAt;
+                copyReplacementRuleFields(localMatch, remoteRule);
             }
         }
+        normalizeReplacementRules(localRules);
     }
 
     private void mergeThemes(JSONArray remoteThemes) {
@@ -1110,10 +1138,121 @@ public class WebDavBackupManager {
         }
     }
 
+    private void normalizeReplacementRules(List<ReplacementRuleRecord> rules) {
+        if (rules == null || rules.isEmpty()) {
+            return;
+        }
+        Map<String, ReplacementRuleRecord> uniqueByKey = new LinkedHashMap<>();
+        for (ReplacementRuleRecord rule : new ArrayList<>(rules)) {
+            if (rule == null) {
+                continue;
+            }
+            normalizeRuleScope(rule);
+            String key = buildRuleKey(rule);
+            ReplacementRuleRecord existing = uniqueByKey.get(key);
+            if (existing == null) {
+                uniqueByKey.put(key, rule);
+            } else {
+                mergeDuplicateReplacementRule(existing, rule);
+            }
+        }
+        rules.clear();
+        rules.addAll(uniqueByKey.values());
+        ensureUniqueRuleIds(rules);
+    }
+
+    private void normalizeRuleScope(ReplacementRuleRecord rule) {
+        if (rule == null) {
+            return;
+        }
+        if ("book".equals(rule.scope)) {
+            return;
+        }
+        rule.scope = "global";
+        rule.bookId = null;
+    }
+
+    private void mergeDuplicateReplacementRule(ReplacementRuleRecord target, ReplacementRuleRecord incoming) {
+        if (target == null || incoming == null) {
+            return;
+        }
+        long stableId = target.id > 0 ? target.id : incoming.id;
+        if (incoming.updatedAt > target.updatedAt) {
+            copyReplacementRuleFields(target, incoming);
+            target.id = stableId;
+        } else if (target.id <= 0 && incoming.id > 0) {
+            target.id = incoming.id;
+        }
+    }
+
+    private void copyReplacementRuleFields(ReplacementRuleRecord target, ReplacementRuleRecord source) {
+        long id = target.id;
+        target.pattern = source.pattern;
+        target.replacement = source.replacement;
+        target.scope = source.scope;
+        target.bookId = source.bookId;
+        target.regex = source.regex;
+        target.active = source.active;
+        target.updatedAt = source.updatedAt;
+        target.id = id;
+        normalizeRuleScope(target);
+    }
+
+    private void ensureUniqueRuleIds(List<ReplacementRuleRecord> rules) {
+        Set<Long> usedIds = new HashSet<>();
+        for (ReplacementRuleRecord rule : rules) {
+            if (rule == null) {
+                continue;
+            }
+            if (rule.id <= 0 || usedIds.contains(rule.id)) {
+                rule.id = nextUnusedId(usedIds);
+            }
+            usedIds.add(rule.id);
+        }
+    }
+
+    private long nextRecordId(List<?> records, long preferredId) {
+        Set<Long> usedIds = new HashSet<>();
+        for (Object record : records) {
+            long id = recordId(record);
+            if (id > 0) {
+                usedIds.add(id);
+            }
+        }
+        if (preferredId > 0 && !usedIds.contains(preferredId)) {
+            return preferredId;
+        }
+        return nextUnusedId(usedIds);
+    }
+
+    private long nextUnusedId(Set<Long> usedIds) {
+        long maxId = 0;
+        for (long id : usedIds) {
+            if (id > maxId) {
+                maxId = id;
+            }
+        }
+        long candidate = maxId > 0 ? maxId + 1 : System.currentTimeMillis() * 1000L;
+        while (usedIds.contains(candidate)) {
+            candidate++;
+        }
+        return candidate;
+    }
+
+    private long recordId(Object record) {
+        if (record instanceof BookRecord) return ((BookRecord) record).id;
+        if (record instanceof ChapterRecord) return ((ChapterRecord) record).id;
+        if (record instanceof ReplacementRuleRecord) return ((ReplacementRuleRecord) record).id;
+        if (record instanceof ReaderThemeRecord) return ((ReaderThemeRecord) record).id;
+        if (record instanceof BookmarkRecord) return ((BookmarkRecord) record).id;
+        if (record instanceof ReadingTimeEntryRecord) return ((ReadingTimeEntryRecord) record).id;
+        return 0;
+    }
+
     private String buildRuleKey(ReplacementRuleRecord rule) {
-        return (rule.pattern != null ? rule.pattern : "") + "|" +
-                (rule.scope != null ? rule.scope : "global") + "|" +
-                (rule.bookId != null ? rule.bookId : 0);
+        String scope = "book".equals(rule.scope) ? "book" : "global";
+        long bookId = "book".equals(scope) && rule.bookId != null ? rule.bookId : 0L;
+        return (rule.pattern != null ? rule.pattern : "") + "|" + scope + "|" + bookId;
     }
 
     private String normalizeTitleAuthor(String title, String author) {
