@@ -1238,7 +1238,7 @@ public final class ReaderContentController {
             }
             return;
         }
-        if (paginationInsetsChanged && !suppressReflow) {
+        if (paginationInsetsChanged) {
             scheduleReflowAfterLayout(chapterIndex, currentCharOffset());
         } else if (!suppressReflow && paging != null) {
             paging.invalidatePreparedPagingSnapshots();
