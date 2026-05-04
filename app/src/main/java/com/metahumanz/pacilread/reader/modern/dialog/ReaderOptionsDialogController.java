@@ -109,12 +109,18 @@ public final class ReaderOptionsDialogController {
             String finalAuthor = author;
             int anchorOffset = content.currentCharOffset();
             boolean chapterTitleVisibilityChanged = runtime.settingsStore.isChapterTitleVisible() != refs.showTitleCheck.isChecked();
+            String previousFlipMode = runtime.settingsStore.getFlipMode();
+            String previousFlipSpeed = runtime.settingsStore.getFlipSpeed();
+            String nextFlipMode = ReaderOptionCatalog.FLIP_KEYS[refs.flipSpinner.getSelectedItemPosition()];
+            String nextFlipSpeed = speedKeys[refs.flipSpeedSpinner.getSelectedItemPosition()];
+            boolean flipSettingsChanged = !previousFlipMode.equals(nextFlipMode)
+                    || !previousFlipSpeed.equals(nextFlipSpeed);
             if (state.book != null) {
                 state.book.title = finalTitle;
                 state.book.author = finalAuthor;
             }
-            runtime.settingsStore.setFlipMode(ReaderOptionCatalog.FLIP_KEYS[refs.flipSpinner.getSelectedItemPosition()]);
-            runtime.settingsStore.setFlipSpeed(speedKeys[refs.flipSpeedSpinner.getSelectedItemPosition()]);
+            runtime.settingsStore.setFlipMode(nextFlipMode);
+            runtime.settingsStore.setFlipSpeed(nextFlipSpeed);
             runtime.settingsStore.setReaderSliderMode(sliderMode[0]);
             runtime.settingsStore.setChapterTitleVisible(refs.showTitleCheck.isChecked());
             runtime.settingsStore.setReaderMenuPersistentActionsEnabled(refs.persistentActionsCheck.isChecked());
@@ -128,6 +134,9 @@ public final class ReaderOptionsDialogController {
             runtime.settingsStore.setHudBottomMarginDp(refs.hudBottomMarginSeek.getProgress());
             if (chapterTitleVisibilityChanged) {
                 content.scheduleReflowAfterLayout(state.currentChapterIndex, anchorOffset);
+            } else if (flipSettingsChanged) {
+                chrome.applyMenuLayoutMode();
+                navigation.refreshPagingPresentationAfterSettingsChange();
             } else {
                 chrome.updateReaderLayoutInsets();
                 chrome.applyMenuLayoutMode();

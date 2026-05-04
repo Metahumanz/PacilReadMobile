@@ -109,6 +109,17 @@ public final class ReaderNavigationController {
         paging.animateTransition(safeChapterIndex, safePageIndex, direction == 0 ? 1 : direction);
     }
 
+    public void refreshPagingPresentationAfterSettingsChange() {
+        if (paging == null) {
+            return;
+        }
+        paging.cancelInteractiveAnimator();
+        paging.cancelInteractivePaging();
+        paging.invalidatePreparedPagingSnapshots();
+        chrome.updateUiAfterPageChange();
+        chrome.scheduleAutoHide();
+    }
+
     public void openChapterWithPartialPages(
             int chapterIndex,
             int pageIndex,

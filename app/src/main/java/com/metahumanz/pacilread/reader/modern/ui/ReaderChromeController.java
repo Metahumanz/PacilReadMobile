@@ -109,25 +109,41 @@ public final class ReaderChromeController {
         views.readerRoot.setOnApplyWindowInsetsListener((view, windowInsets) -> {
             int previousInsetTop = state.systemInsetTop;
             int previousInsetBottom = state.systemInsetBottom;
+            int previousContentInsetTop = state.readerContentInsetTop;
+            int previousContentInsetBottom = state.readerContentInsetBottom;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 Insets systemBars = windowInsets.getInsets(WindowInsets.Type.systemBars());
+                Insets stableSystemBars = windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars());
                 Insets cutout = windowInsets.getInsets(WindowInsets.Type.displayCutout());
                 boolean landscape = view.getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
                 state.systemInsetLeft = landscape ? systemBars.left : Math.max(systemBars.left, cutout.left);
                 state.systemInsetTop = Math.max(systemBars.top, cutout.top);
                 state.systemInsetRight = landscape ? systemBars.right : Math.max(systemBars.right, cutout.right);
                 state.systemInsetBottom = Math.max(systemBars.bottom, cutout.bottom);
+                state.readerContentInsetLeft = landscape ? stableSystemBars.left : Math.max(stableSystemBars.left, cutout.left);
+                state.readerContentInsetTop = Math.max(stableSystemBars.top, cutout.top);
+                state.readerContentInsetRight = landscape ? stableSystemBars.right : Math.max(stableSystemBars.right, cutout.right);
+                state.readerContentInsetBottom = Math.max(stableSystemBars.bottom, cutout.bottom);
             } else {
                 state.systemInsetLeft = windowInsets.getSystemWindowInsetLeft();
                 state.systemInsetTop = windowInsets.getSystemWindowInsetTop();
                 state.systemInsetRight = windowInsets.getSystemWindowInsetRight();
                 state.systemInsetBottom = windowInsets.getSystemWindowInsetBottom();
+                state.readerContentInsetLeft = windowInsets.getStableInsetLeft();
+                state.readerContentInsetTop = windowInsets.getStableInsetTop();
+                state.readerContentInsetRight = windowInsets.getStableInsetRight();
+                state.readerContentInsetBottom = windowInsets.getStableInsetBottom();
             }
             updateReaderLayoutInsets();
-            if (previousInsetTop != state.systemInsetTop || previousInsetBottom != state.systemInsetBottom) {
+            if (previousInsetTop != state.systemInsetTop
+                    || previousInsetBottom != state.systemInsetBottom
+                    || previousContentInsetTop != state.readerContentInsetTop
+                    || previousContentInsetBottom != state.readerContentInsetBottom) {
                 boolean suppressReflow = shouldSuppressInsetDrivenReflow();
                 if (content != null) {
-                    content.onReaderInsetsChanged(suppressReflow);
+                    boolean paginationInsetsChanged = previousContentInsetTop != state.readerContentInsetTop
+                            || previousContentInsetBottom != state.readerContentInsetBottom;
+                    content.onReaderInsetsChanged(suppressReflow, paginationInsetsChanged);
                 }
             }
             return windowInsets;
@@ -142,16 +158,16 @@ public final class ReaderChromeController {
                 ? bottomPanelBottomMargin + menuBottomHeight + ui.dp(10)
                 : ui.dp(148) + state.systemInsetBottom;
         views.hudTopContainer.setPadding(
-                ui.dp(12) + state.systemInsetLeft,
-                ui.dp(runtime.settingsStore.getHudTopMarginDp()) + state.systemInsetTop,
-                ui.dp(12) + state.systemInsetRight,
+                ui.dp(12) + state.readerContentInsetLeft,
+                ui.dp(runtime.settingsStore.getHudTopMarginDp()) + state.readerContentInsetTop,
+                ui.dp(12) + state.readerContentInsetRight,
                 0
         );
         views.hudBottomContainer.setPadding(
-                ui.dp(12) + state.systemInsetLeft,
+                ui.dp(12) + state.readerContentInsetLeft,
                 0,
-                ui.dp(12) + state.systemInsetRight,
-                ui.dp(runtime.settingsStore.getHudBottomMarginDp()) + state.systemInsetBottom
+                ui.dp(12) + state.readerContentInsetRight,
+                ui.dp(runtime.settingsStore.getHudBottomMarginDp()) + state.readerContentInsetBottom
         );
         views.pageStage.setPadding(0, 0, 0, 0);
         updateFrameLayoutMargins(
@@ -215,7 +231,7 @@ public final class ReaderChromeController {
         updateReaderHud();
         styleReaderMenuButton(views.ttsButton, tts != null && tts.isActive());
         styleReaderMenuButton(views.autoPageButton, autoPage != null && autoPage.isActive());
-        styleReaderMenuButton(views.themeToggleButton, ThemeModeHelper.isDark(activity.getResources()));
+        styleReaderMenuButton(views.themeToggleButton, isDarkReaderUi());
     }
 
     public int fetchCurrentProgressPercent() {
@@ -257,9 +273,9 @@ public final class ReaderChromeController {
     }
 
     public void toggleReaderUiTheme() {
-        boolean darkUi = ThemeModeHelper.isDark(activity.getResources());
+        boolean darkUi = isDarkReaderUi();
         runtime.settingsStore.setReaderUiThemeMode(darkUi ? "light" : "dark");
-        activity.recreate();
+        activity.applyReaderUiThemeWithoutRecreate();
     }
 
     public void applyReaderMenuPalette(ReaderThemePalette palette, int readerTextColor) {
@@ -386,7 +402,7 @@ public final class ReaderChromeController {
         int flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                 | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
-        if (!ThemeModeHelper.isDark(activity.getResources())) {
+        if (!isDarkReaderUi()) {
             flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
             flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
         }
@@ -438,7 +454,11 @@ public final class ReaderChromeController {
         applyReaderMenuHierarchy(views.menuBottomPanel);
         styleReaderMenuButton(views.ttsButton, tts != null && tts.isActive());
         styleReaderMenuButton(views.autoPageButton, autoPage != null && autoPage.isActive());
-        styleReaderMenuButton(views.themeToggleButton, ThemeModeHelper.isDark(activity.getResources()));
+        styleReaderMenuButton(views.themeToggleButton, isDarkReaderUi());
+    }
+
+    private boolean isDarkReaderUi() {
+        return ThemeModeHelper.MODE_DARK.equals(ThemeModeHelper.getResolvedReaderBucket(activity));
     }
 
     private void applyReaderMenuPanel(View panel) {

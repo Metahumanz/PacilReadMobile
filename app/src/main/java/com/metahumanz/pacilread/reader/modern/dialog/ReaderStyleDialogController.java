@@ -354,7 +354,8 @@ public final class ReaderStyleDialogController {
             refreshTextColorPreview.run();
             String nextResolvedAppearance = ThemeModeHelper.getResolvedReaderAppearanceLabel(activity);
             if (!previousResolvedAppearance.equals(nextResolvedAppearance)) {
-                activity.recreate();
+                activity.applyReaderUiThemeWithoutRecreate();
+                content.scheduleReflowAfterLayout(state.currentChapterIndex, anchorOffset);
                 return;
             }
             content.scheduleReflowAfterLayout(state.currentChapterIndex, anchorOffset);

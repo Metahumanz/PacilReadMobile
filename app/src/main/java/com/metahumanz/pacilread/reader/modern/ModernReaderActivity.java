@@ -52,6 +52,7 @@ import com.metahumanz.pacilread.theme.ThemedReaderActivity;
 import com.metahumanz.pacilread.ui.ActivityTransitionCompat;
 import com.metahumanz.pacilread.ui.LaunchSourceTransition;
 import com.metahumanz.pacilread.ui.PredictiveBackScaleController;
+import com.metahumanz.pacilread.ui.ScreenCornerClipper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -117,6 +118,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         }
 
         views = ReaderViewRefs.bind(this);
+        ScreenCornerClipper.apply(this, views.readerRoot);
         ui = new ReaderUiUtils(this);
         initializeControllers();
 
@@ -161,12 +163,26 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         if (readingStatsTracker != null) {
             readingStatsTracker.resume();
         }
+        if (views != null && views.readerRoot != null) {
+            views.readerRoot.invalidateOutline();
+        }
         chrome.updateSystemBarsVisibility(state.controlsVisible);
         chrome.applyGlassOpacity();
         if (state.controlsVisible) {
             chrome.scheduleAutoHide();
         } else {
             chrome.cancelAutoHide();
+        }
+    }
+
+    public void applyReaderUiThemeWithoutRecreate() {
+        applyResolvedReaderThemeWithoutRecreate();
+        if (style != null) {
+            style.applyReaderSettings();
+        }
+        if (chrome != null) {
+            chrome.updateUiAfterPageChange();
+            chrome.updateSystemBarsVisibility(state != null && state.controlsVisible);
         }
     }
 

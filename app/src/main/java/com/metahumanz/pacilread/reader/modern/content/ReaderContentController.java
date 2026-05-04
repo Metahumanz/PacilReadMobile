@@ -1217,7 +1217,7 @@ public final class ReaderContentController {
         runtime.mainHandler.removeCallbacks(scheduledReflowRunnable);
     }
 
-    public void onReaderInsetsChanged(boolean suppressReflow) {
+    public void onReaderInsetsChanged(boolean suppressReflow, boolean paginationInsetsChanged) {
         if (style != null) {
             style.applyReaderSettings();
         }
@@ -1226,7 +1226,7 @@ public final class ReaderContentController {
             return;
         }
         int chapterIndex = ui.clamp(state.currentChapterIndex, 0, state.chapters.size() - 1);
-        if (initialReflowDeferred && !initialVisiblePageBound) {
+        if (paginationInsetsChanged && initialReflowDeferred && !initialVisiblePageBound) {
             cancelInitialProgressivePagination(chapterIndex, "insets_changed");
             clearPartialPagination();
             View target = views.pageCurrent == null ? views.pageBodyCurrent : views.pageCurrent;
@@ -1238,8 +1238,10 @@ public final class ReaderContentController {
             }
             return;
         }
-        if (!suppressReflow) {
+        if (paginationInsetsChanged && !suppressReflow) {
             scheduleReflowAfterLayout(chapterIndex, currentCharOffset());
+        } else if (!suppressReflow && paging != null) {
+            paging.invalidatePreparedPagingSnapshots();
         }
     }
 
@@ -1286,8 +1288,8 @@ public final class ReaderContentController {
                 runtime.settingsStore.getRightPaddingDp(),
                 runtime.settingsStore.getTopPaddingDp(),
                 runtime.settingsStore.getBottomPaddingDp(),
-                state.systemInsetTop,
-                state.systemInsetBottom,
+                state.readerContentInsetTop,
+                state.readerContentInsetBottom,
                 isDoublePageActive()
         );
     }
