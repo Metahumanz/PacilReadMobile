@@ -61,13 +61,13 @@ public final class HomeNavigationController {
                 activity,
                 settingsStore,
                 resolver,
-                page -> selectHomePage(page, true, false)
+                page -> selectHomePage(page, true, page == PAGE_STATS)
         );
         this.sidebarController = new HomeSidebarController(
                 activity,
                 settingsStore,
                 resolver,
-                (page, animate) -> selectHomePage(page, animate, false)
+                (page, animate) -> selectHomePage(page, animate, page == PAGE_STATS)
         );
         this.pagerController = new HomePagerController(pageContainer, new HomePagerController.Callback() {
             @Override
@@ -85,7 +85,7 @@ public final class HomeNavigationController {
             @Override
             public void onPageChanged(int page, boolean syncFirst) {
                 currentPage = page;
-                callback.onHomePageSelected(page, syncFirst);
+                callback.onHomePageSelected(page, syncFirst || page == PAGE_STATS);
             }
 
             @Override
@@ -99,6 +99,10 @@ public final class HomeNavigationController {
 
     public int getCurrentPage() {
         return currentPage;
+    }
+
+    public void restoreHomePage(int page) {
+        selectHomePage(page, false, false);
     }
 
     public void refreshFromSettings() {

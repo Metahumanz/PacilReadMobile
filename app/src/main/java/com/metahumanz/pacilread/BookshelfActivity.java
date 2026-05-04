@@ -45,6 +45,7 @@ public class BookshelfActivity extends ThemedActivity {
     private static final int REQUEST_PICK_BOOK = 1001;
     private static final int REQUEST_PICK_COVER = 1002;
     private static final String VIEW_MODE_CARD = "card";
+    private static final String STATE_HOME_PAGE = "state_home_page";
     public static final String EXTRA_AUTO_OPEN_BOOK_ID =
             "com.metahumanz.pacilread.EXTRA_AUTO_OPEN_BOOK_ID";
 
@@ -98,6 +99,11 @@ public class BookshelfActivity extends ThemedActivity {
         setupAdapters();
         setupInteractions();
         setupHomeControllers();
+        if (savedInstanceState != null && homeNavigationController != null) {
+            homeNavigationController.restoreHomePage(
+                    savedInstanceState.getInt(STATE_HOME_PAGE, HomeNavigationController.PAGE_BOOKSHELF)
+            );
+        }
         long autoOpenBookId = getIntent().getLongExtra(EXTRA_AUTO_OPEN_BOOK_ID, -1L);
         if (savedInstanceState == null && autoOpenBookId > 0) {
             performAutoOpenFastPath(autoOpenBookId);
@@ -120,6 +126,14 @@ public class BookshelfActivity extends ThemedActivity {
             refreshBooks();
         }
         refreshCurrentHomePage(true);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        if (homeNavigationController != null) {
+            outState.putInt(STATE_HOME_PAGE, homeNavigationController.getCurrentPage());
+        }
+        super.onSaveInstanceState(outState);
     }
 
     @Override

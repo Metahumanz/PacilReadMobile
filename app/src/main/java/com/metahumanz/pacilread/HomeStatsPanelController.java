@@ -12,6 +12,8 @@ import com.metahumanz.pacilread.model.ReadingBookStatRecord;
 import com.metahumanz.pacilread.stats.ReadingStatsUtils;
 import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
+import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
+import com.metahumanz.pacilread.sync.WebDavClient;
 import com.metahumanz.pacilread.ui.LaunchSourceTransition;
 import com.metahumanz.pacilread.ui.TransitionMotionModeHelper;
 
@@ -23,6 +25,7 @@ public final class HomeStatsPanelController {
     private final JsonDatabase databaseHelper;
     private final SettingsStore settingsStore;
     private final ExecutorService executor;
+    private final ReadingStatsSyncManager readingStatsSyncManager;
 
     private final LinearLayout listLayout;
     private final TextView statusText;
@@ -44,6 +47,12 @@ public final class HomeStatsPanelController {
         this.databaseHelper = databaseHelper;
         this.settingsStore = settingsStore;
         this.executor = executor;
+        this.readingStatsSyncManager = new ReadingStatsSyncManager(
+                activity,
+                databaseHelper,
+                settingsStore,
+                new WebDavClient(settingsStore)
+        );
         this.listLayout = activity.findViewById(R.id.layout_home_stats_list);
         this.statusText = activity.findViewById(R.id.text_home_stats_status);
         this.totalText = activity.findViewById(R.id.text_home_stats_total);
@@ -60,19 +69,31 @@ public final class HomeStatsPanelController {
         }
         updatePeriodButtons();
         if (statusText != null) {
-            statusText.setText(syncFirst ? "正在加载本地阅读统计..." : "正在刷新阅读统计...");
+            statusText.setText(syncFirst && readingStatsSyncManager.canAutoSync()
+                    ? "正在同步云端阅读统计..."
+                    : "正在刷新阅读统计...");
         }
         if (totalText != null) {
             totalText.setText("...");
         }
         executor.execute(() -> {
+            String syncMessage = "当前展示的是本地阅读统计";
+            if (syncFirst && readingStatsSyncManager.canAutoSync()) {
+                try {
+                    readingStatsSyncManager.downloadAndMergeReadingStats();
+                    syncMessage = "已同步本地与云端阅读统计";
+                } catch (Exception error) {
+                    syncMessage = "云端同步失败，当前展示本地统计：" + readableError(error);
+                }
+            }
             ReadingStatsUtils.Range range = ReadingStatsUtils.rangeForPeriod(
                     selectedPeriod,
                     java.time.ZoneId.systemDefault()
             );
             int totalSeconds = databaseHelper.getReadingDurationSeconds(range.startDateString(), range.endDateString(), null);
             List<ReadingBookStatRecord> records = databaseHelper.getReadingBookStats(range.startDateString(), range.endDateString());
-            activity.runOnUiThread(() -> render(totalSeconds, records));
+            String finalSyncMessage = syncMessage;
+            activity.runOnUiThread(() -> render(totalSeconds, records, finalSyncMessage));
         });
     }
 
@@ -101,9 +122,9 @@ public final class HomeStatsPanelController {
         AppUiUtils.styleToggleButton(activity, yearButton, ReadingStatsUtils.PERIOD_YEAR.equals(selectedPeriod));
     }
 
-    private void render(int totalSeconds, List<ReadingBookStatRecord> records) {
+    private void render(int totalSeconds, List<ReadingBookStatRecord> records, String syncMessage) {
         if (statusText != null) {
-            statusText.setText("当前展示的是本地阅读统计");
+            statusText.setText(syncMessage);
         }
         if (totalText != null) {
             totalText.setText(ReadingStatsUtils.formatDuration(totalSeconds));
@@ -143,5 +164,19 @@ public final class HomeStatsPanelController {
             }
             listLayout.addView(row);
         }
+    }
+
+    private String readableError(Throwable error) {
+        if (error == null) {
+            return "未知错误";
+        }
+        String message = error.getMessage();
+        if ((message == null || message.isBlank()) && error.getCause() != null) {
+            message = error.getCause().getMessage();
+        }
+        if (message == null || message.isBlank()) {
+            message = error.getClass().getSimpleName();
+        }
+        return message.length() > 120 ? message.substring(0, 120) + "..." : message;
     }
 }
