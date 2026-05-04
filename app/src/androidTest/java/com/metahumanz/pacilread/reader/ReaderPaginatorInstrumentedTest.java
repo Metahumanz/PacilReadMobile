@@ -1,8 +1,10 @@
 package com.metahumanz.pacilread.reader;
 
 import android.graphics.Typeface;
+import android.text.Layout;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
+import android.text.StaticLayout;
 import android.text.TextPaint;
 import android.text.style.StyleSpan;
 
@@ -86,6 +88,36 @@ public class ReaderPaginatorInstrumentedTest {
         assertTrue(pages.size() > 1);
         assertTrue(pages.get(0).text.toString().contains("第二行"));
         assertFalse(pages.get(0).text.toString().contains("第三行"));
+    }
+
+    @Test
+    public void lineBottomForPageEnd_ignoresParagraphSpacingWithExtraLineSpacing() {
+        SpannableStringBuilder source = new SpannableStringBuilder();
+        source.append("第一段");
+        int visibleEnd = source.length();
+        source.append("\n");
+        int lineEnd = source.length();
+        source.setSpan(
+                new ReaderParagraphBottomSpacingSpan(72),
+                visibleEnd,
+                lineEnd,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        );
+        source.append("第二段\n第三段");
+
+        TextPaint paint = newPaint();
+        StaticLayout layout = StaticLayout.Builder.obtain(source, 0, source.length(), paint, 800)
+                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                .setIncludePad(false)
+                .setLineSpacing(12f, 1f)
+                .setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE)
+                .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
+                .build();
+
+        int visualBottom = ReaderPaginator.lineBottomForPageEnd(source, layout, 0);
+
+        assertEquals(layout.getLineBottom(0) - 72, visualBottom);
+        assertTrue(visualBottom < layout.getLineBottom(0));
     }
 
     @Test
