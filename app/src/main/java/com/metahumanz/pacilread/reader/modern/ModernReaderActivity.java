@@ -261,6 +261,23 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         if (paging.handleReaderVolumeKeyEvent(event)) {
             return true;
         }
+        if (event.getAction() == KeyEvent.ACTION_DOWN && !state.controlsVisible) {
+            switch (event.getKeyCode()) {
+                case KeyEvent.KEYCODE_DPAD_UP:
+                case KeyEvent.KEYCODE_DPAD_LEFT:
+                case KeyEvent.KEYCODE_PAGE_UP:
+                    navigation.pageUp();
+                    return true;
+                case KeyEvent.KEYCODE_DPAD_DOWN:
+                case KeyEvent.KEYCODE_DPAD_RIGHT:
+                case KeyEvent.KEYCODE_PAGE_DOWN:
+                case KeyEvent.KEYCODE_SPACE:
+                case KeyEvent.KEYCODE_ENTER:
+                case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                    navigation.pageDown();
+                    return true;
+            }
+        }
         return super.dispatchKeyEvent(event);
     }
 
