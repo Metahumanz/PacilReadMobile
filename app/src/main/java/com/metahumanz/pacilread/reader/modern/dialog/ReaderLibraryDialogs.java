@@ -74,54 +74,31 @@ public final class ReaderLibraryDialogs {
         }
         ArrayAdapter<String> adapter = new TocListAdapter(items, state.currentChapterIndex);
         listView.setAdapter(adapter);
-        final boolean[] scrubberDragging = new boolean[]{false};
-        final int[] lastDraggedIndex = new int[]{-1};
         AlertDialog dialog = new AlertDialog.Builder(activity).setView(contentView).create();
         dialogSupport.applyTocStyleFullscreenInsets(contentView, contentContainer);
         dialogSupport.addAlignedCloseButton(contentView, R.id.toc_title, contentContainer, dialog);
+        attachListScrubber(
+                listView,
+                tocBody,
+                scrubberHost,
+                scrubberTrack,
+                scrubberThumb,
+                scrubberPreview,
+                new ScrubberItems() {
+                    @Override
+                    public int size() {
+                        return items.size();
+                    }
+
+                    @Override
+                    public CharSequence previewText(int index) {
+                        return items.get(index);
+                    }
+                }
+        );
         listView.setOnItemClickListener((parent, view, position, id) -> {
             dialog.dismiss();
             navigation.openChapterFromStart(position, true, position >= state.currentChapterIndex ? 1 : -1);
-        });
-        listView.setOnScrollListener(new AbsListView.OnScrollListener() {
-            @Override
-            public void onScrollStateChanged(AbsListView view, int scrollState) {
-            }
-
-            @Override
-            public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {
-                if (scrubberDragging[0]) {
-                    return;
-                }
-                float fraction = firstVisibleFraction(listView, items.size());
-                positionScrubberThumb(scrubberTrack, scrubberThumb, fraction);
-            }
-        });
-        scrubberHost.setOnTouchListener((view, event) -> {
-            if (event.getActionMasked() == MotionEvent.ACTION_CANCEL || event.getActionMasked() == MotionEvent.ACTION_UP) {
-                scrubberDragging[0] = false;
-                lastDraggedIndex[0] = -1;
-                scrubberPreview.setVisibility(View.INVISIBLE);
-                view.getParent().requestDisallowInterceptTouchEvent(false);
-                view.post(() -> positionScrubberThumb(scrubberTrack, scrubberThumb, firstVisibleFraction(listView, items.size())));
-                return true;
-            }
-            if (event.getActionMasked() != MotionEvent.ACTION_DOWN && event.getActionMasked() != MotionEvent.ACTION_MOVE) {
-                return false;
-            }
-            scrubberDragging[0] = true;
-            view.getParent().requestDisallowInterceptTouchEvent(true);
-            float fraction = touchFractionForScrubber(event, scrubberTrack);
-            int index = fractionToChapterIndex(fraction, items.size());
-            positionScrubberThumb(scrubberTrack, scrubberThumb, fraction);
-            if (index != lastDraggedIndex[0]) {
-                lastDraggedIndex[0] = index;
-                listView.setSelectionFromTop(index, 0);
-            }
-            scrubberPreview.setText(items.get(index));
-            scrubberPreview.setVisibility(View.VISIBLE);
-            positionScrubberPreview(scrubberPreview, tocBody, scrubberTrack, fraction);
-            return true;
         });
         dialogSupport.showImmersiveFullscreenDialog(dialog, state.controlsVisible);
         contentView.requestApplyInsets();
@@ -140,11 +117,35 @@ public final class ReaderLibraryDialogs {
         EditText queryInput = contentView.findViewById(R.id.search_query_input);
         Button searchButton = contentView.findViewById(R.id.search_button_go);
         TextView resultCount = contentView.findViewById(R.id.search_result_count);
+        FrameLayout searchBody = contentView.findViewById(R.id.search_result_body);
         ListView listView = contentView.findViewById(R.id.search_result_list);
+        View scrubberHost = contentView.findViewById(R.id.search_scrubber_host);
+        View scrubberTrack = contentView.findViewById(R.id.search_scrubber_track);
+        View scrubberThumb = contentView.findViewById(R.id.search_scrubber_thumb);
+        TextView scrubberPreview = contentView.findViewById(R.id.search_scrubber_preview);
         List<SearchResult> results = new ArrayList<>();
         ArrayAdapter<String> adapter = dialogSupport.buildDialogListAdapter(new ArrayList<>());
         listView.setAdapter(adapter);
         AlertDialog dialog = new AlertDialog.Builder(activity).setView(contentView).create();
+        attachListScrubber(
+                listView,
+                searchBody,
+                scrubberHost,
+                scrubberTrack,
+                scrubberThumb,
+                scrubberPreview,
+                new ScrubberItems() {
+                    @Override
+                    public int size() {
+                        return results.size();
+                    }
+
+                    @Override
+                    public CharSequence previewText(int index) {
+                        return searchScrubberPreviewText(results.get(index));
+                    }
+                }
+        );
         listView.setOnItemClickListener((parent, view, position, id) -> {
             SearchResult result = results.get(position);
             dialog.dismiss();
@@ -158,12 +159,16 @@ public final class ReaderLibraryDialogs {
         Runnable runSearch = () -> {
             String query = queryInput.getText().toString().trim().toLowerCase(Locale.ROOT);
             if (query.isEmpty()) {
+                results.clear();
+                adapter.clear();
                 resultCount.setText("请输入关键词");
+                refreshListScrubber(listView, scrubberHost, scrubberTrack, scrubberThumb, scrubberPreview, results.size());
                 return;
             }
             results.clear();
             adapter.clear();
             resultCount.setText("正在搜索...");
+            refreshListScrubber(listView, scrubberHost, scrubberTrack, scrubberThumb, scrubberPreview, results.size());
             runtime.executor.execute(() -> {
                 List<SearchResult> tempResults = new ArrayList<>();
                 for (int i = 0; i < state.chapters.size(); i++) {
@@ -185,6 +190,15 @@ public final class ReaderLibraryDialogs {
                         adapter.add(result.chapterTitle + "\n" + result.snippet);
                     }
                     resultCount.setText(results.isEmpty() ? "没有找到匹配内容" : "找到 " + results.size() + " 条结果");
+                    listView.setSelectionFromTop(0, 0);
+                    listView.post(() -> refreshListScrubber(
+                            listView,
+                            scrubberHost,
+                            scrubberTrack,
+                            scrubberThumb,
+                            scrubberPreview,
+                            results.size()
+                    ));
                 });
             });
         };
@@ -300,6 +314,105 @@ public final class ReaderLibraryDialogs {
         }
     }
 
+    private void attachListScrubber(
+            ListView listView,
+            View body,
+            View scrubberHost,
+            View scrubberTrack,
+            View scrubberThumb,
+            TextView scrubberPreview,
+            ScrubberItems items
+    ) {
+        if (listView == null || body == null || scrubberHost == null
+                || scrubberTrack == null || scrubberThumb == null || scrubberPreview == null
+                || items == null) {
+            return;
+        }
+        final boolean[] scrubberDragging = new boolean[]{false};
+        final int[] lastDraggedIndex = new int[]{-1};
+        listView.setOnScrollListener(new AbsListView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(AbsListView view, int scrollState) {
+            }
+
+            @Override
+            public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {
+                if (scrubberDragging[0]) {
+                    return;
+                }
+                refreshListScrubber(
+                        listView,
+                        scrubberHost,
+                        scrubberTrack,
+                        scrubberThumb,
+                        scrubberPreview,
+                        items.size()
+                );
+            }
+        });
+        scrubberHost.setOnTouchListener((view, event) -> {
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_CANCEL || action == MotionEvent.ACTION_UP) {
+                scrubberDragging[0] = false;
+                lastDraggedIndex[0] = -1;
+                scrubberPreview.setVisibility(View.INVISIBLE);
+                view.getParent().requestDisallowInterceptTouchEvent(false);
+                view.post(() -> refreshListScrubber(
+                        listView,
+                        scrubberHost,
+                        scrubberTrack,
+                        scrubberThumb,
+                        scrubberPreview,
+                        items.size()
+                ));
+                return true;
+            }
+            if (action != MotionEvent.ACTION_DOWN && action != MotionEvent.ACTION_MOVE) {
+                return false;
+            }
+            int itemCount = items.size();
+            if (itemCount <= 1) {
+                scrubberPreview.setVisibility(View.INVISIBLE);
+                return false;
+            }
+            scrubberDragging[0] = true;
+            view.getParent().requestDisallowInterceptTouchEvent(true);
+            float fraction = touchFractionForScrubber(event, scrubberTrack);
+            int index = fractionToItemIndex(fraction, itemCount);
+            positionScrubberThumb(scrubberTrack, scrubberThumb, fraction);
+            if (index != lastDraggedIndex[0]) {
+                lastDraggedIndex[0] = index;
+                listView.setSelectionFromTop(index, 0);
+            }
+            scrubberPreview.setText(items.previewText(index));
+            scrubberPreview.setVisibility(View.VISIBLE);
+            positionScrubberPreview(scrubberPreview, body, scrubberTrack, fraction);
+            return true;
+        });
+        refreshListScrubber(listView, scrubberHost, scrubberTrack, scrubberThumb, scrubberPreview, items.size());
+    }
+
+    private void refreshListScrubber(
+            ListView listView,
+            View scrubberHost,
+            View scrubberTrack,
+            View scrubberThumb,
+            TextView scrubberPreview,
+            int itemCount
+    ) {
+        if (scrubberHost == null || scrubberTrack == null || scrubberThumb == null || scrubberPreview == null) {
+            return;
+        }
+        if (itemCount <= 1) {
+            scrubberHost.setVisibility(View.INVISIBLE);
+            scrubberPreview.setVisibility(View.INVISIBLE);
+            positionScrubberThumb(scrubberTrack, scrubberThumb, 0f);
+            return;
+        }
+        scrubberHost.setVisibility(View.VISIBLE);
+        positionScrubberThumb(scrubberTrack, scrubberThumb, firstVisibleFraction(listView, itemCount));
+    }
+
     private void positionScrubberPreview(TextView preview, View body, View scrubberTrack, float fraction) {
         if (body.getHeight() <= 0) {
             return;
@@ -347,7 +460,7 @@ public final class ReaderLibraryDialogs {
         return clampFraction(index / (float) (itemCount - 1));
     }
 
-    private int fractionToChapterIndex(float fraction, int itemCount) {
+    private int fractionToItemIndex(float fraction, int itemCount) {
         if (itemCount <= 1) {
             return 0;
         }
@@ -356,6 +469,25 @@ public final class ReaderLibraryDialogs {
 
     private float clampFraction(float fraction) {
         return Math.max(0f, Math.min(1f, fraction));
+    }
+
+    private String searchScrubberPreviewText(SearchResult result) {
+        if (result == null) {
+            return "";
+        }
+        return String.format(
+                Locale.SIMPLIFIED_CHINESE,
+                "%03d  %s\n%s",
+                result.chapterIndex + 1,
+                result.chapterTitle,
+                result.snippet
+        );
+    }
+
+    private interface ScrubberItems {
+        int size();
+
+        CharSequence previewText(int index);
     }
 
     private static final class SearchResult {
