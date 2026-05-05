@@ -19,6 +19,8 @@ import android.widget.Spinner;
 import android.widget.TextView;
 
 import com.metahumanz.pacilread.importer.BookImportService;
+import com.metahumanz.pacilread.model.BookRecord;
+import com.metahumanz.pacilread.model.ReplacementRuleRecord;
 import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
@@ -30,8 +32,10 @@ import com.metahumanz.pacilread.tts.SystemTtsClient;
 import com.metahumanz.pacilread.ui.TransitionMotionModeHelper;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -122,6 +126,13 @@ final class SettingsScreenController {
     private Button transitionSimpleButton;
     private TextView transitionMotionDescriptionText;
 
+    private String ruleFilter = "all";
+    private LinearLayout rulesListContainer;
+    private TextView rulesEmptyText;
+    private Button filterAllButton;
+    private Button filterGlobalButton;
+    private Button filterBookButton;
+
     private boolean bindingSettingsValues = false;
     private boolean settingsBusy = false;
     private String selectedLightStyleVariant = ThemeModeHelper.LIGHT_STYLE_YUNBAI;
@@ -151,6 +162,7 @@ final class SettingsScreenController {
         setupWebDavSyncButtons();
         refreshBackupLabels();
         setupActionButtons();
+        setupRuleFilterButtons();
     }
 
     void bindCurrentValues() {
@@ -196,6 +208,7 @@ final class SettingsScreenController {
             readingStatsController.bindValues();
         }
         updateTtsSettingsVisibility();
+        refreshRulesList();
         bindingSettingsValues = false;
         refreshStatusSummary();
         refreshDatabaseSizeLabel();
@@ -340,6 +353,11 @@ final class SettingsScreenController {
         webDavSyncReadingStatsButton = activity.findViewById(R.id.button_webdav_sync_reading_stats);
         webDavCleanRemoteOrphansCheck = activity.findViewById(R.id.check_webdav_clean_remote_orphans);
         ttsMimoKeyLayout = activity.findViewById(R.id.layout_tts_mimo_key);
+        rulesListContainer = activity.findViewById(R.id.layout_rules_list);
+        rulesEmptyText = activity.findViewById(R.id.text_rules_empty);
+        filterAllButton = activity.findViewById(R.id.button_rule_filter_all);
+        filterGlobalButton = activity.findViewById(R.id.button_rule_filter_global);
+        filterBookButton = activity.findViewById(R.id.button_rule_filter_book);
     }
 
     private void setupSharedControllers() {
@@ -1088,6 +1106,126 @@ final class SettingsScreenController {
 
     private String buildWebDavSettingsSnapshotSummary() {
         return settingsStore.getWebDavDir() + settingsStore.getWebDavSettingsSubdir() + "android-settings.json";
+    }
+
+    private void setupRuleFilterButtons() {
+        if (filterAllButton == null || filterGlobalButton == null || filterBookButton == null) return;
+        filterAllButton.setOnClickListener(v -> selectRuleFilter("all"));
+        filterGlobalButton.setOnClickListener(v -> selectRuleFilter("global"));
+        filterBookButton.setOnClickListener(v -> selectRuleFilter("book"));
+    }
+
+    private void selectRuleFilter(String filter) {
+        ruleFilter = filter;
+        AppUiUtils.styleToggleButton(activity, filterAllButton, "all".equals(filter));
+        AppUiUtils.styleToggleButton(activity, filterGlobalButton, "global".equals(filter));
+        AppUiUtils.styleToggleButton(activity, filterBookButton, "book".equals(filter));
+        refreshRulesList();
+    }
+
+    private void refreshRulesList() {
+        if (rulesListContainer == null || rulesEmptyText == null) return;
+        rulesListContainer.removeAllViews();
+        List<ReplacementRuleRecord> rules = new ArrayList<>(databaseHelper.getRulesMutable());
+
+        Map<Long, String> bookTitles = new HashMap<>();
+        for (BookRecord book : databaseHelper.getBooks()) {
+            bookTitles.put(book.id, book.title);
+        }
+
+        List<ReplacementRuleRecord> filtered = new ArrayList<>();
+        for (ReplacementRuleRecord rule : rules) {
+            if ("all".equals(ruleFilter)) {
+                filtered.add(rule);
+            } else if ("global".equals(ruleFilter) && "global".equals(rule.scope)) {
+                filtered.add(rule);
+            } else if ("book".equals(ruleFilter) && "book".equals(rule.scope)) {
+                filtered.add(rule);
+            }
+        }
+
+        if (filtered.isEmpty()) {
+            rulesEmptyText.setVisibility(View.VISIBLE);
+            return;
+        }
+        rulesEmptyText.setVisibility(View.GONE);
+
+        for (int i = 0; i < filtered.size(); i++) {
+            ReplacementRuleRecord rule = filtered.get(i);
+            View row = buildRuleRow(rule, bookTitles, i > 0);
+            row.setTag(rule);
+            row.setOnClickListener(v -> {
+                ReplacementRuleRecord clickedRule = (ReplacementRuleRecord) v.getTag();
+                toggleRuleActive(clickedRule);
+            });
+            row.setOnLongClickListener(v -> {
+                ReplacementRuleRecord clickedRule = (ReplacementRuleRecord) v.getTag();
+                confirmDeleteRule(clickedRule);
+                return true;
+            });
+            row.setAlpha(rule.active ? 1.0f : 0.5f);
+            rulesListContainer.addView(row);
+        }
+    }
+
+    private View buildRuleRow(ReplacementRuleRecord rule, Map<Long, String> bookTitles, boolean showDivider) {
+        LinearLayout row = new LinearLayout(activity);
+        row.setOrientation(LinearLayout.VERTICAL);
+        row.setPadding(dp(12), dp(10), dp(12), dp(10));
+        if (showDivider) {
+            View divider = new View(activity);
+            divider.setBackgroundColor(ThemeModeHelper.resolveColor(activity, R.color.app_border));
+            LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, dp(1));
+            dividerParams.topMargin = dp(10);
+            row.addView(divider, 0);
+        }
+
+        String replacement = rule.replacement == null || rule.replacement.isEmpty() ? "(删除)" : rule.replacement;
+        String replacementSuffix = rule.regex ? "  [正则]" : "";
+
+        TextView patternText = new TextView(activity);
+        patternText.setTextSize(13f);
+        patternText.setTextColor(ThemeModeHelper.resolveColor(activity, R.color.app_primary));
+        patternText.setText(rule.pattern + "  →  " + replacement + replacementSuffix);
+        row.addView(patternText);
+
+        TextView metaText = new TextView(activity);
+        metaText.setTextSize(11f);
+        metaText.setTextColor(ThemeModeHelper.resolveColor(activity, R.color.app_text_secondary));
+        String scopeLabel = "global".equals(rule.scope) ? "全局" : "单书";
+        StringBuilder metaBuilder = new StringBuilder(scopeLabel);
+        if ("book".equals(rule.scope) && rule.bookId != null) {
+            String title = bookTitles.get(rule.bookId);
+            metaBuilder.append(" - ");
+            metaBuilder.append(title != null ? title : "#" + rule.bookId);
+        }
+        if (rule.regex) {
+            metaBuilder.append(" - 正则");
+        }
+        metaBuilder.append(rule.active ? " - 已启用" : " - 已停用");
+        metaText.setText(metaBuilder.toString());
+        row.addView(metaText);
+
+        return row;
+    }
+
+    private void toggleRuleActive(ReplacementRuleRecord rule) {
+        databaseHelper.toggleReplacementRule(rule.id, !rule.active);
+        refreshRulesList();
+    }
+
+    private void confirmDeleteRule(ReplacementRuleRecord rule) {
+        String pattern = rule.pattern.length() > 30 ? rule.pattern.substring(0, 30) + "..." : rule.pattern;
+        new AlertDialog.Builder(activity)
+                .setTitle("删除替换规则")
+                .setMessage("确定要删除规则 \"" + pattern + "\" 吗？")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("删除", (dialog, which) -> {
+                    databaseHelper.deleteReplacementRule(rule.id);
+                    refreshRulesList();
+                })
+                .show();
     }
 
     private interface BackgroundAction {

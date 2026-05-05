@@ -105,6 +105,12 @@ public final class ReaderContentController {
     private PartialPagination activePartialPagination = null;
     private ReaderLayoutSignature runningProgressiveSignature = null;
     private String runningProgressiveSource = null;
+    private final Object progressSyncLock = new Object();
+    private boolean initialRemoteProgressSyncPending = false;
+    private long initialRemoteProgressBaselineLastReadAt = 0L;
+    private int initialRemoteProgressBaselineIndex = 0;
+    private int initialRemoteProgressBaselineOffset = 0;
+    private DeferredProgressUpload deferredProgressUpload = null;
 
     public ReaderContentController(
             ModernReaderActivity activity,
@@ -298,6 +304,7 @@ public final class ReaderContentController {
             state.currentChapterIndex = targetChapterIndex;
             int initialAnchorOffset = resolveInitialAnchorOffset(state.book.progressOffset);
             state.sessionStartOffset = initialAnchorOffset;
+            prepareInitialRemoteProgressSync();
             if (!deferReflow) {
                 style.applyReaderSettings();
             }
@@ -371,6 +378,7 @@ public final class ReaderContentController {
                     state.currentChapterIndex = targetChapterIndex;
                     int initialAnchorOffset = resolveInitialAnchorOffset(loadedBook.progressOffset);
                     state.sessionStartOffset = initialAnchorOffset;
+                    prepareInitialRemoteProgressSync();
 
                     // 预先注入已处理好的正文到缓存，后续 prewarm/prefetch 只需分页
                     if (finalPrewarmedText != null && finalPrewarmIndex >= 0) {
@@ -428,15 +436,10 @@ public final class ReaderContentController {
         if (runtime.settingsStore.isWebDavEnabled()) {
             BookRecord bookSnapshot = snapshotBookForProgressUpload(state.book);
             ChapterRecord chapterSnapshot = snapshotChapterForProgressUpload(chapter);
-            WebDavClient webDavClient = runtime.webDavClient;
-            PROGRESS_UPLOAD_EXECUTOR.execute(() -> {
-                try {
-                    webDavClient.ensureProgressDirectory();
-                    webDavClient.uploadProgress(bookSnapshot, chapterSnapshot, offset);
-                } catch (Exception error) {
-                    Log.w(TAG, "Failed to upload reader progress", error);
-                }
-            });
+            if (deferProgressUploadIfInitialSyncPending(bookSnapshot, chapterSnapshot, offset)) {
+                return;
+            }
+            uploadProgressSnapshot(bookSnapshot, chapterSnapshot, offset);
         }
     }
 
@@ -456,17 +459,32 @@ public final class ReaderContentController {
             }
             return;
         }
+        RemoteProgressComparison initialComparison = captureInitialRemoteProgressComparison();
         runtime.executor.execute(() -> {
+            boolean remoteApplied = false;
             try {
-                com.metahumanz.pacilread.sync.WebDavClient.ProgressPayload payload = runtime.webDavClient.downloadProgress(state.book);
+                BookRecord currentBook = state.book;
+                if (currentBook == null) {
+                    return;
+                }
+                com.metahumanz.pacilread.sync.WebDavClient.ProgressPayload payload = runtime.webDavClient.downloadProgress(currentBook);
                 if (payload == null) {
                     if (!silent) {
                         activity.runOnUiThread(() -> ui.showToast("云端暂时没有可恢复的进度"));
                     }
                     return;
                 }
-                boolean shouldApply = payload.chapterTime > state.book.lastReadAt + 5000
-                        || (state.book.progressIndex == 0 && state.book.progressOffset == 0);
+                long compareLastReadAt = initialComparison != null
+                        ? initialComparison.lastReadAt
+                        : currentBook.lastReadAt;
+                int compareProgressIndex = initialComparison != null
+                        ? initialComparison.progressIndex
+                        : currentBook.progressIndex;
+                int compareProgressOffset = initialComparison != null
+                        ? initialComparison.progressOffset
+                        : currentBook.progressOffset;
+                boolean shouldApply = payload.chapterTime > compareLastReadAt + 5000
+                        || (compareProgressIndex == 0 && compareProgressOffset == 0);
                 if (!shouldApply) {
                     return;
                 }
@@ -483,17 +501,97 @@ public final class ReaderContentController {
                 state.book.progressIndex = state.chapters.get(remoteIndex).orderIndex;
                 state.book.progressOffset = Math.max(payload.chapterPosition, 0);
                 state.book.lastReadAt = payload.chapterTime;
+                remoteApplied = true;
                 activity.runOnUiThread(() -> scheduleReflowAfterLayout(remoteIndex, payload.chapterPosition));
             } catch (Exception error) {
                 if (!silent) {
                     activity.runOnUiThread(() -> ui.showToast("同步失败: " + error.getMessage()));
+                }
+            } finally {
+                DeferredProgressUpload upload = finishInitialRemoteProgressSync(initialComparison, remoteApplied);
+                if (upload != null) {
+                    uploadProgressSnapshot(upload.book, upload.chapter, upload.offset);
                 }
             }
         });
     }
 
     private void scheduleRemoteProgressSync() {
-        runtime.mainHandler.postDelayed(() -> syncFromWebDav(true), 2000L);
+        runtime.mainHandler.postDelayed(() -> syncFromWebDav(true), 250L);
+    }
+
+    private void prepareInitialRemoteProgressSync() {
+        synchronized (progressSyncLock) {
+            deferredProgressUpload = null;
+            if (!runtime.settingsStore.isWebDavEnabled() || state.book == null) {
+                initialRemoteProgressSyncPending = false;
+                return;
+            }
+            initialRemoteProgressSyncPending = true;
+            initialRemoteProgressBaselineLastReadAt = state.book.lastReadAt;
+            initialRemoteProgressBaselineIndex = state.book.progressIndex;
+            initialRemoteProgressBaselineOffset = state.book.progressOffset;
+        }
+    }
+
+    private RemoteProgressComparison captureInitialRemoteProgressComparison() {
+        synchronized (progressSyncLock) {
+            if (!initialRemoteProgressSyncPending) {
+                return null;
+            }
+            return new RemoteProgressComparison(
+                    initialRemoteProgressBaselineLastReadAt,
+                    initialRemoteProgressBaselineIndex,
+                    initialRemoteProgressBaselineOffset
+            );
+        }
+    }
+
+    private boolean deferProgressUploadIfInitialSyncPending(
+            BookRecord bookSnapshot,
+            ChapterRecord chapterSnapshot,
+            int offset
+    ) {
+        synchronized (progressSyncLock) {
+            if (!initialRemoteProgressSyncPending) {
+                return false;
+            }
+            deferredProgressUpload = new DeferredProgressUpload(bookSnapshot, chapterSnapshot, offset);
+            return true;
+        }
+    }
+
+    private DeferredProgressUpload finishInitialRemoteProgressSync(
+            RemoteProgressComparison comparison,
+            boolean remoteApplied
+    ) {
+        if (comparison == null) {
+            return null;
+        }
+        synchronized (progressSyncLock) {
+            if (!initialRemoteProgressSyncPending) {
+                return null;
+            }
+            initialRemoteProgressSyncPending = false;
+            initialRemoteProgressBaselineLastReadAt = 0L;
+            initialRemoteProgressBaselineIndex = 0;
+            initialRemoteProgressBaselineOffset = 0;
+            DeferredProgressUpload upload = remoteApplied ? null : deferredProgressUpload;
+            deferredProgressUpload = null;
+            return upload;
+        }
+    }
+
+    private void uploadProgressSnapshot(BookRecord bookSnapshot, ChapterRecord chapterSnapshot, int offset) {
+        WebDavClient webDavClient = runtime.webDavClient;
+        PROGRESS_UPLOAD_EXECUTOR.execute(() -> {
+            try {
+                webDavClient.ensureProgressDirectory();
+                webDavClient.uploadProgress(bookSnapshot, chapterSnapshot, offset);
+            } catch (Exception error) {
+                Log.w(TAG, "Failed to upload reader progress", error);
+            }
+        });
     }
 
     private BookRecord snapshotBookForProgressUpload(BookRecord source) {
@@ -515,6 +613,30 @@ public final class ReaderContentController {
         snapshot.title = source.title;
         snapshot.orderIndex = source.orderIndex;
         return snapshot;
+    }
+
+    private static final class RemoteProgressComparison {
+        final long lastReadAt;
+        final int progressIndex;
+        final int progressOffset;
+
+        RemoteProgressComparison(long lastReadAt, int progressIndex, int progressOffset) {
+            this.lastReadAt = lastReadAt;
+            this.progressIndex = progressIndex;
+            this.progressOffset = progressOffset;
+        }
+    }
+
+    private static final class DeferredProgressUpload {
+        final BookRecord book;
+        final ChapterRecord chapter;
+        final int offset;
+
+        DeferredProgressUpload(BookRecord book, ChapterRecord chapter, int offset) {
+            this.book = book;
+            this.chapter = chapter;
+            this.offset = offset;
+        }
     }
 
     public List<PageSlice> getPagesForChapter(int chapterIndex) {
@@ -1095,7 +1217,7 @@ public final class ReaderContentController {
         runtime.mainHandler.removeCallbacks(scheduledReflowRunnable);
     }
 
-    public void onReaderInsetsChanged(boolean suppressReflow) {
+    public void onReaderInsetsChanged(boolean suppressReflow, boolean paginationInsetsChanged) {
         if (style != null) {
             style.applyReaderSettings();
         }
@@ -1104,7 +1226,7 @@ public final class ReaderContentController {
             return;
         }
         int chapterIndex = ui.clamp(state.currentChapterIndex, 0, state.chapters.size() - 1);
-        if (initialReflowDeferred && !initialVisiblePageBound) {
+        if (paginationInsetsChanged && initialReflowDeferred && !initialVisiblePageBound) {
             cancelInitialProgressivePagination(chapterIndex, "insets_changed");
             clearPartialPagination();
             View target = views.pageCurrent == null ? views.pageBodyCurrent : views.pageCurrent;
@@ -1116,8 +1238,10 @@ public final class ReaderContentController {
             }
             return;
         }
-        if (!suppressReflow) {
+        if (paginationInsetsChanged) {
             scheduleReflowAfterLayout(chapterIndex, currentCharOffset());
+        } else if (!suppressReflow && paging != null) {
+            paging.invalidatePreparedPagingSnapshots();
         }
     }
 
@@ -1164,8 +1288,8 @@ public final class ReaderContentController {
                 runtime.settingsStore.getRightPaddingDp(),
                 runtime.settingsStore.getTopPaddingDp(),
                 runtime.settingsStore.getBottomPaddingDp(),
-                state.systemInsetTop,
-                state.systemInsetBottom,
+                state.readerContentInsetTop,
+                state.readerContentInsetBottom,
                 isDoublePageActive()
         );
     }

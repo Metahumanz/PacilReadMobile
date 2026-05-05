@@ -1,5 +1,6 @@
 package com.metahumanz.pacilread.reader;
 
+import android.annotation.SuppressLint;
 import android.text.Layout;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -244,6 +245,7 @@ public final class ReaderPaginator {
         return buildLayout(source, paint, width, lineSpacingExtra, 0, source.length());
     }
 
+    @SuppressLint("WrongConstant")
     private static StaticLayout buildLayout(CharSequence source, TextPaint paint, int width, float lineSpacingExtra, int start, int end) {
         int safeStart = Math.max(0, Math.min(start, source.length()));
         int safeEnd = Math.max(safeStart, Math.min(end, source.length()));
@@ -276,13 +278,13 @@ public final class ReaderPaginator {
         return Math.max(windowStart, Math.min(absoluteOffset, windowEnd));
     }
 
-    private static int lineBottomForPageEnd(CharSequence source, StaticLayout layout, int lineIndex) {
+    static int lineBottomForPageEnd(CharSequence source, Layout layout, int lineIndex) {
         return lineBottomForPageEnd(source, layout, lineIndex, 0, source.length(), false);
     }
 
-    private static int lineBottomForPageEnd(
+    static int lineBottomForPageEnd(
             CharSequence source,
-            StaticLayout layout,
+            Layout layout,
             int lineIndex,
             int windowStart,
             int windowEnd,

@@ -145,9 +145,9 @@ public class WebDavClient {
     public ProgressPayload downloadProgress(BookRecord book) throws Exception {
         ProgressPayload latestPayload = null;
         Exception lastError = null;
-        for (String url : progressFileUrls(book)) {
+        for (ProgressFileTarget target : progressDownloadFileTargets(book)) {
             try {
-                Response response = request(url, "GET", null, null);
+                Response response = request(target.url, "GET", null, null);
                 if (response.code == 404) {
                     continue;
                 }
@@ -167,7 +167,9 @@ public class WebDavClient {
                     latestPayload = payload;
                 }
             } catch (Exception error) {
-                lastError = error;
+                if (target.required) {
+                    lastError = error;
+                }
             }
         }
         if (latestPayload != null) {
@@ -193,7 +195,7 @@ public class WebDavClient {
         String body = payload.toString(2);
         Exception lastError = null;
         boolean uploadedAny = false;
-        for (String url : progressFileUrls(book)) {
+        for (String url : progressUploadFileUrls(book)) {
             try {
                 Response response = request(url, "PUT", body, null);
                 requireSuccessfulResponse(response, "上传阅读进度", false);
@@ -213,13 +215,29 @@ public class WebDavClient {
         return safeTitle + "_" + safeAuthor + ".json";
     }
 
-    private List<String> progressFileUrls(BookRecord book) throws Exception {
+    private List<String> progressUploadFileUrls(BookRecord book) throws Exception {
         String fileName = encodePathSegment(safeProgressFileName(book));
         List<String> urls = new ArrayList<>();
         for (ProgressLocation location : progressLocations()) {
             addUnique(urls, location.baseUrl + "bookProgress/" + fileName);
         }
         return urls;
+    }
+
+    private List<ProgressFileTarget> progressDownloadFileTargets(BookRecord book) throws Exception {
+        String fileName = encodePathSegment(safeProgressFileName(book));
+        List<ProgressFileTarget> targets = new ArrayList<>();
+        for (String url : progressUploadFileUrls(book)) {
+            addUniqueTarget(targets, url, true);
+        }
+        if (shouldReadLegacyRootProgressLocation()) {
+            addUniqueTarget(targets, requireConfiguredServerUrl() + "bookProgress/" + fileName, false);
+        }
+        return targets;
+    }
+
+    private boolean shouldReadLegacyRootProgressLocation() {
+        return requireConfiguredProgressBaseUrl().equals(requireConfiguredServerUrl());
     }
 
     private List<ProgressLocation> progressLocations() {
@@ -250,6 +268,18 @@ public class WebDavClient {
         if (value != null && !value.isBlank() && !values.contains(value)) {
             values.add(value);
         }
+    }
+
+    private void addUniqueTarget(List<ProgressFileTarget> targets, String url, boolean required) {
+        if (url == null || url.isBlank()) {
+            return;
+        }
+        for (ProgressFileTarget target : targets) {
+            if (target.url.equals(url)) {
+                return;
+            }
+        }
+        targets.add(new ProgressFileTarget(url, required));
     }
 
     private String encodePathSegment(String value) throws Exception {
@@ -567,6 +597,16 @@ public class WebDavClient {
         ProgressLocation(String baseUrl, String parentDirectory) {
             this.baseUrl = baseUrl;
             this.parentDirectory = parentDirectory;
+        }
+    }
+
+    private static class ProgressFileTarget {
+        final String url;
+        final boolean required;
+
+        ProgressFileTarget(String url, boolean required) {
+            this.url = url;
+            this.required = required;
         }
     }
 

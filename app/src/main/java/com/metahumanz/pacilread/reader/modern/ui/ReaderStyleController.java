@@ -94,10 +94,10 @@ public final class ReaderStyleController {
         int leftPadding = ui.dp(runtime.settingsStore.getLeftPaddingDp());
         int rightPadding = ui.dp(runtime.settingsStore.getRightPaddingDp());
         int topPadding = ui.dp(runtime.settingsStore.getTopPaddingDp())
-                + state.systemInsetTop
+                + state.readerContentInsetTop
                 + computeHudReservedTopPx();
         int bottomPadding = ui.dp(runtime.settingsStore.getBottomPaddingDp())
-                + state.systemInsetBottom
+                + state.readerContentInsetBottom
                 + computeHudReservedBottomPx();
         ((ViewGroup) views.pageCurrent).setPadding(leftPadding, topPadding, rightPadding, bottomPadding);
         ((ViewGroup) views.pageIncoming).setPadding(leftPadding, topPadding, rightPadding, bottomPadding);
@@ -371,6 +371,7 @@ public final class ReaderStyleController {
         textView.setLineSpacing(runtime.settingsStore.getLineSpacingExtraSp(), 1f);
         textView.setLetterSpacing(runtime.settingsStore.getLetterSpacing());
         textView.setFullJustifyEnabled(runtime.settingsStore.isBodyTextJustified());
+        textView.setGravity(Gravity.START | Gravity.TOP);
         textView.setPadding(0, 0, 0, 0);
     }
 

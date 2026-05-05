@@ -52,6 +52,7 @@ import com.metahumanz.pacilread.theme.ThemedReaderActivity;
 import com.metahumanz.pacilread.ui.ActivityTransitionCompat;
 import com.metahumanz.pacilread.ui.LaunchSourceTransition;
 import com.metahumanz.pacilread.ui.PredictiveBackScaleController;
+import com.metahumanz.pacilread.ui.ScreenCornerClipper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -117,6 +118,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         }
 
         views = ReaderViewRefs.bind(this);
+        ScreenCornerClipper.apply(this, views.readerRoot);
         ui = new ReaderUiUtils(this);
         initializeControllers();
 
@@ -161,12 +163,26 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         if (readingStatsTracker != null) {
             readingStatsTracker.resume();
         }
+        if (views != null && views.readerRoot != null) {
+            views.readerRoot.invalidateOutline();
+        }
         chrome.updateSystemBarsVisibility(state.controlsVisible);
         chrome.applyGlassOpacity();
         if (state.controlsVisible) {
             chrome.scheduleAutoHide();
         } else {
             chrome.cancelAutoHide();
+        }
+    }
+
+    public void applyReaderUiThemeWithoutRecreate() {
+        applyResolvedReaderThemeWithoutRecreate();
+        if (style != null) {
+            style.applyReaderSettings();
+        }
+        if (chrome != null) {
+            chrome.updateUiAfterPageChange();
+            chrome.updateSystemBarsVisibility(state != null && state.controlsVisible);
         }
     }
 
@@ -244,6 +260,23 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (paging.handleReaderVolumeKeyEvent(event)) {
             return true;
+        }
+        if (event.getAction() == KeyEvent.ACTION_DOWN && !state.controlsVisible) {
+            switch (event.getKeyCode()) {
+                case KeyEvent.KEYCODE_DPAD_UP:
+                case KeyEvent.KEYCODE_DPAD_LEFT:
+                case KeyEvent.KEYCODE_PAGE_UP:
+                    navigation.pageUp();
+                    return true;
+                case KeyEvent.KEYCODE_DPAD_DOWN:
+                case KeyEvent.KEYCODE_DPAD_RIGHT:
+                case KeyEvent.KEYCODE_PAGE_DOWN:
+                case KeyEvent.KEYCODE_SPACE:
+                case KeyEvent.KEYCODE_ENTER:
+                case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                    navigation.pageDown();
+                    return true;
+            }
         }
         return super.dispatchKeyEvent(event);
     }

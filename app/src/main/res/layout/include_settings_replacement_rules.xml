@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <TextView
+        style="@style/AppChromeSectionLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginBottom="10dp"
+        android:text="替换规则" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="20dp"
+        android:background="@drawable/bg_app_card"
+        android:elevation="2dp"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <TextView
+            style="@style/AppChromeBody"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:lineSpacingExtra="2dp"
+            android:text="在阅读界面中添加用于文字净化的替换规则，在此处可以浏览并控制全部规则的启用状态。"
+            android:textColor="?attr/themeColorAppTextSecondary"
+            android:textSize="12sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/button_rule_filter_all"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_app_primary_button"
+                android:text="全部"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonPrimaryText"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/button_rule_filter_global"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_app_outline_button"
+                android:text="全局"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonOutlineText"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/button_rule_filter_book"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_app_outline_button"
+                android:text="单书"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonOutlineText"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/layout_rules_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <TextView
+            android:id="@+id/text_rules_empty"
+            style="@style/AppChromeBody"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:paddingTop="20dp"
+            android:paddingBottom="20dp"
+            android:text="暂无替换规则"
+            android:textColor="?attr/themeColorAppTextSecondary"
+            android:textSize="13sp"
+            android:visibility="gone" />
+
+    </LinearLayout>
+</merge>

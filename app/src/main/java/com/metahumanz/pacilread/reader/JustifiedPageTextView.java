@@ -1,5 +1,6 @@
 package com.metahumanz.pacilread.reader;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
@@ -10,12 +11,14 @@ import android.text.TextPaint;
 import android.text.style.AlignmentSpan;
 import android.text.style.LineHeightSpan;
 import android.util.AttributeSet;
+import android.view.Gravity;
 
 import androidx.appcompat.widget.AppCompatTextView;
 
 public class JustifiedPageTextView extends AppCompatTextView {
     private boolean fullJustifyEnabled = true;
     private boolean treatFinalLineAsParagraphEnd = true;
+    private boolean bottomJustifyEnabled = false;
     private int highlightStart = -1;
     private int highlightEnd = -1;
     private int selectionHighlightStart = -1;
@@ -44,10 +47,12 @@ public class JustifiedPageTextView extends AppCompatTextView {
         init();
     }
 
+    @SuppressLint("WrongConstant")
     private void init() {
         setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE);
         setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE);
         setIncludeFontPadding(false);
+        setGravity(Gravity.START | Gravity.TOP);
         highlightPaint.setColor(0x40FFC107);
         highlightPaint.setStyle(Paint.Style.FILL);
         selectionHighlightPaint.setColor(0x663B82F6);
@@ -77,6 +82,14 @@ public class JustifiedPageTextView extends AppCompatTextView {
             return;
         }
         treatFinalLineAsParagraphEnd = enabled;
+        invalidate();
+    }
+
+    public void setBottomJustifyEnabled(boolean enabled) {
+        if (bottomJustifyEnabled == enabled) {
+            return;
+        }
+        bottomJustifyEnabled = enabled;
         invalidate();
     }
 
@@ -111,8 +124,9 @@ public class JustifiedPageTextView extends AppCompatTextView {
             return 0;
         }
         float contentX = x - getTotalPaddingLeft();
-        float contentY = y - getExtendedPaddingTop();
-        int lineIndex = Math.max(0, Math.min(layout.getLineForVertical(Math.round(contentY)), layout.getLineCount() - 1));
+        float contentY = y - contentTopPadding();
+        LineVerticalAdjustments verticalAdjustments = verticalAdjustments(layout, text);
+        int lineIndex = verticalAdjustments.lineForVertical(layout, contentY);
         int start = layout.getLineStart(lineIndex);
         int end = layout.getLineEnd(lineIndex);
         int visibleEnd = layout.getLineVisibleEnd(lineIndex);
@@ -151,8 +165,8 @@ public class JustifiedPageTextView extends AppCompatTextView {
             super.onDraw(canvas);
             if (hasSelectionHighlight()) {
                 int save = canvas.save();
-                canvas.translate(getTotalPaddingLeft(), getExtendedPaddingTop());
-                drawSelectionHandles(canvas, layout);
+                canvas.translate(getTotalPaddingLeft(), contentTopPadding());
+                drawSelectionHandles(canvas, layout, verticalAdjustments(layout, getText()));
                 canvas.restoreToCount(save);
             }
             return;
@@ -162,8 +176,9 @@ public class JustifiedPageTextView extends AppCompatTextView {
         CharSequence text = getText();
         int lineCount = layout.getLineCount();
         int availableWidth = getWidth() - getTotalPaddingLeft() - getTotalPaddingRight();
+        LineVerticalAdjustments verticalAdjustments = verticalAdjustments(layout, text);
         int saveCount = canvas.save();
-        canvas.translate(getTotalPaddingLeft(), getExtendedPaddingTop());
+        canvas.translate(getTotalPaddingLeft(), contentTopPadding());
         for (int lineIndex = 0; lineIndex < lineCount; lineIndex++) {
             int start = layout.getLineStart(lineIndex);
             int end = layout.getLineEnd(lineIndex);
@@ -171,9 +186,12 @@ public class JustifiedPageTextView extends AppCompatTextView {
             if (start >= visibleEnd) {
                 continue;
             }
+            int lineSaveCount = canvas.save();
+            canvas.translate(0f, verticalAdjustments.offsetForLine(lineIndex));
             if (shouldUsePlatformLine(text, start, end)) {
                 drawLineHighlight(canvas, layout, lineIndex, layout.getLineBaseline(lineIndex), paint, text, start, visibleEnd);
                 drawPlatformLine(canvas, layout, lineIndex, availableWidth);
+                canvas.restoreToCount(lineSaveCount);
                 continue;
             }
             boolean paragraphEnd = hasTrailingLineBreak(text, visibleEnd, end)
@@ -181,6 +199,7 @@ public class JustifiedPageTextView extends AppCompatTextView {
             String rawLine = text.subSequence(start, visibleEnd).toString();
             String drawLine = trimLineBreaks(rawLine);
             if (drawLine.isEmpty()) {
+                canvas.restoreToCount(lineSaveCount);
                 continue;
             }
             float lineLeft = lineContentLeft(layout, lineIndex);
@@ -200,9 +219,10 @@ public class JustifiedPageTextView extends AppCompatTextView {
                 drawLineHighlightManual(canvas, lineLeft, layout, lineIndex, paint, text, start, visibleEnd);
                 canvas.drawText(drawLine, lineLeft, baseline, paint);
             }
+            canvas.restoreToCount(lineSaveCount);
         }
         if (hasSelectionHighlight()) {
-            drawSelectionHandles(canvas, layout);
+            drawSelectionHandles(canvas, layout, verticalAdjustments);
         }
         canvas.restoreToCount(saveCount);
     }
@@ -240,8 +260,9 @@ public class JustifiedPageTextView extends AppCompatTextView {
         }
         TextPaint paint = getPaint();
         CharSequence text = getText();
+        LineVerticalAdjustments verticalAdjustments = verticalAdjustments(layout, text);
         int saveCount = canvas.save();
-        canvas.translate(getTotalPaddingLeft(), getExtendedPaddingTop());
+        canvas.translate(getTotalPaddingLeft(), contentTopPadding());
         int lineCount = layout.getLineCount();
         for (int lineIndex = 0; lineIndex < lineCount; lineIndex++) {
             int start = layout.getLineStart(lineIndex);
@@ -250,7 +271,10 @@ public class JustifiedPageTextView extends AppCompatTextView {
             if (start >= visibleEnd) {
                 continue;
             }
+            int lineSaveCount = canvas.save();
+            canvas.translate(0f, verticalAdjustments.offsetForLine(lineIndex));
             drawLineHighlight(canvas, layout, lineIndex, layout.getLineBaseline(lineIndex), paint, text, start, visibleEnd);
+            canvas.restoreToCount(lineSaveCount);
         }
         canvas.restoreToCount(saveCount);
     }
@@ -355,7 +379,7 @@ public class JustifiedPageTextView extends AppCompatTextView {
         return selectionHighlightStart >= 0 && selectionHighlightEnd > selectionHighlightStart;
     }
 
-    private void drawSelectionHandles(Canvas canvas, Layout layout) {
+    private void drawSelectionHandles(Canvas canvas, Layout layout, LineVerticalAdjustments verticalAdjustments) {
         if (layout == null) return;
         CharSequence text = getText();
         if (text == null) return;
@@ -363,16 +387,16 @@ public class JustifiedPageTextView extends AppCompatTextView {
         int[] screenPos = new int[2];
         getLocationOnScreen(screenPos);
         float padLeft = getTotalPaddingLeft();
-        float padTop = getExtendedPaddingTop();
+        float padTop = contentTopPadding();
 
         // Start handle
-        drawHandleAtOffset(canvas, layout, text, screenPos, padLeft, padTop, selectionHighlightStart, startHandleBounds);
+        drawHandleAtOffset(canvas, layout, text, verticalAdjustments, screenPos, padLeft, padTop, selectionHighlightStart, startHandleBounds);
 
         // End handle
-        drawHandleAtOffset(canvas, layout, text, screenPos, padLeft, padTop, selectionHighlightEnd, endHandleBounds);
+        drawHandleAtOffset(canvas, layout, text, verticalAdjustments, screenPos, padLeft, padTop, selectionHighlightEnd, endHandleBounds);
     }
 
-    private void drawHandleAtOffset(Canvas canvas, Layout layout, CharSequence text,
+    private void drawHandleAtOffset(Canvas canvas, Layout layout, CharSequence text, LineVerticalAdjustments verticalAdjustments,
             int[] screenPos, float padLeft, float padTop, int offset, RectF outBounds) {
         float canvasX = canvasXForOffset(layout, text, offset);
         int lineIndex;
@@ -383,7 +407,7 @@ public class JustifiedPageTextView extends AppCompatTextView {
         } else {
             lineIndex = layout.getLineForOffset(offset);
         }
-        float canvasY = layout.getLineBottom(lineIndex);
+        float canvasY = layout.getLineBottom(lineIndex) + verticalAdjustments.offsetForLine(lineIndex);
 
         // Draw the handle circle
         canvas.drawCircle(canvasX, canvasY, handleRadius, handleStrokePaint);
@@ -449,7 +473,38 @@ public class JustifiedPageTextView extends AppCompatTextView {
         return null;
     }
 
-    private String trimLineBreaks(String line) {
+    float adjustedLineTopForTest(int lineIndex) {
+        Layout layout = getLayout();
+        CharSequence text = getText();
+        if (layout == null || text == null || lineIndex < 0 || lineIndex >= layout.getLineCount()) {
+            return 0f;
+        }
+        return layout.getLineTop(lineIndex) + verticalAdjustments(layout, text).offsetForLine(lineIndex);
+    }
+
+    float adjustedVisualLineBottomForTest(int lineIndex) {
+        Layout layout = getLayout();
+        CharSequence text = getText();
+        if (layout == null || text == null || lineIndex < 0 || lineIndex >= layout.getLineCount()) {
+            return 0f;
+        }
+        return ReaderPaginator.lineBottomForPageEnd(text, layout, lineIndex)
+                + verticalAdjustments(layout, text).offsetForLine(lineIndex);
+    }
+
+    private int contentTopPadding() {
+        return getTotalPaddingTop();
+    }
+
+    private int contentHeight() {
+        return Math.max(0, getHeight() - contentTopPadding() - getTotalPaddingBottom());
+    }
+
+    private LineVerticalAdjustments verticalAdjustments(Layout layout, CharSequence text) {
+        return LineVerticalAdjustments.create(layout, text, bottomJustifyEnabled, contentHeight());
+    }
+
+    private static String trimLineBreaks(String line) {
         int end = line.length();
         while (end > 0) {
             char c = line.charAt(end - 1);
@@ -486,5 +541,86 @@ public class JustifiedPageTextView extends AppCompatTextView {
             }
         }
         return true;
+    }
+
+    private static final class LineVerticalAdjustments {
+        private static final LineVerticalAdjustments NONE = new LineVerticalAdjustments(-1, -1, 0f);
+
+        private final int firstLine;
+        private final int lastLine;
+        private final float surplus;
+
+        private LineVerticalAdjustments(int firstLine, int lastLine, float surplus) {
+            this.firstLine = firstLine;
+            this.lastLine = lastLine;
+            this.surplus = Math.max(0f, surplus);
+        }
+
+        static LineVerticalAdjustments create(Layout layout, CharSequence text, boolean enabled, int contentHeight) {
+            if (!enabled || layout == null || text == null || layout.getLineCount() <= 1 || contentHeight <= 0) {
+                return NONE;
+            }
+            int first = -1;
+            int last = -1;
+            int lineCount = layout.getLineCount();
+            for (int lineIndex = 0; lineIndex < lineCount; lineIndex++) {
+                if (!isDrawableLine(layout, text, lineIndex)) {
+                    continue;
+                }
+                if (first < 0) {
+                    first = lineIndex;
+                }
+                last = lineIndex;
+            }
+            if (first < 0 || last <= first) {
+                return NONE;
+            }
+            int lastVisualBottom = ReaderPaginator.lineBottomForPageEnd(text, layout, last);
+            int lastLineTop = layout.getLineTop(last);
+            float lastLineHeight = Math.max(1f, lastVisualBottom - lastLineTop);
+            float surplus = contentHeight - lastVisualBottom;
+            if (surplus <= 0f || surplus >= lastLineHeight) {
+                return NONE;
+            }
+            return new LineVerticalAdjustments(first, last, surplus);
+        }
+
+        float offsetForLine(int lineIndex) {
+            if (surplus <= 0f || firstLine < 0 || lastLine <= firstLine || lineIndex <= firstLine) {
+                return 0f;
+            }
+            if (lineIndex >= lastLine) {
+                return surplus;
+            }
+            return surplus * (lineIndex - firstLine) / (float) (lastLine - firstLine);
+        }
+
+        int lineForVertical(Layout layout, float y) {
+            int lineCount = layout.getLineCount();
+            if (surplus <= 0f || firstLine < 0 || lastLine <= firstLine) {
+                return Math.max(0, Math.min(layout.getLineForVertical(Math.round(y)), lineCount - 1));
+            }
+            for (int lineIndex = 0; lineIndex < lineCount; lineIndex++) {
+                float top = layout.getLineTop(lineIndex) + offsetForLine(lineIndex);
+                float bottom = layout.getLineBottom(lineIndex) + offsetForLine(lineIndex);
+                if (y < bottom) {
+                    return lineIndex;
+                }
+                if (y >= top && y <= bottom) {
+                    return lineIndex;
+                }
+            }
+            return Math.max(0, lineCount - 1);
+        }
+
+        private static boolean isDrawableLine(Layout layout, CharSequence text, int lineIndex) {
+            int start = layout.getLineStart(lineIndex);
+            int visibleEnd = layout.getLineVisibleEnd(lineIndex);
+            if (start >= visibleEnd) {
+                return false;
+            }
+            String line = trimLineBreaks(text.subSequence(start, visibleEnd).toString());
+            return !line.isEmpty();
+        }
     }
 }

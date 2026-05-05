@@ -27,6 +27,10 @@ public final class ReaderSessionState {
     public int systemInsetBottom = 0;
     public int systemInsetLeft = 0;
     public int systemInsetRight = 0;
+    public int readerContentInsetTop = 0;
+    public int readerContentInsetBottom = 0;
+    public int readerContentInsetLeft = 0;
+    public int readerContentInsetRight = 0;
     public int currentBatteryLevel = -1;
     public boolean controlsVisible = false;
     public boolean autoPageActive = false;

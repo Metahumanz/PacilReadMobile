@@ -35,7 +35,14 @@ public abstract class ThemedReaderActivity extends AppCompatActivity {
         }
     }
 
+    protected void applyResolvedReaderThemeWithoutRecreate() {
+        setTheme(ThemeModeHelper.resolveReaderThemeResId(this));
+        appliedThemeBucket = ThemeModeHelper.getResolvedReaderBucket(this);
+        appliedStyleVariant = ThemeModeHelper.getResolvedReaderStyleVariant(this);
+        EdgeToEdgeHelper.configure(this);
+    }
+
     protected boolean isDarkReaderUi() {
-        return ThemeModeHelper.isDark(getResources());
+        return ThemeModeHelper.MODE_DARK.equals(ThemeModeHelper.getResolvedReaderBucket(this));
     }
 }

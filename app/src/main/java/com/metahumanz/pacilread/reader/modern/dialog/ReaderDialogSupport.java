@@ -364,7 +364,7 @@ public final class ReaderDialogSupport {
         int flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                 | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
-        if (!ThemeModeHelper.isDark(activity.getResources())) {
+        if (!isDarkReaderUi()) {
             flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
             flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
         }
@@ -385,6 +385,10 @@ public final class ReaderDialogSupport {
                 }
             }
         }
+    }
+
+    private boolean isDarkReaderUi() {
+        return ThemeModeHelper.MODE_DARK.equals(ThemeModeHelper.getResolvedReaderBucket(activity));
     }
 
     public static final class SimpleSeekListener implements SeekBar.OnSeekBarChangeListener {
