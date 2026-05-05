@@ -16,4 +16,6 @@
     <include layout="@layout/include_settings_backup" />
 
     <include layout="@layout/include_settings_tts" />
+
+    <include layout="@layout/include_settings_replacement_rules" />
 </LinearLayout>
