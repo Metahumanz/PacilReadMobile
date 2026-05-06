@@ -66,6 +66,17 @@ public final class ScreenCornerClipper {
         target.post(target::invalidateOutline);
     }
 
+    public static void setClipEnabled(View target, boolean enabled) {
+        if (target == null) {
+            return;
+        }
+        target.setClipToOutline(enabled);
+        if (!enabled) {
+            target.setClipBounds(null);
+        }
+        target.invalidateOutline();
+    }
+
     private static float screenCornerRadiusPx(Activity activity, View view) {
         if (isInMultiWindowMode(activity)) {
             return adaptiveWindowCornerRadiusPx(view);
