@@ -254,10 +254,12 @@ public class ReadingStatsActivity extends ThemedActivity {
                 book = databaseHelper.getBook(bookId);
                 if (book != null) {
                     chapters = databaseHelper.getChapters(book.id, false);
-                    totalSeconds = databaseHelper.getReadingDurationSeconds(
+                    totalSeconds = databaseHelper.getReadingDurationSecondsForBook(
                             range.startDateString(),
                             range.endDateString(),
-                            book.readingStatsKey
+                            book.readingStatsKey,
+                            book.title,
+                            book.author
                     );
                 } else {
                     totalSeconds = 0;

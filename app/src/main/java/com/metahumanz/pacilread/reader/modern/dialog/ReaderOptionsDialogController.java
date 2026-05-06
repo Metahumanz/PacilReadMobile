@@ -23,6 +23,7 @@ import com.metahumanz.pacilread.reader.modern.content.ReaderContentController;
 import com.metahumanz.pacilread.reader.modern.paging.ReaderNavigationController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderStyleController;
+import com.metahumanz.pacilread.stats.ReadingStatsUtils;
 
 public final class ReaderOptionsDialogController {
     private final ModernReaderActivity activity;
@@ -118,6 +119,7 @@ public final class ReaderOptionsDialogController {
             if (state.book != null) {
                 state.book.title = finalTitle;
                 state.book.author = finalAuthor;
+                state.book.readingStatsKey = ReadingStatsUtils.buildBookIdentity(finalTitle, finalAuthor);
             }
             runtime.settingsStore.setFlipMode(nextFlipMode);
             runtime.settingsStore.setFlipSpeed(nextFlipSpeed);

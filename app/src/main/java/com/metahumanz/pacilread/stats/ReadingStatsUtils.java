@@ -61,11 +61,20 @@ public final class ReadingStatsUtils {
     }
 
     public static String buildBookIdentity(String title, String author) {
-        String normalized = normalizeText(title) + "::" + normalizeText(author);
+        String normalized = buildTitleAuthorKey(title, author);
         if (normalized.isBlank()) {
             normalized = "untitled::unknown";
         }
         return sha256(normalized);
+    }
+
+    public static String buildTitleAuthorKey(String title, String author) {
+        return normalizeIdentityText(title) + "::" + normalizeIdentityText(author);
+    }
+
+    public static String normalizeIdentityText(String value) {
+        String trimmed = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        return trimmed.replaceAll("\\s+", " ");
     }
 
     public static String normalizePeriodKey(String value) {
@@ -91,11 +100,6 @@ public final class ReadingStatsUtils {
                     : String.format(Locale.SIMPLIFIED_CHINESE, "%d 分", minutes);
         }
         return String.format(Locale.SIMPLIFIED_CHINESE, "%d 秒", seconds);
-    }
-
-    private static String normalizeText(String value) {
-        String trimmed = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
-        return trimmed.replaceAll("\\s+", " ");
     }
 
     private static String sha256(String value) {
