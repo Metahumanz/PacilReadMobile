@@ -271,7 +271,7 @@ public final class ReaderPagingAnimator {
             return;
         }
         views.pageStage.removeCallbacks(pagingSnapshotWarmupRunnable);
-        if (state.chapters.isEmpty() || state.isAnimating || state.interactivePaging) {
+        if (state.chapters.isEmpty() || state.controlsVisible || state.isAnimating || state.interactivePaging) {
             return;
         }
         views.pageStage.post(pagingSnapshotWarmupRunnable);
@@ -368,6 +368,7 @@ public final class ReaderPagingAnimator {
         clearAnimationTarget();
         resetInteractiveTouchState();
         restoreLivePageLayers(false);
+        showLiveHudAfterPaging();
         resetAnimatedPage(views.pageCurrent);
         resetAnimatedPage(views.pageIncoming);
         views.pageIncoming.setVisibility(View.GONE);
@@ -424,6 +425,7 @@ public final class ReaderPagingAnimator {
         state.isAnimating = false;
         activity.markReadingActivity();
         chrome.updateUiAfterPageChange();
+        showLiveHudAfterPaging();
         content.scheduleProgressSave();
         chrome.scheduleAutoHide();
         schedulePagingSnapshotWarmup();
@@ -681,6 +683,7 @@ public final class ReaderPagingAnimator {
         state.pendingTapPagingDelta = 0;
         activity.markReadingActivity();
         chrome.updateUiAfterPageChange();
+        showLiveHudAfterPaging();
         content.scheduleProgressSave();
         chrome.scheduleAutoHide();
         schedulePagingSnapshotWarmup();
@@ -695,7 +698,12 @@ public final class ReaderPagingAnimator {
         if (!hasPreparedCurrentSnapshot(state.currentChapterIndex, state.currentPageIndex)) {
             navigation.bindCurrentSpread(state.currentChapterIndex, state.currentPageIndex);
             layoutPageLayerForSnapshot(views.pageCurrent);
-            state.currentPageSnapshotBitmap = screenshotPageLayer(views.pageCurrent, state.currentPageSnapshotBitmap);
+            state.currentPageSnapshotBitmap = screenshotPageLayer(
+                    views.pageCurrent,
+                    state.currentPageSnapshotBitmap,
+                    state.currentChapterIndex,
+                    state.currentPageIndex
+            );
             if (state.currentPageSnapshotBitmap != null) {
                 state.preparedCurrentSnapshotChapterIndex = state.currentChapterIndex;
                 state.preparedCurrentSnapshotPageIndex = state.currentPageIndex;
@@ -719,10 +727,11 @@ public final class ReaderPagingAnimator {
         views.pageSnapshotIncoming.setVisibility(View.VISIBLE);
         views.pageCurrent.setVisibility(View.INVISIBLE);
         views.pageIncoming.setVisibility(View.INVISIBLE);
+        hideLiveHudDuringPaging();
         state.pagingSnapshotsVisible = true;
     }
 
-    private Bitmap screenshotPageLayer(View source, Bitmap reuse) {
+    private Bitmap screenshotPageLayer(View source, Bitmap reuse, int chapterIndex, int pageIndex) {
         int width = source.getWidth();
         int height = source.getHeight();
         if (width <= 0 || height <= 0) {
@@ -743,6 +752,7 @@ public final class ReaderPagingAnimator {
         pagingSnapshotCanvas.translate(-source.getScrollX(), -source.getScrollY());
         source.draw(pagingSnapshotCanvas);
         pagingSnapshotCanvas.restore();
+        drawHudSnapshotLayer(pagingSnapshotCanvas, source, chapterIndex, pageIndex);
         pagingSnapshotCanvas.setBitmap(null);
         targetBitmap.prepareToDraw();
         return targetBitmap;
@@ -756,7 +766,12 @@ public final class ReaderPagingAnimator {
             return;
         }
         if (!hasPreparedCurrentSnapshot(state.currentChapterIndex, state.currentPageIndex)) {
-            state.currentPageSnapshotBitmap = screenshotPageLayer(views.pageCurrent, state.currentPageSnapshotBitmap);
+            state.currentPageSnapshotBitmap = screenshotPageLayer(
+                    views.pageCurrent,
+                    state.currentPageSnapshotBitmap,
+                    state.currentChapterIndex,
+                    state.currentPageIndex
+            );
             if (state.currentPageSnapshotBitmap != null) {
                 state.preparedCurrentSnapshotChapterIndex = state.currentChapterIndex;
                 state.preparedCurrentSnapshotPageIndex = state.currentPageIndex;
@@ -797,7 +812,7 @@ public final class ReaderPagingAnimator {
             views.pageIncoming.setVisibility(previousVisibility);
             return null;
         }
-        Bitmap bitmap = screenshotPageLayer(views.pageIncoming, state.incomingPageSnapshotBitmap);
+        Bitmap bitmap = screenshotPageLayer(views.pageIncoming, state.incomingPageSnapshotBitmap, chapterIndex, pageIndex);
         views.pageIncoming.setAlpha(previousAlpha);
         views.pageIncoming.setVisibility(previousVisibility);
         resetAnimatedPage(views.pageIncoming);
@@ -913,6 +928,115 @@ public final class ReaderPagingAnimator {
         );
         views.readerBackgroundImage.draw(canvas);
         canvas.restore();
+    }
+
+    private void drawHudSnapshotLayer(Canvas canvas, View source, int chapterIndex, int pageIndex) {
+        if (chrome == null || canvas == null || source == null) {
+            return;
+        }
+        ReaderChromeController.HudSnapshotState hudSnapshot = chrome.captureHudSnapshotState();
+        try {
+            chrome.updateReaderHudForPageSnapshot(chapterIndex, pageIndex);
+            drawHudContainerSnapshot(canvas, source, views.hudTopContainer, false);
+            drawHudContainerSnapshot(canvas, source, views.hudBottomContainer, true);
+        } finally {
+            chrome.restoreHudSnapshotState(hudSnapshot);
+        }
+    }
+
+    private void drawHudContainerSnapshot(Canvas canvas, View source, View hudContainer, boolean alignBottom) {
+        if (hudContainer == null || source == null || source.getWidth() <= 0 || source.getHeight() <= 0) {
+            return;
+        }
+        int previousVisibility = hudContainer.getVisibility();
+        float previousAlpha = hudContainer.getAlpha();
+        float previousTranslationX = hudContainer.getTranslationX();
+        float previousTranslationY = hudContainer.getTranslationY();
+        int previousLeft = hudContainer.getLeft();
+        int previousTop = hudContainer.getTop();
+        int previousRight = hudContainer.getRight();
+        int previousBottom = hudContainer.getBottom();
+
+        int width = source.getWidth();
+        int height = source.getHeight();
+        int widthSpec = View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY);
+        int heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+        hudContainer.measure(widthSpec, heightSpec);
+        int measuredHeight = Math.max(0, hudContainer.getMeasuredHeight());
+        if (measuredHeight <= 0) {
+            restoreHudContainerAfterSnapshot(
+                    hudContainer,
+                    previousVisibility,
+                    previousAlpha,
+                    previousTranslationX,
+                    previousTranslationY,
+                    previousLeft,
+                    previousTop,
+                    previousRight,
+                    previousBottom
+            );
+            return;
+        }
+        int top = alignBottom ? Math.max(0, height - measuredHeight) : 0;
+        hudContainer.setVisibility(View.VISIBLE);
+        hudContainer.setAlpha(1f);
+        hudContainer.setTranslationX(0f);
+        hudContainer.setTranslationY(0f);
+        hudContainer.layout(0, top, width, top + measuredHeight);
+        canvas.save();
+        canvas.translate(0f, top);
+        hudContainer.draw(canvas);
+        canvas.restore();
+        restoreHudContainerAfterSnapshot(
+                hudContainer,
+                previousVisibility,
+                previousAlpha,
+                previousTranslationX,
+                previousTranslationY,
+                previousLeft,
+                previousTop,
+                previousRight,
+                previousBottom
+        );
+    }
+
+    private void restoreHudContainerAfterSnapshot(
+            View hudContainer,
+            int visibility,
+            float alpha,
+            float translationX,
+            float translationY,
+            int left,
+            int top,
+            int right,
+            int bottom
+    ) {
+        hudContainer.layout(left, top, right, bottom);
+        hudContainer.setVisibility(visibility);
+        hudContainer.setAlpha(alpha);
+        hudContainer.setTranslationX(translationX);
+        hudContainer.setTranslationY(translationY);
+    }
+
+    private void hideLiveHudDuringPaging() {
+        setLiveHudAlphaForPaging(0f);
+    }
+
+    private void showLiveHudAfterPaging() {
+        setLiveHudAlphaForPaging(1f);
+    }
+
+    private void setLiveHudAlphaForPaging(float alpha) {
+        setHudContainerAlpha(views.hudTopContainer, alpha);
+        setHudContainerAlpha(views.hudBottomContainer, alpha);
+    }
+
+    private void setHudContainerAlpha(View hudContainer, float alpha) {
+        if (hudContainer == null) {
+            return;
+        }
+        hudContainer.animate().cancel();
+        hudContainer.setAlpha(alpha);
     }
 
     private View activeCurrentPageLayer() {

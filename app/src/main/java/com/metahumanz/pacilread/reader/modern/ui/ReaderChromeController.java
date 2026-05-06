@@ -19,6 +19,7 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 
 import com.metahumanz.pacilread.R;
+import com.metahumanz.pacilread.reader.PageSlice;
 import com.metahumanz.pacilread.reader.modern.ModernReaderActivity;
 import com.metahumanz.pacilread.reader.modern.ReaderRuntime;
 import com.metahumanz.pacilread.reader.modern.ReaderSessionState;
@@ -33,6 +34,7 @@ import com.metahumanz.pacilread.ui.GlassUiHelper;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 public final class ReaderChromeController {
@@ -270,6 +272,53 @@ public final class ReaderChromeController {
             hideHudSlot(views.hudBottomCenter);
         }
         applyHudSlot(views.hudBottomRight, runtime.settingsStore.getHudBottomRight());
+        if (paging != null && !state.isAnimating && !state.interactivePaging) {
+            paging.invalidatePreparedPagingSnapshots();
+        }
+    }
+
+    public HudSnapshotState captureHudSnapshotState() {
+        return new HudSnapshotState(
+                captureHudSlotState(views.hudTopLeft),
+                captureHudSlotState(views.hudTopCenter),
+                captureHudSlotState(views.hudTopRight),
+                captureHudSlotState(views.hudBottomLeft),
+                captureHudSlotState(views.hudBottomCenter),
+                captureHudSlotState(views.hudBottomRight)
+        );
+    }
+
+    public void restoreHudSnapshotState(HudSnapshotState snapshot) {
+        if (snapshot == null) {
+            return;
+        }
+        restoreHudSlotState(views.hudTopLeft, snapshot.topLeft);
+        restoreHudSlotState(views.hudTopCenter, snapshot.topCenter);
+        restoreHudSlotState(views.hudTopRight, snapshot.topRight);
+        restoreHudSlotState(views.hudBottomLeft, snapshot.bottomLeft);
+        restoreHudSlotState(views.hudBottomCenter, snapshot.bottomCenter);
+        restoreHudSlotState(views.hudBottomRight, snapshot.bottomRight);
+    }
+
+    public void updateReaderHudForPageSnapshot(int chapterIndex, int pageIndex) {
+        if (state.book == null || state.chapters.isEmpty()) {
+            return;
+        }
+        boolean showCenterSlots = isLandscapeHudMode();
+        applyHudSlot(views.hudTopLeft, runtime.settingsStore.getHudTopLeft(), chapterIndex, pageIndex);
+        if (showCenterSlots) {
+            applyHudSlot(views.hudTopCenter, runtime.settingsStore.getHudTopCenter(), chapterIndex, pageIndex);
+        } else {
+            hideHudSlot(views.hudTopCenter);
+        }
+        applyHudSlot(views.hudTopRight, runtime.settingsStore.getHudTopRight(), chapterIndex, pageIndex);
+        applyHudSlot(views.hudBottomLeft, runtime.settingsStore.getHudBottomLeft(), chapterIndex, pageIndex);
+        if (showCenterSlots) {
+            applyHudSlot(views.hudBottomCenter, runtime.settingsStore.getHudBottomCenter(), chapterIndex, pageIndex);
+        } else {
+            hideHudSlot(views.hudBottomCenter);
+        }
+        applyHudSlot(views.hudBottomRight, runtime.settingsStore.getHudBottomRight(), chapterIndex, pageIndex);
     }
 
     public void toggleReaderUiTheme() {
@@ -381,6 +430,9 @@ public final class ReaderChromeController {
             views.readerRoot.post(this::updateReaderLayoutInsets);
         } else {
             runtime.mainHandler.removeCallbacks(autoHideRunnable);
+            if (paging != null) {
+                paging.schedulePagingSnapshotWarmup();
+            }
         }
     }
 
@@ -571,10 +623,14 @@ public final class ReaderChromeController {
     }
 
     private void applyHudSlot(TextView textView, String type) {
+        applyHudSlot(textView, type, state.currentChapterIndex, state.currentPageIndex);
+    }
+
+    private void applyHudSlot(TextView textView, String type, int chapterIndex, int pageIndex) {
         if (textView == null) {
             return;
         }
-        String text = hudTextForSlot(type);
+        String text = hudTextForSlot(type, chapterIndex, pageIndex);
         if (text.isEmpty()) {
             textView.setText("");
             textView.setVisibility(View.GONE);
@@ -592,24 +648,24 @@ public final class ReaderChromeController {
         textView.setVisibility(View.GONE);
     }
 
-    private String hudTextForSlot(String type) {
+    private String hudTextForSlot(String type, int chapterIndex, int pageIndex) {
         switch (type) {
             case "title":
                 return currentBookTitle();
             case "chapter":
-                return currentChapterTitle();
+                return chapterTitleFor(chapterIndex);
             case "title_chapter":
-                return currentTitleOrChapterHudText();
+                return titleOrChapterHudTextFor(chapterIndex, pageIndex);
             case "time":
                 return currentTimeText();
             case "battery":
                 return currentBatteryText();
             case "chapter_page":
-                return currentChapterPageText();
+                return chapterPageTextFor(chapterIndex, pageIndex);
             case "book_progress":
-                return currentBookProgressText();
+                return bookProgressTextFor(chapterIndex, pageIndex);
             case "page_and_progress":
-                return joinHudSegments(currentChapterPageText(), currentBookProgressPercentText(), " · ");
+                return joinHudSegments(chapterPageTextFor(chapterIndex, pageIndex), bookProgressPercentTextFor(chapterIndex, pageIndex), " · ");
             case "time_and_battery":
                 return joinHudSegments(currentTimeText(), currentBatteryText(), " · ");
             default:
@@ -622,10 +678,14 @@ public final class ReaderChromeController {
     }
 
     private String currentChapterTitle() {
-        if (state.currentChapterIndex < 0 || state.currentChapterIndex >= state.chapters.size()) {
+        return chapterTitleFor(state.currentChapterIndex);
+    }
+
+    private String chapterTitleFor(int chapterIndex) {
+        if (chapterIndex < 0 || chapterIndex >= state.chapters.size()) {
             return "";
         }
-        return trimToEmpty(state.chapters.get(state.currentChapterIndex).title);
+        return trimToEmpty(state.chapters.get(chapterIndex).title);
     }
 
     private String currentTimeText() {
@@ -633,9 +693,13 @@ public final class ReaderChromeController {
     }
 
     private String currentTitleOrChapterHudText() {
+        return titleOrChapterHudTextFor(state.currentChapterIndex, state.currentPageIndex);
+    }
+
+    private String titleOrChapterHudTextFor(int chapterIndex, int pageIndex) {
         String bookTitle = currentBookTitle();
-        String chapterTitle = currentChapterTitle();
-        if (state.currentPageIndex == 0) {
+        String chapterTitle = chapterTitleFor(chapterIndex);
+        if (pageIndex == 0) {
             return bookTitle.isEmpty() ? chapterTitle : bookTitle;
         }
         return chapterTitle.isEmpty() ? bookTitle : chapterTitle;
@@ -646,8 +710,17 @@ public final class ReaderChromeController {
     }
 
     private String currentChapterPageText() {
-        int safePageCount = Math.max(content.getKnownPageCountForChapter(state.currentChapterIndex), 1);
-        boolean pageCountComplete = content.isPageCountCompleteForChapter(state.currentChapterIndex);
+        return chapterPageTextFor(state.currentChapterIndex, state.currentPageIndex);
+    }
+
+    private String chapterPageTextFor(int chapterIndex, int pageIndex) {
+        if (state.chapters.isEmpty()) {
+            return "";
+        }
+        int safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size() - 1);
+        int safePageIndex = Math.max(pageIndex, 0);
+        int safePageCount = Math.max(content.getKnownPageCountForChapter(safeChapterIndex), 1);
+        boolean pageCountComplete = content.isPageCountCompleteForChapter(safeChapterIndex);
         int pagesPerScreen = ReaderDisplayModeHelper.pagesPerScreen(
                 activity,
                 runtime.settingsStore,
@@ -655,15 +728,15 @@ public final class ReaderChromeController {
                 views.pageStage == null ? 0 : views.pageStage.getHeight()
         );
         if (!pageCountComplete) {
-            int startPage = Math.max(state.currentPageIndex + 1, 1);
-            int endPage = Math.max(startPage, state.currentPageIndex + pagesPerScreen);
+            int startPage = Math.max(safePageIndex + 1, 1);
+            int endPage = Math.max(startPage, safePageIndex + pagesPerScreen);
             if (pagesPerScreen > 1 && endPage > startPage) {
                 return String.format(Locale.SIMPLIFIED_CHINESE, "第 %d-%d 页 / 计算中", startPage, endPage);
             }
             return String.format(Locale.SIMPLIFIED_CHINESE, "第 %d 页 / 计算中", startPage);
         }
-        int startPage = Math.min(state.currentPageIndex + 1, safePageCount);
-        int endPage = Math.min(state.currentPageIndex + pagesPerScreen, safePageCount);
+        int startPage = Math.min(safePageIndex + 1, safePageCount);
+        int endPage = Math.min(safePageIndex + pagesPerScreen, safePageCount);
         if (pagesPerScreen > 1 && endPage > startPage) {
             return String.format(Locale.SIMPLIFIED_CHINESE, "第 %d-%d/%d 页", startPage, endPage, safePageCount);
         }
@@ -685,6 +758,35 @@ public final class ReaderChromeController {
         return "全书 " + currentBookProgressPercentText();
     }
 
+    private String bookProgressPercentTextFor(int chapterIndex, int pageIndex) {
+        if (chapterIndex == state.currentChapterIndex && pageIndex == state.currentPageIndex) {
+            return currentBookProgressPercentText();
+        }
+        return fetchProgressPercentFor(chapterIndex, pageIndex) + "%";
+    }
+
+    private String bookProgressTextFor(int chapterIndex, int pageIndex) {
+        return "全书 " + bookProgressPercentTextFor(chapterIndex, pageIndex);
+    }
+
+    private int fetchProgressPercentFor(int chapterIndex, int pageIndex) {
+        if (state.book == null || state.chapters.isEmpty()) {
+            return 0;
+        }
+        int safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size() - 1);
+        int chapterOffset = chapterOffsetForPage(safeChapterIndex, pageIndex);
+        return Math.round(content.bookProgressPercentFor(safeChapterIndex, chapterOffset));
+    }
+
+    private int chapterOffsetForPage(int chapterIndex, int pageIndex) {
+        List<PageSlice> pages = content.getPagesForChapter(chapterIndex);
+        if (pages == null || pages.isEmpty()) {
+            return 0;
+        }
+        int safePageIndex = ui.clamp(pageIndex, 0, pages.size() - 1);
+        return Math.max(0, pages.get(safePageIndex).start);
+    }
+
     private String joinHudSegments(String first, String second, String divider) {
         if (first == null || first.isEmpty()) {
             return second == null ? "" : second;
@@ -697,6 +799,56 @@ public final class ReaderChromeController {
 
     private String trimToEmpty(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private HudSlotSnapshot captureHudSlotState(TextView textView) {
+        if (textView == null) {
+            return null;
+        }
+        return new HudSlotSnapshot(textView.getText(), textView.getVisibility());
+    }
+
+    private void restoreHudSlotState(TextView textView, HudSlotSnapshot snapshot) {
+        if (textView == null || snapshot == null) {
+            return;
+        }
+        textView.setText(snapshot.text);
+        textView.setVisibility(snapshot.visibility);
+    }
+
+    public static final class HudSnapshotState {
+        private final HudSlotSnapshot topLeft;
+        private final HudSlotSnapshot topCenter;
+        private final HudSlotSnapshot topRight;
+        private final HudSlotSnapshot bottomLeft;
+        private final HudSlotSnapshot bottomCenter;
+        private final HudSlotSnapshot bottomRight;
+
+        private HudSnapshotState(
+                HudSlotSnapshot topLeft,
+                HudSlotSnapshot topCenter,
+                HudSlotSnapshot topRight,
+                HudSlotSnapshot bottomLeft,
+                HudSlotSnapshot bottomCenter,
+                HudSlotSnapshot bottomRight
+        ) {
+            this.topLeft = topLeft;
+            this.topCenter = topCenter;
+            this.topRight = topRight;
+            this.bottomLeft = bottomLeft;
+            this.bottomCenter = bottomCenter;
+            this.bottomRight = bottomRight;
+        }
+    }
+
+    private static final class HudSlotSnapshot {
+        private final CharSequence text;
+        private final int visibility;
+
+        private HudSlotSnapshot(CharSequence text, int visibility) {
+            this.text = text;
+            this.visibility = visibility;
+        }
     }
 
     private void suppressInsetDrivenReflowTemporarily() {
