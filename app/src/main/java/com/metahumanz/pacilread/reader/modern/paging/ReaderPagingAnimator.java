@@ -1266,9 +1266,19 @@ public final class ReaderPagingAnimator {
 
         if ("cover".equals(mode)) {
             float revealWidth = width * safeProgress;
-            currentLayer.setTranslationX((direction > 0 ? -1f : 1f) * width * safeProgress);
-            applyRevealedIncomingClip(incomingLayer, direction, revealWidth, widthPx, heightPx);
             incomingLayer.setAlpha(1f);
+            if (direction > 0) {
+                incomingLayer.bringToFront();
+                currentLayer.bringToFront();
+                currentLayer.setTranslationX(-width * safeProgress);
+                applyRevealedIncomingClip(incomingLayer, direction, revealWidth, widthPx, heightPx);
+            } else {
+                currentLayer.bringToFront();
+                incomingLayer.bringToFront();
+                currentLayer.setTranslationX(0f);
+                incomingLayer.setTranslationX(-width * (1f - safeProgress));
+                incomingLayer.setClipBounds(null);
+            }
             hideInteractiveShadow();
             return;
         }
