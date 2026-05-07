@@ -179,7 +179,7 @@ public final class ReaderPagingAnimator {
         resetShadowView();
         views.pageIncoming.setVisibility(View.GONE);
         if ("none".equals(mode)) {
-            finishAnimation(targetChapterIndex, targetPageIndex, token);
+            finishAnimation(targetChapterIndex, targetPageIndex, direction, token);
             return;
         }
         if ("simulation".equals(mode)) {
@@ -188,7 +188,7 @@ public final class ReaderPagingAnimator {
             resetInteractiveTouchState();
         }
         navigation.bindIncomingSpread(targetChapterIndex, targetPageIndex);
-        preparePagingSnapshots(targetChapterIndex, targetPageIndex);
+        preparePagingSnapshots(targetChapterIndex, targetPageIndex, direction);
         arrangePagingLayers(mode);
         applyPagingVisuals(mode, direction, 0f, "simulation".equals(mode) ? state.interactiveTouchY : height * 0.5f);
         state.interactiveAnimator = ValueAnimator.ofFloat(0f, 1f);
@@ -229,7 +229,7 @@ public final class ReaderPagingAnimator {
                 if (cancelled[0] || token != state.animationToken) {
                     return;
                 }
-                finishAnimation(targetChapterIndex, targetPageIndex, token);
+                finishAnimation(targetChapterIndex, targetPageIndex, direction, token);
             }
         });
         state.interactiveAnimator.start();
@@ -285,6 +285,10 @@ public final class ReaderPagingAnimator {
         if (views.pageStage != null) {
             views.pageStage.removeCallbacks(pagingSnapshotWarmupRunnable);
         }
+        state.preparedNextSnapshotChapterIndex = -1;
+        state.preparedNextSnapshotPageIndex = -1;
+        state.preparedPreviousSnapshotChapterIndex = -1;
+        state.preparedPreviousSnapshotPageIndex = -1;
     }
 
     public void restoreLivePageLayers(boolean incomingVisible) {
@@ -384,8 +388,16 @@ public final class ReaderPagingAnimator {
         if (state.incomingPageSnapshotBitmap != null && !state.incomingPageSnapshotBitmap.isRecycled()) {
             state.incomingPageSnapshotBitmap.recycle();
         }
+        if (state.nextPageSnapshotBitmap != null && !state.nextPageSnapshotBitmap.isRecycled()) {
+            state.nextPageSnapshotBitmap.recycle();
+        }
+        if (state.previousPageSnapshotBitmap != null && !state.previousPageSnapshotBitmap.isRecycled()) {
+            state.previousPageSnapshotBitmap.recycle();
+        }
         state.currentPageSnapshotBitmap = null;
         state.incomingPageSnapshotBitmap = null;
+        state.nextPageSnapshotBitmap = null;
+        state.previousPageSnapshotBitmap = null;
     }
 
     public void removeWarmupCallbacks() {
@@ -470,7 +482,7 @@ public final class ReaderPagingAnimator {
         resetAnimatedPage(views.pageCurrent);
         resetAnimatedPage(views.pageIncoming);
         resetShadowView();
-        preparePagingSnapshots(target.chapterIndex, target.pageIndex);
+        preparePagingSnapshots(target.chapterIndex, target.pageIndex, direction);
         arrangePagingLayers(runtime.settingsStore.getFlipMode());
         applyInteractivePagingProgress(0f, state.interactiveTouchY);
         return true;
@@ -610,7 +622,12 @@ public final class ReaderPagingAnimator {
                     return;
                 }
                 if (commit) {
-                    finishAnimation(state.interactiveTargetChapterIndex, state.interactiveTargetPageIndex, token);
+                    finishAnimation(
+                            state.interactiveTargetChapterIndex,
+                            state.interactiveTargetPageIndex,
+                            state.interactiveDirection,
+                            token
+                    );
                 } else {
                     cancelInteractivePaging();
                 }
@@ -641,13 +658,21 @@ public final class ReaderPagingAnimator {
         return event.getRawY() - stageLocation[1];
     }
 
-    private void finishAnimation(int targetChapterIndex, int targetPageIndex, long token) {
+    private void finishAnimation(int targetChapterIndex, int targetPageIndex, int direction, long token) {
         if (token != state.animationToken) {
             return;
         }
+        int previousChapterIndex = state.currentChapterIndex;
+        int previousPageIndex = state.currentPageIndex;
         state.currentChapterIndex = targetChapterIndex;
         state.currentPageIndex = targetPageIndex;
-        promoteIncomingSnapshotToCurrent(targetChapterIndex, targetPageIndex);
+        promoteIncomingSnapshotToCurrent(
+                targetChapterIndex,
+                targetPageIndex,
+                previousChapterIndex,
+                previousPageIndex,
+                direction
+        );
         navigation.bindCurrentSpread(targetChapterIndex, targetPageIndex);
         boolean keepIncomingCover = views.pageIncoming != null && views.pageIncoming.getVisibility() == View.VISIBLE;
         restoreLivePageLayers(keepIncomingCover);
@@ -689,34 +714,18 @@ public final class ReaderPagingAnimator {
         schedulePagingSnapshotWarmup();
     }
 
-    private void preparePagingSnapshots(int targetChapterIndex, int targetPageIndex) {
+    private void preparePagingSnapshots(int targetChapterIndex, int targetPageIndex, int direction) {
         if (views.pageSnapshotCurrent == null || views.pageSnapshotIncoming == null) {
             state.pagingSnapshotsVisible = false;
             return;
         }
         clearSimulationPagingLayer();
-        if (!hasPreparedCurrentSnapshot(state.currentChapterIndex, state.currentPageIndex)) {
-            navigation.bindCurrentSpread(state.currentChapterIndex, state.currentPageIndex);
-            layoutPageLayerForSnapshot(views.pageCurrent);
-            state.currentPageSnapshotBitmap = screenshotPageLayer(
-                    views.pageCurrent,
-                    state.currentPageSnapshotBitmap,
-                    state.currentChapterIndex,
-                    state.currentPageIndex
-            );
-            if (state.currentPageSnapshotBitmap != null) {
-                state.preparedCurrentSnapshotChapterIndex = state.currentChapterIndex;
-                state.preparedCurrentSnapshotPageIndex = state.currentPageIndex;
-            }
+        ensurePreparedCurrentSnapshot();
+        Bitmap targetSnapshot = preparedTargetSnapshot(targetChapterIndex, targetPageIndex);
+        if (targetSnapshot == null) {
+            targetSnapshot = captureDirectionalPreparedSnapshot(direction, targetChapterIndex, targetPageIndex);
         }
-        if (!hasPreparedIncomingSnapshot(targetChapterIndex, targetPageIndex)) {
-            Bitmap preparedBitmap = capturePreparedIncomingSnapshot(targetChapterIndex, targetPageIndex);
-            if (preparedBitmap != null) {
-                state.incomingPageSnapshotBitmap = preparedBitmap;
-                state.preparedIncomingSnapshotChapterIndex = targetChapterIndex;
-                state.preparedIncomingSnapshotPageIndex = targetPageIndex;
-            }
-        }
+        setActiveIncomingSnapshot(targetSnapshot, targetChapterIndex, targetPageIndex);
         if (state.currentPageSnapshotBitmap == null || state.incomingPageSnapshotBitmap == null) {
             restoreLivePageLayers(true);
             return;
@@ -765,37 +774,87 @@ public final class ReaderPagingAnimator {
         if (!ensurePageAreaReady(this::schedulePagingSnapshotWarmup)) {
             return;
         }
-        if (!hasPreparedCurrentSnapshot(state.currentChapterIndex, state.currentPageIndex)) {
-            state.currentPageSnapshotBitmap = screenshotPageLayer(
-                    views.pageCurrent,
-                    state.currentPageSnapshotBitmap,
-                    state.currentChapterIndex,
-                    state.currentPageIndex
-            );
-            if (state.currentPageSnapshotBitmap != null) {
-                state.preparedCurrentSnapshotChapterIndex = state.currentChapterIndex;
-                state.preparedCurrentSnapshotPageIndex = state.currentPageIndex;
-            }
-        }
-        PageTarget target = resolveInteractiveTarget(1);
-        if (target == null) {
-            target = resolveInteractiveTarget(-1);
-        }
-        if (target == null || hasPreparedIncomingSnapshot(target.chapterIndex, target.pageIndex)) {
-            return;
-        }
-        Bitmap preparedBitmap = capturePreparedIncomingSnapshot(target.chapterIndex, target.pageIndex);
-        if (preparedBitmap == null) {
-            state.preparedIncomingSnapshotChapterIndex = -1;
-            state.preparedIncomingSnapshotPageIndex = -1;
-            return;
-        }
-        state.incomingPageSnapshotBitmap = preparedBitmap;
-        state.preparedIncomingSnapshotChapterIndex = target.chapterIndex;
-        state.preparedIncomingSnapshotPageIndex = target.pageIndex;
+        ensurePreparedCurrentSnapshot();
+        warmDirectionalSnapshot(1);
+        warmDirectionalSnapshot(-1);
     }
 
-    private Bitmap capturePreparedIncomingSnapshot(int chapterIndex, int pageIndex) {
+    private void ensurePreparedCurrentSnapshot() {
+        if (hasPreparedCurrentSnapshot(state.currentChapterIndex, state.currentPageIndex)) {
+            return;
+        }
+        navigation.bindCurrentSpread(state.currentChapterIndex, state.currentPageIndex);
+        layoutPageLayerForSnapshot(views.pageCurrent);
+        state.currentPageSnapshotBitmap = screenshotPageLayer(
+                views.pageCurrent,
+                state.currentPageSnapshotBitmap,
+                state.currentChapterIndex,
+                state.currentPageIndex
+        );
+        if (state.currentPageSnapshotBitmap != null) {
+            state.preparedCurrentSnapshotChapterIndex = state.currentChapterIndex;
+            state.preparedCurrentSnapshotPageIndex = state.currentPageIndex;
+        } else {
+            state.preparedCurrentSnapshotChapterIndex = -1;
+            state.preparedCurrentSnapshotPageIndex = -1;
+        }
+    }
+
+    private void warmDirectionalSnapshot(int direction) {
+        PageTarget target = resolveInteractiveTarget(direction);
+        if (target == null || hasPreparedDirectionalSnapshot(direction, target.chapterIndex, target.pageIndex)) {
+            return;
+        }
+        captureDirectionalPreparedSnapshot(direction, target.chapterIndex, target.pageIndex);
+    }
+
+    private Bitmap preparedTargetSnapshot(int chapterIndex, int pageIndex) {
+        if (hasPreparedNextSnapshot(chapterIndex, pageIndex)) {
+            return state.nextPageSnapshotBitmap;
+        }
+        if (hasPreparedPreviousSnapshot(chapterIndex, pageIndex)) {
+            return state.previousPageSnapshotBitmap;
+        }
+        if (hasPreparedIncomingSnapshot(chapterIndex, pageIndex)) {
+            return state.incomingPageSnapshotBitmap;
+        }
+        return null;
+    }
+
+    private Bitmap captureDirectionalPreparedSnapshot(int direction, int chapterIndex, int pageIndex) {
+        if (direction >= 0) {
+            Bitmap preparedBitmap = capturePreparedIncomingSnapshot(
+                    chapterIndex,
+                    pageIndex,
+                    state.nextPageSnapshotBitmap
+            );
+            if (preparedBitmap != null) {
+                state.nextPageSnapshotBitmap = preparedBitmap;
+                state.preparedNextSnapshotChapterIndex = chapterIndex;
+                state.preparedNextSnapshotPageIndex = pageIndex;
+            } else {
+                state.preparedNextSnapshotChapterIndex = -1;
+                state.preparedNextSnapshotPageIndex = -1;
+            }
+            return preparedBitmap;
+        }
+        Bitmap preparedBitmap = capturePreparedIncomingSnapshot(
+                chapterIndex,
+                pageIndex,
+                state.previousPageSnapshotBitmap
+        );
+        if (preparedBitmap != null) {
+            state.previousPageSnapshotBitmap = preparedBitmap;
+            state.preparedPreviousSnapshotChapterIndex = chapterIndex;
+            state.preparedPreviousSnapshotPageIndex = pageIndex;
+        } else {
+            state.preparedPreviousSnapshotChapterIndex = -1;
+            state.preparedPreviousSnapshotPageIndex = -1;
+        }
+        return preparedBitmap;
+    }
+
+    private Bitmap capturePreparedIncomingSnapshot(int chapterIndex, int pageIndex, Bitmap reuse) {
         if (views.pageIncoming == null) {
             return null;
         }
@@ -812,7 +871,7 @@ public final class ReaderPagingAnimator {
             views.pageIncoming.setVisibility(previousVisibility);
             return null;
         }
-        Bitmap bitmap = screenshotPageLayer(views.pageIncoming, state.incomingPageSnapshotBitmap, chapterIndex, pageIndex);
+        Bitmap bitmap = screenshotPageLayer(views.pageIncoming, reuse, chapterIndex, pageIndex);
         views.pageIncoming.setAlpha(previousAlpha);
         views.pageIncoming.setVisibility(previousVisibility);
         resetAnimatedPage(views.pageIncoming);
@@ -879,6 +938,45 @@ public final class ReaderPagingAnimator {
         );
     }
 
+    private boolean hasPreparedNextSnapshot(int chapterIndex, int pageIndex) {
+        return hasPreparedSnapshot(
+                state.nextPageSnapshotBitmap,
+                views.pageIncoming,
+                state.preparedNextSnapshotChapterIndex,
+                state.preparedNextSnapshotPageIndex,
+                chapterIndex,
+                pageIndex
+        );
+    }
+
+    private boolean hasPreparedPreviousSnapshot(int chapterIndex, int pageIndex) {
+        return hasPreparedSnapshot(
+                state.previousPageSnapshotBitmap,
+                views.pageIncoming,
+                state.preparedPreviousSnapshotChapterIndex,
+                state.preparedPreviousSnapshotPageIndex,
+                chapterIndex,
+                pageIndex
+        );
+    }
+
+    private boolean hasPreparedDirectionalSnapshot(int direction, int chapterIndex, int pageIndex) {
+        return direction >= 0
+                ? hasPreparedNextSnapshot(chapterIndex, pageIndex)
+                : hasPreparedPreviousSnapshot(chapterIndex, pageIndex);
+    }
+
+    private void setActiveIncomingSnapshot(Bitmap bitmap, int chapterIndex, int pageIndex) {
+        state.incomingPageSnapshotBitmap = bitmap;
+        if (bitmap == null) {
+            state.preparedIncomingSnapshotChapterIndex = -1;
+            state.preparedIncomingSnapshotPageIndex = -1;
+            return;
+        }
+        state.preparedIncomingSnapshotChapterIndex = chapterIndex;
+        state.preparedIncomingSnapshotPageIndex = pageIndex;
+    }
+
     private boolean hasPreparedSnapshot(Bitmap bitmap, View source, int preparedChapterIndex, int preparedPageIndex, int chapterIndex, int pageIndex) {
         if (bitmap == null
                 || bitmap.isRecycled()
@@ -895,19 +993,67 @@ public final class ReaderPagingAnimator {
                 && bitmap.getHeight() == expectedHeight;
     }
 
-    private void promoteIncomingSnapshotToCurrent(int chapterIndex, int pageIndex) {
+    private void promoteIncomingSnapshotToCurrent(
+            int chapterIndex,
+            int pageIndex,
+            int previousChapterIndex,
+            int previousPageIndex,
+            int direction
+    ) {
         if (!hasPreparedIncomingSnapshot(chapterIndex, pageIndex)) {
             state.preparedCurrentSnapshotChapterIndex = -1;
             state.preparedCurrentSnapshotPageIndex = -1;
             return;
         }
+        boolean previousCurrentWasPrepared = hasPreparedCurrentSnapshot(previousChapterIndex, previousPageIndex);
         Bitmap previousCurrentBitmap = state.currentPageSnapshotBitmap;
+        Bitmap promotedBitmap = state.incomingPageSnapshotBitmap;
+        Bitmap previousNextBitmap = state.nextPageSnapshotBitmap;
+        Bitmap previousPreviousBitmap = state.previousPageSnapshotBitmap;
+
         state.currentPageSnapshotBitmap = state.incomingPageSnapshotBitmap;
-        state.incomingPageSnapshotBitmap = previousCurrentBitmap;
         state.preparedCurrentSnapshotChapterIndex = chapterIndex;
         state.preparedCurrentSnapshotPageIndex = pageIndex;
+        setActiveIncomingSnapshot(null, -1, -1);
         state.preparedIncomingSnapshotChapterIndex = -1;
         state.preparedIncomingSnapshotPageIndex = -1;
+
+        state.nextPageSnapshotBitmap = previousNextBitmap == promotedBitmap ? null : previousNextBitmap;
+        state.previousPageSnapshotBitmap = previousPreviousBitmap == promotedBitmap ? null : previousPreviousBitmap;
+        state.preparedNextSnapshotChapterIndex = -1;
+        state.preparedNextSnapshotPageIndex = -1;
+        state.preparedPreviousSnapshotChapterIndex = -1;
+        state.preparedPreviousSnapshotPageIndex = -1;
+
+        if (!previousCurrentWasPrepared
+                || previousCurrentBitmap == null
+                || previousCurrentBitmap.isRecycled()
+                || previousCurrentBitmap == promotedBitmap) {
+            return;
+        }
+        if (direction >= 0) {
+            Bitmap spare = state.previousPageSnapshotBitmap;
+            state.previousPageSnapshotBitmap = previousCurrentBitmap;
+            state.preparedPreviousSnapshotChapterIndex = previousChapterIndex;
+            state.preparedPreviousSnapshotPageIndex = previousPageIndex;
+            if (state.nextPageSnapshotBitmap == null
+                    && spare != null
+                    && spare != previousCurrentBitmap
+                    && spare != promotedBitmap) {
+                state.nextPageSnapshotBitmap = spare;
+            }
+            return;
+        }
+        Bitmap spare = state.nextPageSnapshotBitmap;
+        state.nextPageSnapshotBitmap = previousCurrentBitmap;
+        state.preparedNextSnapshotChapterIndex = previousChapterIndex;
+        state.preparedNextSnapshotPageIndex = previousPageIndex;
+        if (state.previousPageSnapshotBitmap == null
+                && spare != null
+                && spare != previousCurrentBitmap
+                && spare != promotedBitmap) {
+            state.previousPageSnapshotBitmap = spare;
+        }
     }
 
     private void drawSnapshotBaseLayer(Canvas canvas, View source) {
