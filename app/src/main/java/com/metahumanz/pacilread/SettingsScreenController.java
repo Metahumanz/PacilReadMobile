@@ -7,6 +7,7 @@ import android.net.Uri;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -80,6 +81,8 @@ final class SettingsScreenController {
     private TextView statusText;
     private TextView databaseSizeText;
     private TextView maintenanceSummaryText;
+    private TextView textAppVersion;
+    private androidx.core.widget.NestedScrollView scrollChangelog;
     private Button optimizeDatabaseButton;
     private TextView fullBackupText;
     private TextView liteBackupText;
@@ -209,6 +212,9 @@ final class SettingsScreenController {
         }
         updateTtsSettingsVisibility();
         refreshRulesList();
+        if (textAppVersion != null) {
+            textAppVersion.setText("v" + BuildConfig.VERSION_NAME);
+        }
         bindingSettingsValues = false;
         refreshStatusSummary();
         refreshDatabaseSizeLabel();
@@ -358,6 +364,30 @@ final class SettingsScreenController {
         filterAllButton = activity.findViewById(R.id.button_rule_filter_all);
         filterGlobalButton = activity.findViewById(R.id.button_rule_filter_global);
         filterBookButton = activity.findViewById(R.id.button_rule_filter_book);
+        textAppVersion = activity.findViewById(R.id.text_app_version);
+        scrollChangelog = activity.findViewById(R.id.scroll_changelog);
+        if (scrollChangelog != null) {
+            scrollChangelog.setOnTouchListener(new View.OnTouchListener() {
+                private float startY;
+                @Override
+                public boolean onTouch(View v, MotionEvent event) {
+                    if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                        startY = event.getY();
+                        v.getParent().requestDisallowInterceptTouchEvent(true);
+                    } else if (event.getAction() == MotionEvent.ACTION_MOVE) {
+                        float dy = event.getY() - startY;
+                        boolean canScrollDown = dy < 0 && !v.canScrollVertically(1);
+                        boolean canScrollUp = dy > 0 && !v.canScrollVertically(-1);
+                        if (canScrollDown || canScrollUp) {
+                            v.getParent().requestDisallowInterceptTouchEvent(false);
+                        }
+                    } else if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
+                        v.getParent().requestDisallowInterceptTouchEvent(false);
+                    }
+                    return false;
+                }
+            });
+        }
     }
 
     private void setupSharedControllers() {
