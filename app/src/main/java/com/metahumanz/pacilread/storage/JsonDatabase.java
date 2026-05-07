@@ -470,15 +470,7 @@ public class JsonDatabase {
                     book.progressOffset = charOffset;
                     book.lastReadAt = System.currentTimeMillis();
                     book.updatedAt = book.lastReadAt;
-                    // 更新 currentChapterTitle
-                    String chapterTitle = "";
-                    for (ChapterRecord ch : chapterCache) {
-                        if (ch.bookId == bookId && ch.orderIndex == chapterIndex) {
-                            chapterTitle = ch.title != null ? ch.title : "";
-                            break;
-                        }
-                    }
-                    book.currentChapterTitle = chapterTitle;
+                    book.currentChapterTitle = chapterTitleForProgressLocked(bookId, chapterIndex);
                     saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
                     return;
                 }
@@ -486,6 +478,35 @@ public class JsonDatabase {
         } finally {
             lock.writeLock().unlock();
         }
+    }
+
+    public void updateProgressFromRemote(long bookId, int chapterIndex, int charOffset, long remoteLastReadAt) {
+        lock.writeLock().lock();
+        try {
+            for (BookRecord book : bookCache) {
+                if (book.id == bookId) {
+                    long safeRemoteLastReadAt = Math.max(remoteLastReadAt, 0L);
+                    book.progressIndex = chapterIndex;
+                    book.progressOffset = Math.max(charOffset, 0);
+                    book.lastReadAt = safeRemoteLastReadAt;
+                    book.updatedAt = safeRemoteLastReadAt;
+                    book.currentChapterTitle = chapterTitleForProgressLocked(bookId, chapterIndex);
+                    saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
+                    return;
+                }
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    private String chapterTitleForProgressLocked(long bookId, int chapterIndex) {
+        for (ChapterRecord ch : chapterCache) {
+            if (ch.bookId == bookId && ch.orderIndex == chapterIndex) {
+                return ch.title != null ? ch.title : "";
+            }
+        }
+        return "";
     }
 
     public long getMostRecentBookId() {

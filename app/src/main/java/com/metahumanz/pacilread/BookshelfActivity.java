@@ -27,6 +27,8 @@ import com.metahumanz.pacilread.importer.BookImportService;
 import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
+import com.metahumanz.pacilread.sync.WebDavClient;
+import com.metahumanz.pacilread.sync.WebDavProgressSyncCoordinator;
 import com.metahumanz.pacilread.theme.ThemedActivity;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.ui.LaunchSourceTransition;
@@ -50,10 +52,12 @@ public class BookshelfActivity extends ThemedActivity {
             "com.metahumanz.pacilread.EXTRA_AUTO_OPEN_BOOK_ID";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final ExecutorService progressPrefetchExecutor = Executors.newSingleThreadExecutor();
     private final List<BookRecord> allBooks = new ArrayList<>();
 
     private JsonDatabase databaseHelper;
     private SettingsStore settingsStore;
+    private WebDavProgressSyncCoordinator progressSyncCoordinator;
     private BookImportService importService;
     private BookListAdapter listAdapter;
     private BookGridAdapter gridAdapter;
@@ -93,6 +97,11 @@ public class BookshelfActivity extends ThemedActivity {
 
         databaseHelper = JsonDatabase.getInstance(this);
         settingsStore = new SettingsStore(this);
+        progressSyncCoordinator = new WebDavProgressSyncCoordinator(
+                databaseHelper,
+                settingsStore,
+                new WebDavClient(settingsStore)
+        );
         importService = new BookImportService(this);
 
         bindViews();
@@ -152,6 +161,7 @@ public class BookshelfActivity extends ThemedActivity {
         }
         super.onDestroy();
         executor.shutdownNow();
+        progressPrefetchExecutor.shutdownNow();
     }
 
     @Override
@@ -432,6 +442,10 @@ public class BookshelfActivity extends ThemedActivity {
     }
 
     private void refreshBooks() {
+        refreshBooks(true);
+    }
+
+    private void refreshBooks(boolean prefetchAfterLoad) {
         booksLoading = true;
         if (!booksLoaded) {
             showBookshelfLoadingState();
@@ -445,6 +459,9 @@ public class BookshelfActivity extends ThemedActivity {
                     allBooks.clear();
                     allBooks.addAll(books);
                     applyFilter(currentQuery());
+                    if (prefetchAfterLoad) {
+                        scheduleBookshelfProgressPrefetch(books);
+                    }
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
@@ -455,6 +472,62 @@ public class BookshelfActivity extends ThemedActivity {
                 });
             }
         });
+    }
+
+    private void scheduleBookshelfProgressPrefetch(List<BookRecord> books) {
+        if (books == null
+                || books.isEmpty()
+                || !settingsStore.isWebDavEnabled()
+                || progressSyncCoordinator == null) {
+            return;
+        }
+        int limit = Math.min(WebDavProgressSyncCoordinator.BOOKSHELF_PREFETCH_LIMIT, books.size());
+        List<BookRecord> candidates = new ArrayList<>();
+        for (int i = 0; i < limit; i++) {
+            candidates.add(snapshotBookForProgressPrefetch(books.get(i)));
+        }
+        progressPrefetchExecutor.execute(() -> {
+            boolean changed = false;
+            for (BookRecord book : candidates) {
+                if (Thread.currentThread().isInterrupted()) {
+                    return;
+                }
+                try {
+                    WebDavProgressSyncCoordinator.SyncResult result =
+                            progressSyncCoordinator.syncBookProgressIfNeeded(book);
+                    changed = changed || result.remoteApplied;
+                } catch (Exception error) {
+                    Log.d(TAG, "WebDAV progress prefetch skipped for book " + book.id, error);
+                }
+            }
+            if (changed && !Thread.currentThread().isInterrupted()) {
+                runOnUiThread(() -> {
+                    if (!isFinishing()) {
+                        refreshBooks(false);
+                    }
+                });
+            }
+        });
+    }
+
+    private BookRecord snapshotBookForProgressPrefetch(BookRecord source) {
+        BookRecord snapshot = new BookRecord();
+        snapshot.id = source.id;
+        snapshot.title = source.title;
+        snapshot.author = source.author;
+        snapshot.localPath = source.localPath;
+        snapshot.coverPath = source.coverPath;
+        snapshot.bookType = source.bookType;
+        snapshot.readingStatsKey = source.readingStatsKey;
+        snapshot.progressIndex = source.progressIndex;
+        snapshot.progressOffset = source.progressOffset;
+        snapshot.lastReadAt = source.lastReadAt;
+        snapshot.pinned = source.pinned;
+        snapshot.currentChapterTitle = source.currentChapterTitle;
+        snapshot.chapterCount = source.chapterCount;
+        snapshot.createdAt = source.createdAt;
+        snapshot.updatedAt = source.updatedAt;
+        return snapshot;
     }
 
     private void applyFilter(String query) {
