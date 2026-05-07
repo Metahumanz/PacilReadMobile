@@ -1,0 +1,379 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <TextView
+        style="@style/AppChromeSectionLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginBottom="10dp"
+        android:text="关于与更新" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="20dp"
+        android:background="@drawable/bg_app_card"
+        android:elevation="2dp"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <!-- 版本信息行 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                style="@style/AppChromeBodyStrong"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="PacilRead 版本" />
+
+            <TextView
+                android:id="@+id/text_app_version"
+                style="@style/AppChromeBody"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_app_input"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:text="v1.0.0"
+                android:textColor="?attr/themeColorAppPrimary" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="12dp"
+            android:background="?attr/themeColorAppBorder" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                style="@style/AppChromeBodyStrong"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="版本演进日志" />
+
+            <TextView
+                style="@style/AppChromeCaption"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="仅记录主要变更" />
+        </LinearLayout>
+
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/scroll_changelog"
+            android:layout_width="match_parent"
+            android:layout_height="380dp"
+            android:layout_marginTop="12dp"
+            android:scrollbars="none"
+            android:overScrollMode="never"
+            android:fadingEdge="vertical"
+            android:requiresFadingEdge="vertical"
+            android:fillViewport="false">
+
+            <LinearLayout
+                android:id="@+id/layout_changelog_entries"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <!-- v1.0.0 首个正式版 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_app_badge_latest"
+                            android:paddingStart="6dp"
+                            android:paddingEnd="6dp"
+                            android:paddingTop="2dp"
+                            android:paddingBottom="2dp"
+                            android:text="最新"
+                            android:textColor="@android:color/white"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            style="@style/AppChromeBodyStrong"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:text="v1.0.0 — 首个正式版" />
+
+                        <TextView
+                            style="@style/AppChromeCaption"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="end"
+                            android:text="2026-05-07" />
+                    </LinearLayout>
+
+                    <!-- ===== 核心阅读引擎 ===== -->
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="核心阅读引擎" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  仿真 3D 翻页动画：贝赛尔曲线折痕，从四角拖拽的立体翻页效果" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  多种翻页模式：覆盖、平移、仿真、上下滚动、无动画五种模式可切换" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  StaticLayout 智能分页：渐进式分页策略，支持大文本流畅加载" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  两端对齐渲染：手动字间距计算实现中英文混排的精确两端对齐" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  底边对齐模式：自动拉伸行间距使正文末行对齐页面底部" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  多种翻页触发：点击区域、滑动手势、键盘方向键、空格/回车、鼠标滚轮、音量键" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  双页模式：支持横屏/平板自动双页，翻页步长可配置" />
+
+                    <!-- ===== 文本排版与样式 ===== -->
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="文本排版与样式" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  完整排版参数：字号（12-32sp）、字族、字重、行间距、段落间距、字间距、首行缩进、四边距" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  三种内置阅读主题：纸控（米白+棕字）、护眼（浅绿+深绿字）、夜航（深蓝+浅灰字）" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  8 种预设文字颜色 + 自定义 HEX / HSV 色彩选择器" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  自定义背景图片：支持系统文件选择器导入 + 模糊度调节" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  章节标题显示可选：左对齐 / 居中对齐 / 完全隐藏" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  自定义主题保存/加载/删除：完整排版参数可存为命名预设" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  屏幕方向锁定：竖屏 / 横屏 / 跟随系统" />
+
+                    <!-- ===== 全文搜索与目录导航 ===== -->
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="全文搜索与目录导航" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  全书关键词搜索：后台遍历所有章节，返回匹配结果含上下文摘要" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  章节目录：完整章节列表，当前章节高亮加粗，侧边快速拖拽滚动条" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  进度条双模式：全书章节模式 / 本章页数模式一键切换，拖拽跳转" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  阅读位置记忆：自动恢复上次阅读位置，精确到字符偏移量" />
+
+                    <!-- ===== 文字选择与书签 ===== -->
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="文字选择与书签" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  长按智能选词：BreakIterator 按语言环境切词，双拖拽手柄调整范围" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  选中文字操作：复制到剪贴板 / 添加替换规则 / 全文搜索 / 从此处朗读" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  书签管理：添加书签自动生成上下文摘要，支持手动编辑笔记，点击跳转" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  书签跨设备同步：通过 WebDAV 增量合并，UUID 去重" />
+
+                    <!-- ===== 语音朗读 ===== -->
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="语音朗读（TTS）" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  双引擎：系统 TTS 引擎 + 小米 MiMo 云端语音合成（24kHz PCM16）" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  MiMo 四种音色：冰糖（女声）、茉莉（女声）、苏打（男声）、白桦（男声）" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  按句朗读：智能分句合组，减少 API 调用次数，支持倍速（0.5x-3.0x）" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  实时高亮跟随：正在朗读的句子在页面上逐句高亮，跨页自动翻页跟随" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  MiMo PCM 缓存：预取相邻句子组，降低等待延迟" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  音频焦点管理：自动抢占/释放系统音频焦点，来电/通知自动暂停" />
+
+                    <!-- ===== 自动翻页 ===== -->
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="自动翻页" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  定时翻页：可配置间隔 1-20 秒，自动连续翻页" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  菜单隐藏时自动翻页不中断，一键开始/停止" />
+
+                    <!-- ===== HUD 信息显示 ===== -->
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="HUD 信息面板" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  6 个自定义槽位（上左/上中/上右/下左/下中/下右），可自由组合" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  10 种显示内容：书名、章节名、时间、电量、本章页码、全书进度等" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  HUD 跟随翻页移动：快照合成技术，翻页动画中 HUD 位置随页面同步" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  系统时间分钟级更新、电池电量实时监听" />
+
+                    <!-- ===== 文本替换净化 ===== -->
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="文本替换净化" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  全局/单书两级作用域替换规则" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  纯文本与正则表达式两种匹配模式" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  规则启用/停用一键切换，长按删除" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  替换规则跨设备 WebDAV 去重合并同步" />
+
+                    <!-- ===== 书籍导入 ===== -->
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="书籍导入与解析" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  支持格式：TXT、EPUB、PDF 三种格式导入" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  TXT：自动编码检测（UTF-8/16/GB18030），智能章节正则匹配" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  EPUB：完整 OPF/Spine/NCX/NAV 解析，手写 XML 解析器免 DOM 依赖" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  PDF：PDFBox 引擎提取文本，支持按页拆分或智能分章" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  中文文件名智能解析：自动提取书名号/括号/分隔符中的书名和作者" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  EPUB 封面自动提取与压缩存储" />
+
+                    <!-- ===== 书架主页 ===== -->
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="书架主页" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  四 Tab 底部导航：书架 / 阅读时长 / 书签 / 设置" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  卡片/列表双视图切换，书名/作者实时搜索过滤" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  书籍置顶，长按删除，点击继续阅读" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  启动时自动打开上次阅读的书籍" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  书籍元数据编辑：书名和作者名支持即时修改，自动关联阅读统计" />
+
+                    <!-- ===== WebDAV 云同步 ===== -->
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="WebDAV 云端同步" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  全量备份/恢复：书架、书籍文件、封面、章节正文、主题、背景完整打包" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  增量备份/恢复：SHA-256 比对新旧，仅上传变化文件，大幅节省流量" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  选择性同步：书架/文件/UI设置/主题/背景/阅读统计 6 个维度独立开关" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  阅读进度多端同步：多位置进度上传/下载，自动选取最新进度" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  书架预拉进度：进入书架时自动预拉 6 本书的远端进度，无需逐本打开" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  实体合并策略：书籍按 title+author 匹配合并，章节按 (bookId, orderIndex) 匹配" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  远端孤立文件清理：备份后自动清理远端无引用的残留资源" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  Android 私有设置快照：独立配置文件的备份与恢复" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  网络重试：瞬态 IO 错误自动重试最多 3 次，指数退避" />
+
+                    <!-- ===== 阅读统计 ===== -->
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="阅读统计" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  自动记录阅读时长与阅读字数，空闲检测自动分割时间段" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  本日/本周/本年 三维度统计视图，支持全局统计和单书统计" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  WebDAV 跨设备合并：多设备阅读统计按 deviceId+date+bookIdentity 自动归并" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  按书聚合展示：每本书的总阅读时长、最近阅读时间" />
+
+                    <!-- ===== 外观与主题 ===== -->
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="外观与主题" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  应用与阅读界面独立主题设置：跟随系统 / 浅色 / 深色 / 跟随应用" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  浅色双风格：云白（柔和）/ 曜白（高对比）" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  深色双风格：夜幕（深邃蓝底）/ 极夜（纯黑底）" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  毛玻璃效果：阅读菜单和弹窗的背景不透明度滑块可调（20%-100%）" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  日夜模式自动切换：跟随系统深色模式自动切换阅读器主题" />
+
+                    <!-- ===== 转场动效 ===== -->
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="转场与动效" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  流动模式（Android 14+）：预测性返回手势，来源贴合缩放动画" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  简洁模式：稳定基础转场，兼容低版本 Android" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  阅读器启动过渡动画：快照层前台放大、真实页后台淡入，衔接流畅" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  屏幕圆角自适应裁剪（预测返回手势期间）、刘海屏边到边适配" />
+
+                    <!-- ===== 导航与布局 ===== -->
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="导航与布局" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  首页导航模式：底栏/侧栏/自动，竖屏和横屏可分别配置" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  侧栏双模式：滑出式抽屉 / 宽屏固定侧栏（平板适配）" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  底栏样式：仅图标 / 仅文字 / 图标+文字，文字标签可隐藏" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  固定侧栏展示风格：图标+文字 / 仅图标" />
+
+                    <!-- ===== 数据管理 ===== -->
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="数据管理" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  JSON 文件数据库：无 SQLite 依赖，所有数据以 JSON 文件存储，读写更高效" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  章节正文外置 GZip 压缩：大幅瘦身数据库，LRU 内存缓存加速读取" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  数据库维护：存储占用统计、临时缓存清理、一键优化按钮" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  阅读主题导出/导入：一键导出 17 项阅读设置为 JSON，跨设备分享" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  R8 代码压缩与混淆：Release 构建自动优化" />
+
+                </LinearLayout>
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+    </LinearLayout>
+</merge>

@@ -58,6 +58,7 @@ public final class LaunchSourceTransition {
         final boolean enterUsesSnapshotOverlay;
         final boolean enterFadesContent;
         final boolean enterAnimatesLiveContent;
+        final boolean exitUsesScreenCornerClip;
 
         private Options(
                 long durationMs,
@@ -65,7 +66,8 @@ public final class LaunchSourceTransition {
                 Interpolator interpolator,
                 boolean enterUsesSnapshotOverlay,
                 boolean enterFadesContent,
-                boolean enterAnimatesLiveContent
+                boolean enterAnimatesLiveContent,
+                boolean exitUsesScreenCornerClip
         ) {
             this.durationMs = durationMs;
             this.snapshotFadeStartFraction = clampOption(snapshotFadeStartFraction, 0f, 1f);
@@ -73,40 +75,53 @@ public final class LaunchSourceTransition {
             this.enterUsesSnapshotOverlay = enterUsesSnapshotOverlay;
             this.enterFadesContent = enterFadesContent;
             this.enterAnimatesLiveContent = enterAnimatesLiveContent;
+            this.exitUsesScreenCornerClip = exitUsesScreenCornerClip;
         }
 
         public static Options defaults() {
-            return new Options(260L, 0.5f, new DecelerateInterpolator(), true, true, true);
+            return new Options(260L, 0.5f, new DecelerateInterpolator(), true, true, true, true);
         }
 
         public Options withDuration(long durationMs) {
             return new Options(durationMs, snapshotFadeStartFraction, interpolator,
-                    enterUsesSnapshotOverlay, enterFadesContent, enterAnimatesLiveContent);
+                    enterUsesSnapshotOverlay, enterFadesContent, enterAnimatesLiveContent,
+                    exitUsesScreenCornerClip);
         }
 
         public Options withSnapshotFadeStartFraction(float fraction) {
             return new Options(durationMs, fraction, interpolator,
-                    enterUsesSnapshotOverlay, enterFadesContent, enterAnimatesLiveContent);
+                    enterUsesSnapshotOverlay, enterFadesContent, enterAnimatesLiveContent,
+                    exitUsesScreenCornerClip);
         }
 
         public Options withEnterSnapshotOverlay(boolean useSnapshotOverlay) {
             return new Options(durationMs, snapshotFadeStartFraction, interpolator,
-                    useSnapshotOverlay, enterFadesContent, enterAnimatesLiveContent);
+                    useSnapshotOverlay, enterFadesContent, enterAnimatesLiveContent,
+                    exitUsesScreenCornerClip);
         }
 
         public Options withEnterContentFade(boolean fadeContent) {
             return new Options(durationMs, snapshotFadeStartFraction, interpolator,
-                    enterUsesSnapshotOverlay, fadeContent, enterAnimatesLiveContent);
+                    enterUsesSnapshotOverlay, fadeContent, enterAnimatesLiveContent,
+                    exitUsesScreenCornerClip);
         }
 
         public Options withInterpolator(Interpolator newInterpolator) {
             return new Options(durationMs, snapshotFadeStartFraction, newInterpolator,
-                    enterUsesSnapshotOverlay, enterFadesContent, enterAnimatesLiveContent);
+                    enterUsesSnapshotOverlay, enterFadesContent, enterAnimatesLiveContent,
+                    exitUsesScreenCornerClip);
         }
 
         public Options withEnterAnimatesLiveContent(boolean animatesLiveContent) {
             return new Options(durationMs, snapshotFadeStartFraction, interpolator,
-                    enterUsesSnapshotOverlay, enterFadesContent, animatesLiveContent);
+                    enterUsesSnapshotOverlay, enterFadesContent, animatesLiveContent,
+                    exitUsesScreenCornerClip);
+        }
+
+        public Options withExitScreenCornerClip(boolean useScreenCornerClip) {
+            return new Options(durationMs, snapshotFadeStartFraction, interpolator,
+                    enterUsesSnapshotOverlay, enterFadesContent, enterAnimatesLiveContent,
+                    useScreenCornerClip);
         }
 
         private static float clampOption(float value, float min, float max) {
@@ -245,7 +260,11 @@ public final class LaunchSourceTransition {
             return false;
         }
 
-        ScreenCornerClipper.apply(targetView);
+        if (options.exitUsesScreenCornerClip) {
+            ScreenCornerClipper.apply(targetView);
+        } else {
+            ScreenCornerClipper.setClipEnabled(targetView, false);
+        }
         targetView.animate().cancel();
 
         float pivotX = targetView.getWidth() / 2f;

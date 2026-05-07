@@ -73,10 +73,16 @@ public final class ReaderSessionState {
     public float lastTapY = -1f;
     public Bitmap currentPageSnapshotBitmap;
     public Bitmap incomingPageSnapshotBitmap;
+    public Bitmap nextPageSnapshotBitmap;
+    public Bitmap previousPageSnapshotBitmap;
     public int preparedCurrentSnapshotChapterIndex = -1;
     public int preparedCurrentSnapshotPageIndex = -1;
     public int preparedIncomingSnapshotChapterIndex = -1;
     public int preparedIncomingSnapshotPageIndex = -1;
+    public int preparedNextSnapshotChapterIndex = -1;
+    public int preparedNextSnapshotPageIndex = -1;
+    public int preparedPreviousSnapshotChapterIndex = -1;
+    public int preparedPreviousSnapshotPageIndex = -1;
     public long suppressInsetReflowUntilUptimeMs = 0L;
     public long sessionStartTime = 0L;
     public int sessionStartOffset = 0;

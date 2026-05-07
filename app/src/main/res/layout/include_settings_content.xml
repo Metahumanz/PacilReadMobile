@@ -18,4 +18,6 @@
     <include layout="@layout/include_settings_tts" />
 
     <include layout="@layout/include_settings_replacement_rules" />
+
+    <include layout="@layout/include_settings_about" />
 </LinearLayout>

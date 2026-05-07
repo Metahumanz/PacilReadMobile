@@ -30,22 +30,25 @@ public final class PredictiveBackScaleController {
         final float translationDp;
         final long cancelDurationMs;
         final long commitDurationMs;
+        final boolean cornerClipDuringGestureOnly;
 
         private Profile(float minScale, float minAlpha, float translationDp,
-                        long cancelDurationMs, long commitDurationMs) {
+                        long cancelDurationMs, long commitDurationMs,
+                        boolean cornerClipDuringGestureOnly) {
             this.minScale = minScale;
             this.minAlpha = minAlpha;
             this.translationDp = translationDp;
             this.cancelDurationMs = cancelDurationMs;
             this.commitDurationMs = commitDurationMs;
+            this.cornerClipDuringGestureOnly = cornerClipDuringGestureOnly;
         }
 
         public static Profile standard() {
-            return new Profile(STANDARD_MIN_SCALE, 0.94f, 28f, 190L, 110L);
+            return new Profile(STANDARD_MIN_SCALE, 0.94f, 28f, 190L, 110L, false);
         }
 
         public static Profile reader() {
-            return new Profile(READER_MIN_SCALE, 0.96f, 14f, 180L, 100L);
+            return new Profile(READER_MIN_SCALE, 0.96f, 14f, 180L, 100L, true);
         }
     }
 
@@ -56,6 +59,9 @@ public final class PredictiveBackScaleController {
             Delegate delegate
     ) {
         ScreenCornerClipper.apply(targetView);
+        if (profile.cornerClipDuringGestureOnly) {
+            ScreenCornerClipper.setClipEnabled(targetView, false);
+        }
         targetView.post(() -> {
             targetView.setPivotX(targetView.getWidth() / 2f);
             targetView.setPivotY(targetView.getHeight() / 2f);
@@ -65,6 +71,7 @@ public final class PredictiveBackScaleController {
             private boolean gestureActive;
             private boolean animatedDuringGesture;
             private boolean committing;
+            private boolean cornerClipEnabled;
             private int lastSwipeEdge = BackEventCompat.EDGE_LEFT;
             private float lastProgress;
 
@@ -111,6 +118,7 @@ public final class PredictiveBackScaleController {
                 }
                 if (gestureActive && animatedDuringGesture) {
                     committing = true;
+                    enableCornerClipIfNeeded();
                     if (delegate.commitBackFromGesture()) {
                         finishGesture();
                         delegate.commitBack();
@@ -120,6 +128,7 @@ public final class PredictiveBackScaleController {
                     return;
                 }
                 finishGesture();
+                disableCornerClipIfNeeded();
                 delegate.commitBack();
             }
 
@@ -133,6 +142,7 @@ public final class PredictiveBackScaleController {
             }
 
             private void applyProgress(BackEventCompat backEvent) {
+                enableCornerClipIfNeeded();
                 float eased = eased(clamp(backEvent.getProgress()));
                 float scale = lerp(1f, profile.minScale, eased);
                 targetView.setScaleX(scale);
@@ -149,10 +159,12 @@ public final class PredictiveBackScaleController {
                         .translationX(0f)
                         .setDuration(profile.cancelDurationMs)
                         .setInterpolator(interpolator)
+                        .withEndAction(this::disableCornerClipIfNeeded)
                         .start();
             }
 
             private void animateToCommit(Runnable onComplete) {
+                enableCornerClipIfNeeded();
                 float eased = eased(Math.max(lastProgress, 0.72f));
                 targetView.animate()
                         .scaleX(profile.minScale)
@@ -169,6 +181,22 @@ public final class PredictiveBackScaleController {
                 gestureActive = false;
                 animatedDuringGesture = false;
                 lastProgress = 0f;
+            }
+
+            private void enableCornerClipIfNeeded() {
+                if (!profile.cornerClipDuringGestureOnly || cornerClipEnabled) {
+                    return;
+                }
+                cornerClipEnabled = true;
+                ScreenCornerClipper.setClipEnabled(targetView, true);
+            }
+
+            private void disableCornerClipIfNeeded() {
+                if (!profile.cornerClipDuringGestureOnly || !cornerClipEnabled) {
+                    return;
+                }
+                cornerClipEnabled = false;
+                ScreenCornerClipper.setClipEnabled(targetView, false);
             }
 
             private float translationPx() {

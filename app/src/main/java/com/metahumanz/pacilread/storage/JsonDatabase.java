@@ -139,6 +139,14 @@ public class JsonDatabase {
             readingStatsCache = loadList(FILE_READING_STATS, ReadingTimeEntryRecord::fromJson);
             // 加载后重定位路径：JSON 中存的是文件名，需拼接本地目录
             rebasePathsLocked();
+            boolean booksChanged = backfillBookReadingStatsKeysLocked();
+            boolean statsChanged = normalizeReadingStatsCacheLocked();
+            if (booksChanged) {
+                saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
+            }
+            if (statsChanged) {
+                saveList(FILE_READING_STATS, readingStatsCache, ReadingTimeEntryRecord::toJson);
+            }
         } finally {
             lock.writeLock().unlock();
         }
@@ -356,15 +364,31 @@ public class JsonDatabase {
     }
 
     public void updateBookInfo(long bookId, String title, String author) {
+        ensureLoaded();
         lock.writeLock().lock();
         try {
             for (BookRecord book : bookCache) {
                 if (book.id == bookId) {
+                    String previousKey = book.readingStatsKey;
+                    String previousTitle = book.title;
+                    String previousAuthor = book.author;
+                    String nextKey = ReadingStatsUtils.buildBookIdentity(title, author);
                     book.title = title;
                     book.author = author;
-                    book.readingStatsKey = ReadingStatsUtils.buildBookIdentity(title, author);
+                    book.readingStatsKey = nextKey;
                     book.updatedAt = System.currentTimeMillis();
+                    boolean statsChanged = migrateReadingStatsForBookRenameLocked(
+                            previousKey,
+                            previousTitle,
+                            previousAuthor,
+                            nextKey,
+                            title,
+                            author
+                    );
                     saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
+                    if (statsChanged) {
+                        saveList(FILE_READING_STATS, readingStatsCache, ReadingTimeEntryRecord::toJson);
+                    }
                     return;
                 }
             }
@@ -446,15 +470,7 @@ public class JsonDatabase {
                     book.progressOffset = charOffset;
                     book.lastReadAt = System.currentTimeMillis();
                     book.updatedAt = book.lastReadAt;
-                    // 更新 currentChapterTitle
-                    String chapterTitle = "";
-                    for (ChapterRecord ch : chapterCache) {
-                        if (ch.bookId == bookId && ch.orderIndex == chapterIndex) {
-                            chapterTitle = ch.title != null ? ch.title : "";
-                            break;
-                        }
-                    }
-                    book.currentChapterTitle = chapterTitle;
+                    book.currentChapterTitle = chapterTitleForProgressLocked(bookId, chapterIndex);
                     saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
                     return;
                 }
@@ -462,6 +478,35 @@ public class JsonDatabase {
         } finally {
             lock.writeLock().unlock();
         }
+    }
+
+    public void updateProgressFromRemote(long bookId, int chapterIndex, int charOffset, long remoteLastReadAt) {
+        lock.writeLock().lock();
+        try {
+            for (BookRecord book : bookCache) {
+                if (book.id == bookId) {
+                    long safeRemoteLastReadAt = Math.max(remoteLastReadAt, 0L);
+                    book.progressIndex = chapterIndex;
+                    book.progressOffset = Math.max(charOffset, 0);
+                    book.lastReadAt = safeRemoteLastReadAt;
+                    book.updatedAt = safeRemoteLastReadAt;
+                    book.currentChapterTitle = chapterTitleForProgressLocked(bookId, chapterIndex);
+                    saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
+                    return;
+                }
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    private String chapterTitleForProgressLocked(long bookId, int chapterIndex) {
+        for (ChapterRecord ch : chapterCache) {
+            if (ch.bookId == bookId && ch.orderIndex == chapterIndex) {
+                return ch.title != null ? ch.title : "";
+            }
+        }
+        return "";
     }
 
     public long getMostRecentBookId() {
@@ -483,18 +528,38 @@ public class JsonDatabase {
     }
 
     public BookRecord findBookByReadingStatsKey(String readingStatsKey) {
+        return findBookForReadingStats(readingStatsKey, null, null);
+    }
+
+    public BookRecord findBookForReadingStats(String readingStatsKey, String title, String author) {
         ensureLoaded();
         lock.readLock().lock();
         try {
-            for (BookRecord book : bookCache) {
-                if (readingStatsKey != null && readingStatsKey.equals(book.readingStatsKey)) {
-                    return cloneBook(book);
-                }
-            }
-            return null;
+            BookRecord matched = findBookForReadingStatsLocked(readingStatsKey, title, author);
+            return matched == null ? null : cloneBook(matched);
         } finally {
             lock.readLock().unlock();
         }
+    }
+
+    private BookRecord findBookForReadingStatsLocked(String readingStatsKey, String title, String author) {
+        if (readingStatsKey != null && !readingStatsKey.isBlank()) {
+            for (BookRecord book : bookCache) {
+                if (readingStatsKey.equals(book.readingStatsKey)) {
+                    return book;
+                }
+            }
+        }
+        String targetTitleAuthorKey = titleAuthorKeyOrEmpty(title, author);
+        if (targetTitleAuthorKey.isEmpty()) {
+            return null;
+        }
+        for (BookRecord book : bookCache) {
+            if (targetTitleAuthorKey.equals(titleAuthorKeyOrEmpty(book.title, book.author))) {
+                return book;
+            }
+        }
+        return null;
     }
 
     private void saveBooksAndChapters() {
@@ -840,19 +905,24 @@ public class JsonDatabase {
         if (durationSeconds <= 0 && charCount <= 0) {
             return;
         }
+        ensureLoaded();
         lock.writeLock().lock();
         try {
             String safeDeviceId = sourceDeviceId != null ? sourceDeviceId : "";
             String safeDate = date != null ? date : "";
-            String safeIdentity = bookIdentity != null ? bookIdentity : "";
+            String safeTitle = ReadingStatsUtils.safeBookTitle(bookTitle);
+            String safeAuthor = bookAuthor != null ? bookAuthor.trim() : "";
+            String safeIdentity = canonicalReadingStatsIdentity(bookIdentity, safeTitle, safeAuthor);
             for (ReadingTimeEntryRecord entry : readingStatsCache) {
                 if (safeDate.equals(entry.date) && safeDeviceId.equals(entry.sourceDeviceId) &&
-                        safeIdentity.equals(entry.bookIdentity)) {
+                        sameReadingStatsBook(entry.bookIdentity, entry.bookTitle, entry.bookAuthor, safeIdentity, safeTitle, safeAuthor)) {
                     entry.durationSeconds += Math.max(durationSeconds, 0);
                     if (charCount > 0) entry.charCount += Math.max(charCount, 0);
-                    entry.bookTitle = ReadingStatsUtils.safeBookTitle(bookTitle);
-                    entry.bookAuthor = bookAuthor != null ? bookAuthor.trim() : "";
+                    entry.bookIdentity = safeIdentity;
+                    entry.bookTitle = safeTitle;
+                    entry.bookAuthor = safeAuthor;
                     entry.updatedAt = Math.max(updatedAt, 0L);
+                    normalizeReadingStatsCacheLocked();
                     saveList(FILE_READING_STATS, readingStatsCache, ReadingTimeEntryRecord::toJson);
                     return;
                 }
@@ -862,12 +932,13 @@ public class JsonDatabase {
             entry.date = safeDate;
             entry.sourceDeviceId = safeDeviceId;
             entry.bookIdentity = safeIdentity;
-            entry.bookTitle = ReadingStatsUtils.safeBookTitle(bookTitle);
-            entry.bookAuthor = bookAuthor != null ? bookAuthor.trim() : "";
+            entry.bookTitle = safeTitle;
+            entry.bookAuthor = safeAuthor;
             entry.durationSeconds = Math.max(durationSeconds, 0);
             entry.charCount = Math.max(charCount, 0);
             entry.updatedAt = Math.max(updatedAt, 0L);
             readingStatsCache.add(entry);
+            normalizeReadingStatsCacheLocked();
             saveList(FILE_READING_STATS, readingStatsCache, ReadingTimeEntryRecord::toJson);
         } finally {
             lock.writeLock().unlock();
@@ -875,6 +946,7 @@ public class JsonDatabase {
     }
 
     public int getReadingDurationSeconds(String startDate, String endDate, String bookIdentity) {
+        ensureLoaded();
         lock.readLock().lock();
         try {
             int total = 0;
@@ -890,17 +962,35 @@ public class JsonDatabase {
         }
     }
 
+    public int getReadingDurationSecondsForBook(String startDate, String endDate, String bookIdentity, String bookTitle, String bookAuthor) {
+        ensureLoaded();
+        lock.readLock().lock();
+        try {
+            int total = 0;
+            for (ReadingTimeEntryRecord entry : readingStatsCache) {
+                if (entry.date.compareTo(startDate) >= 0 && entry.date.compareTo(endDate) <= 0 &&
+                        sameReadingStatsBook(entry.bookIdentity, entry.bookTitle, entry.bookAuthor, bookIdentity, bookTitle, bookAuthor)) {
+                    total += entry.durationSeconds;
+                }
+            }
+            return total;
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     public List<ReadingBookStatRecord> getReadingBookStats(String startDate, String endDate) {
+        ensureLoaded();
         lock.readLock().lock();
         try {
             Map<String, ReadingBookStatRecord> map = new HashMap<>();
             for (ReadingTimeEntryRecord entry : readingStatsCache) {
                 if (entry.date.compareTo(startDate) >= 0 && entry.date.compareTo(endDate) <= 0) {
-                    String key = entry.bookIdentity;
+                    String key = readingStatsBookGroupKey(entry);
                     ReadingBookStatRecord stat = map.get(key);
                     if (stat == null) {
                         stat = new ReadingBookStatRecord();
-                        stat.bookIdentity = key;
+                        stat.bookIdentity = canonicalReadingStatsIdentity(entry.bookIdentity, entry.bookTitle, entry.bookAuthor);
                         stat.bookTitle = entry.bookTitle;
                         stat.bookAuthor = entry.bookAuthor;
                         stat.totalDurationSeconds = 0;
@@ -908,12 +998,17 @@ public class JsonDatabase {
                         map.put(key, stat);
                     }
                     stat.totalDurationSeconds += entry.durationSeconds;
-                    if (entry.updatedAt > stat.updatedAt) stat.updatedAt = entry.updatedAt;
+                    if (entry.updatedAt > stat.updatedAt) {
+                        stat.updatedAt = entry.updatedAt;
+                        stat.bookIdentity = canonicalReadingStatsIdentity(entry.bookIdentity, entry.bookTitle, entry.bookAuthor);
+                        stat.bookTitle = entry.bookTitle;
+                        stat.bookAuthor = entry.bookAuthor;
+                    }
                 }
             }
             // 补上本地书的封面路径
             for (ReadingBookStatRecord stat : map.values()) {
-                BookRecord book = findBookByReadingStatsKey(stat.bookIdentity);
+                BookRecord book = findBookForReadingStatsLocked(stat.bookIdentity, stat.bookTitle, stat.bookAuthor);
                 if (book != null) {
                     stat.localBookId = book.id;
                     stat.localCoverPath = book.coverPath;
@@ -928,30 +1023,42 @@ public class JsonDatabase {
     }
 
     public List<ReadingTimeEntryRecord> getReadingStatsRowsForSync(String sourceDeviceId) {
+        ensureLoaded();
         List<ReadingTimeEntryRecord> rows = new ArrayList<>();
-        lock.readLock().lock();
+        String safeSourceDeviceId = sourceDeviceId == null ? "" : sourceDeviceId;
+        lock.writeLock().lock();
         try {
+            boolean changed = normalizeReadingStatsCacheLocked();
+            if (changed) {
+                saveList(FILE_READING_STATS, readingStatsCache, ReadingTimeEntryRecord::toJson);
+            }
             for (ReadingTimeEntryRecord entry : readingStatsCache) {
-                if (sourceDeviceId.equals(entry.sourceDeviceId)) {
-                    rows.add(entry);
+                if (safeSourceDeviceId.equals(entry.sourceDeviceId)) {
+                    rows.add(cloneReadingTimeEntry(entry));
                 }
             }
         } finally {
-            lock.readLock().unlock();
+            lock.writeLock().unlock();
         }
         return rows;
     }
 
     public void mergeReadingStatsRows(List<ReadingTimeEntryRecord> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+        ensureLoaded();
+        List<ReadingTimeEntryRecord> normalizedRows = normalizeIncomingReadingStatsRows(rows);
         lock.writeLock().lock();
         try {
-            for (ReadingTimeEntryRecord row : rows) {
+            for (ReadingTimeEntryRecord row : normalizedRows) {
                 boolean found = false;
                 for (int i = 0; i < readingStatsCache.size(); i++) {
                     ReadingTimeEntryRecord existing = readingStatsCache.get(i);
                     if (existing.date.equals(row.date) &&
                             existing.sourceDeviceId.equals(row.sourceDeviceId) &&
-                            existing.bookIdentity.equals(row.bookIdentity)) {
+                            sameReadingStatsBook(existing.bookIdentity, existing.bookTitle, existing.bookAuthor,
+                                    row.bookIdentity, row.bookTitle, row.bookAuthor)) {
                         if (row.updatedAt >= existing.updatedAt) {
                             row.id = existing.id;
                             readingStatsCache.set(i, row);
@@ -965,6 +1072,7 @@ public class JsonDatabase {
                     readingStatsCache.add(row);
                 }
             }
+            normalizeReadingStatsCacheLocked();
             saveList(FILE_READING_STATS, readingStatsCache, ReadingTimeEntryRecord::toJson);
         } finally {
             lock.writeLock().unlock();
@@ -982,6 +1090,7 @@ public class JsonDatabase {
     }
 
     public void clearReadingStats() {
+        ensureLoaded();
         lock.writeLock().lock();
         try {
             readingStatsCache.clear();
@@ -989,6 +1098,220 @@ public class JsonDatabase {
         } finally {
             lock.writeLock().unlock();
         }
+    }
+
+    private boolean backfillBookReadingStatsKeysLocked() {
+        boolean changed = false;
+        for (BookRecord book : bookCache) {
+            if (book.readingStatsKey == null || book.readingStatsKey.isBlank()) {
+                book.readingStatsKey = ReadingStatsUtils.buildBookIdentity(book.title, book.author);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    private boolean migrateReadingStatsForBookRenameLocked(
+            String previousKey,
+            String previousTitle,
+            String previousAuthor,
+            String nextKey,
+            String nextTitle,
+            String nextAuthor
+    ) {
+        if ((previousKey == null || previousKey.isBlank())
+                && titleAuthorKeyOrEmpty(previousTitle, previousAuthor).isEmpty()) {
+            return false;
+        }
+        String safeNextTitle = ReadingStatsUtils.safeBookTitle(nextTitle);
+        String safeNextAuthor = nextAuthor == null ? "" : nextAuthor.trim();
+        boolean changed = false;
+        for (ReadingTimeEntryRecord entry : readingStatsCache) {
+            if (sameReadingStatsBook(entry.bookIdentity, entry.bookTitle, entry.bookAuthor,
+                    previousKey, previousTitle, previousAuthor)) {
+                if (!safeEquals(entry.bookIdentity, nextKey)
+                        || !safeEquals(entry.bookTitle, safeNextTitle)
+                        || !safeEquals(entry.bookAuthor, safeNextAuthor)) {
+                    entry.bookIdentity = nextKey;
+                    entry.bookTitle = safeNextTitle;
+                    entry.bookAuthor = safeNextAuthor;
+                    changed = true;
+                }
+            }
+        }
+        return normalizeReadingStatsCacheLocked() || changed;
+    }
+
+    private boolean normalizeReadingStatsCacheLocked() {
+        if (readingStatsCache.isEmpty()) {
+            return false;
+        }
+        Map<String, ReadingTimeEntryRecord> merged = new HashMap<>();
+        boolean changed = false;
+        for (ReadingTimeEntryRecord entry : readingStatsCache) {
+            ReadingTimeEntryRecord normalized = cloneReadingTimeEntry(entry);
+            if (normalizeReadingStatsEntry(normalized)) {
+                changed = true;
+            }
+            String groupKey = readingStatsBucketGroupKey(normalized);
+            ReadingTimeEntryRecord existing = merged.get(groupKey);
+            if (existing == null) {
+                merged.put(groupKey, normalized);
+            } else {
+                mergeReadingStatsTotals(existing, normalized);
+                changed = true;
+            }
+        }
+        if (changed || merged.size() != readingStatsCache.size()) {
+            readingStatsCache = new ArrayList<>(merged.values());
+            return true;
+        }
+        return false;
+    }
+
+    private List<ReadingTimeEntryRecord> normalizeIncomingReadingStatsRows(List<ReadingTimeEntryRecord> rows) {
+        Map<String, ReadingTimeEntryRecord> merged = new HashMap<>();
+        for (ReadingTimeEntryRecord row : rows) {
+            if (row == null || row.date == null || row.date.isBlank()) {
+                continue;
+            }
+            ReadingTimeEntryRecord normalized = cloneReadingTimeEntry(row);
+            normalizeReadingStatsEntry(normalized);
+            String groupKey = readingStatsBucketGroupKey(normalized);
+            ReadingTimeEntryRecord existing = merged.get(groupKey);
+            if (existing == null) {
+                merged.put(groupKey, normalized);
+            } else {
+                mergeReadingStatsTotals(existing, normalized);
+            }
+        }
+        return new ArrayList<>(merged.values());
+    }
+
+    private void mergeReadingStatsTotals(ReadingTimeEntryRecord target, ReadingTimeEntryRecord source) {
+        target.durationSeconds += Math.max(source.durationSeconds, 0);
+        target.charCount += Math.max(source.charCount, 0);
+        if (target.id <= 0L && source.id > 0L) {
+            target.id = source.id;
+        }
+        if (source.updatedAt >= target.updatedAt) {
+            target.bookIdentity = source.bookIdentity;
+            target.bookTitle = source.bookTitle;
+            target.bookAuthor = source.bookAuthor;
+        }
+        target.updatedAt = Math.max(target.updatedAt, source.updatedAt);
+    }
+
+    private boolean normalizeReadingStatsEntry(ReadingTimeEntryRecord entry) {
+        String safeDeviceId = entry.sourceDeviceId == null ? "" : entry.sourceDeviceId;
+        String safeDate = entry.date == null ? "" : entry.date;
+        String safeTitle = safeStatsTitle(entry.bookIdentity, entry.bookTitle);
+        String safeAuthor = entry.bookAuthor == null ? "" : entry.bookAuthor.trim();
+        String safeIdentity = canonicalReadingStatsIdentity(entry.bookIdentity, safeTitle, safeAuthor);
+        int safeDuration = Math.max(entry.durationSeconds, 0);
+        int safeCharCount = Math.max(entry.charCount, 0);
+        long safeUpdatedAt = Math.max(entry.updatedAt, 0L);
+        boolean changed = !safeEquals(entry.sourceDeviceId, safeDeviceId)
+                || !safeEquals(entry.date, safeDate)
+                || !safeEquals(entry.bookIdentity, safeIdentity)
+                || !safeEquals(entry.bookTitle, safeTitle)
+                || !safeEquals(entry.bookAuthor, safeAuthor)
+                || entry.durationSeconds != safeDuration
+                || entry.charCount != safeCharCount
+                || entry.updatedAt != safeUpdatedAt;
+        entry.sourceDeviceId = safeDeviceId;
+        entry.date = safeDate;
+        entry.bookIdentity = safeIdentity;
+        entry.bookTitle = safeTitle;
+        entry.bookAuthor = safeAuthor;
+        entry.durationSeconds = safeDuration;
+        entry.charCount = safeCharCount;
+        entry.updatedAt = safeUpdatedAt;
+        return changed;
+    }
+
+    private String safeStatsTitle(String bookIdentity, String bookTitle) {
+        if (ReadingStatsUtils.LEGACY_BOOK_IDENTITY.equals(bookIdentity)
+                && (bookTitle == null || bookTitle.isBlank())) {
+            return ReadingStatsUtils.LEGACY_BOOK_TITLE;
+        }
+        return ReadingStatsUtils.safeBookTitle(bookTitle);
+    }
+
+    private String canonicalReadingStatsIdentity(String bookIdentity, String bookTitle, String bookAuthor) {
+        String safeIdentity = bookIdentity == null ? "" : bookIdentity.trim();
+        if (ReadingStatsUtils.LEGACY_BOOK_IDENTITY.equals(safeIdentity)) {
+            return ReadingStatsUtils.LEGACY_BOOK_IDENTITY;
+        }
+        String titleAuthorKey = titleAuthorKeyOrEmpty(bookTitle, bookAuthor);
+        if (!titleAuthorKey.isEmpty()) {
+            return ReadingStatsUtils.buildBookIdentity(bookTitle, bookAuthor);
+        }
+        return safeIdentity;
+    }
+
+    private String readingStatsBookGroupKey(ReadingTimeEntryRecord entry) {
+        String safeIdentity = canonicalReadingStatsIdentity(entry.bookIdentity, entry.bookTitle, entry.bookAuthor);
+        if (ReadingStatsUtils.LEGACY_BOOK_IDENTITY.equals(safeIdentity)) {
+            return "legacy:" + safeIdentity;
+        }
+        String titleAuthorKey = titleAuthorKeyOrEmpty(entry.bookTitle, entry.bookAuthor);
+        return titleAuthorKey.isEmpty() ? "identity:" + safeIdentity : "title-author:" + titleAuthorKey;
+    }
+
+    private String readingStatsBucketGroupKey(ReadingTimeEntryRecord entry) {
+        return (entry.sourceDeviceId == null ? "" : entry.sourceDeviceId)
+                + "\n" + (entry.date == null ? "" : entry.date)
+                + "\n" + readingStatsBookGroupKey(entry);
+    }
+
+    private boolean sameReadingStatsBook(
+            String leftIdentity,
+            String leftTitle,
+            String leftAuthor,
+            String rightIdentity,
+            String rightTitle,
+            String rightAuthor
+    ) {
+        String safeLeftIdentity = leftIdentity == null ? "" : leftIdentity.trim();
+        String safeRightIdentity = rightIdentity == null ? "" : rightIdentity.trim();
+        if (!safeLeftIdentity.isEmpty() && safeLeftIdentity.equals(safeRightIdentity)) {
+            return true;
+        }
+        if (ReadingStatsUtils.LEGACY_BOOK_IDENTITY.equals(safeLeftIdentity)
+                || ReadingStatsUtils.LEGACY_BOOK_IDENTITY.equals(safeRightIdentity)) {
+            return false;
+        }
+        String leftTitleAuthorKey = titleAuthorKeyOrEmpty(leftTitle, leftAuthor);
+        String rightTitleAuthorKey = titleAuthorKeyOrEmpty(rightTitle, rightAuthor);
+        return !leftTitleAuthorKey.isEmpty() && leftTitleAuthorKey.equals(rightTitleAuthorKey);
+    }
+
+    private String titleAuthorKeyOrEmpty(String title, String author) {
+        String normalizedTitle = ReadingStatsUtils.normalizeIdentityText(title);
+        String normalizedAuthor = ReadingStatsUtils.normalizeIdentityText(author);
+        if (normalizedTitle.isEmpty() && normalizedAuthor.isEmpty()) {
+            return "";
+        }
+        return normalizedTitle + "::" + normalizedAuthor;
+    }
+
+    private ReadingTimeEntryRecord cloneReadingTimeEntry(ReadingTimeEntryRecord source) {
+        ReadingTimeEntryRecord clone = new ReadingTimeEntryRecord();
+        clone.id = source.id;
+        clone.date = source.date;
+        clone.sourceDeviceId = source.sourceDeviceId;
+        clone.bookIdentity = source.bookIdentity;
+        clone.bookTitle = source.bookTitle;
+        clone.bookAuthor = source.bookAuthor;
+        clone.durationSeconds = source.durationSeconds;
+        clone.charCount = source.charCount;
+        clone.updatedAt = source.updatedAt;
+        return clone;
+    }
+
+    private boolean safeEquals(String left, String right) {
+        return left == null ? right == null : left.equals(right);
     }
 
     // ========== 数据库健康 / 维护 ==========

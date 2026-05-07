@@ -8,6 +8,7 @@ import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
 import com.metahumanz.pacilread.sync.WebDavClient;
+import com.metahumanz.pacilread.sync.WebDavProgressSyncCoordinator;
 import com.metahumanz.pacilread.tts.MimoTtsClient;
 import com.metahumanz.pacilread.tts.SystemTtsClient;
 
@@ -23,6 +24,7 @@ public final class ReaderRuntime {
     public final JsonDatabase databaseHelper;
     public final SettingsStore settingsStore;
     public final WebDavClient webDavClient;
+    public final WebDavProgressSyncCoordinator progressSyncCoordinator;
     public final ReadingStatsSyncManager readingStatsSyncManager;
     public final MimoTtsClient mimoTtsClient;
     public final SystemTtsClient systemTtsClient;
@@ -31,6 +33,7 @@ public final class ReaderRuntime {
         databaseHelper = JsonDatabase.getInstance(context);
         settingsStore = new SettingsStore(context);
         webDavClient = new WebDavClient(settingsStore);
+        progressSyncCoordinator = new WebDavProgressSyncCoordinator(databaseHelper, settingsStore, webDavClient);
         readingStatsSyncManager = new ReadingStatsSyncManager(context, databaseHelper, settingsStore, webDavClient);
         mimoTtsClient = new MimoTtsClient();
         systemTtsClient = new SystemTtsClient(context, settingsStore.getTtsSystemEnginePackage());

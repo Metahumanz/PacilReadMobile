@@ -48,14 +48,68 @@
         android:layout_marginTop="12dp"
         android:textColor="?attr/themeColorOnSurfaceMuted" />
 
-    <ListView
-        android:id="@+id/search_result_list"
+    <FrameLayout
+        android:id="@+id/search_result_body"
         android:layout_width="match_parent"
         android:layout_height="320dp"
-        android:layout_marginTop="10dp"
-        android:divider="?attr/themeColorDivider"
-        android:dividerHeight="1dp"
-        android:fastScrollEnabled="true"
-        android:scrollbarStyle="outsideInset"
-        android:scrollbars="vertical" />
+        android:layout_marginTop="10dp">
+
+        <ListView
+            android:id="@+id/search_result_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="72dp"
+            android:clipToPadding="false"
+            android:divider="?attr/themeColorDivider"
+            android:dividerHeight="1dp"
+            android:fastScrollEnabled="false"
+            android:overScrollMode="never"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:scrollbars="none" />
+
+        <TextView
+            android:id="@+id/search_scrubber_preview"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end|top"
+            android:layout_marginEnd="64dp"
+            android:background="@drawable/bg_toc_scrubber_preview"
+            android:elevation="8dp"
+            android:maxWidth="220dp"
+            android:maxLines="3"
+            android:paddingLeft="14dp"
+            android:paddingTop="10dp"
+            android:paddingRight="14dp"
+            android:paddingBottom="10dp"
+            android:textColor="?attr/themeColorOnSurface"
+            android:textSize="13sp"
+            android:visibility="invisible" />
+
+        <FrameLayout
+            android:id="@+id/search_scrubber_host"
+            android:layout_width="64dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="end"
+            android:visibility="invisible">
+
+            <View
+                android:id="@+id/search_scrubber_track"
+                android:layout_width="10dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_toc_scrubber_track" />
+
+            <View
+                android:id="@+id/search_scrubber_thumb"
+                android:layout_width="28dp"
+                android:layout_height="48dp"
+                android:layout_gravity="center_horizontal|top"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/bg_toc_scrubber_thumb"
+                android:elevation="6dp" />
+        </FrameLayout>
+    </FrameLayout>
 </LinearLayout>

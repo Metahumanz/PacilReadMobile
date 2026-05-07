@@ -35,6 +35,7 @@ import com.metahumanz.pacilread.reader.modern.theme.ReaderDisplayModeHelper;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderStyleController;
 import com.metahumanz.pacilread.sync.WebDavClient;
+import com.metahumanz.pacilread.sync.WebDavProgressSyncCoordinator;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -467,42 +468,34 @@ public final class ReaderContentController {
                 if (currentBook == null) {
                     return;
                 }
-                com.metahumanz.pacilread.sync.WebDavClient.ProgressPayload payload = runtime.webDavClient.downloadProgress(currentBook);
-                if (payload == null) {
+                WebDavProgressSyncCoordinator.ProgressBaseline baseline = initialComparison == null
+                        ? null
+                        : new WebDavProgressSyncCoordinator.ProgressBaseline(
+                        initialComparison.lastReadAt,
+                        initialComparison.progressIndex,
+                        initialComparison.progressOffset
+                );
+                WebDavProgressSyncCoordinator.SyncResult result =
+                        runtime.progressSyncCoordinator.syncBookProgressIfNeeded(currentBook, baseline);
+                if (result.checkedRemote && !result.remoteAvailable) {
                     if (!silent) {
                         activity.runOnUiThread(() -> ui.showToast("云端暂时没有可恢复的进度"));
                     }
                     return;
                 }
-                long compareLastReadAt = initialComparison != null
-                        ? initialComparison.lastReadAt
-                        : currentBook.lastReadAt;
-                int compareProgressIndex = initialComparison != null
-                        ? initialComparison.progressIndex
-                        : currentBook.progressIndex;
-                int compareProgressOffset = initialComparison != null
-                        ? initialComparison.progressOffset
-                        : currentBook.progressOffset;
-                boolean shouldApply = payload.chapterTime > compareLastReadAt + 5000
-                        || (compareProgressIndex == 0 && compareProgressOffset == 0);
-                if (!shouldApply) {
+                if (!result.remoteApplied) {
                     return;
                 }
                 int remoteIndex = ui.clamp(
-                        navigation.chapterIndexFromOrder(payload.chapterIndex),
+                        navigation.chapterIndexFromOrder(result.chapterOrderIndex),
                         0,
                         state.chapters.size() - 1
                 );
-                runtime.databaseHelper.updateProgress(
-                        state.book.id,
-                        state.chapters.get(remoteIndex).orderIndex,
-                        payload.chapterPosition
-                );
                 state.book.progressIndex = state.chapters.get(remoteIndex).orderIndex;
-                state.book.progressOffset = Math.max(payload.chapterPosition, 0);
-                state.book.lastReadAt = payload.chapterTime;
+                state.book.progressOffset = Math.max(result.chapterPosition, 0);
+                state.book.lastReadAt = result.chapterTime;
                 remoteApplied = true;
-                activity.runOnUiThread(() -> scheduleReflowAfterLayout(remoteIndex, payload.chapterPosition));
+                activity.runOnUiThread(() -> scheduleReflowAfterLayout(remoteIndex, result.chapterPosition));
             } catch (Exception error) {
                 if (!silent) {
                     activity.runOnUiThread(() -> ui.showToast("同步失败: " + error.getMessage()));
@@ -517,7 +510,25 @@ public final class ReaderContentController {
     }
 
     private void scheduleRemoteProgressSync() {
-        runtime.mainHandler.postDelayed(() -> syncFromWebDav(true), 250L);
+        if (state.book != null && WebDavProgressSyncCoordinator.isProgressFresh(state.book.id)) {
+            completeInitialRemoteProgressSyncWithoutRemoteApply();
+            return;
+        }
+        runtime.mainHandler.postDelayed(() -> {
+            if (state.book != null && WebDavProgressSyncCoordinator.isProgressFresh(state.book.id)) {
+                completeInitialRemoteProgressSyncWithoutRemoteApply();
+                return;
+            }
+            syncFromWebDav(true);
+        }, 250L);
+    }
+
+    private void completeInitialRemoteProgressSyncWithoutRemoteApply() {
+        RemoteProgressComparison comparison = captureInitialRemoteProgressComparison();
+        DeferredProgressUpload upload = finishInitialRemoteProgressSync(comparison, false);
+        if (upload != null) {
+            uploadProgressSnapshot(upload.book, upload.chapter, upload.offset);
+        }
     }
 
     private void prepareInitialRemoteProgressSync() {

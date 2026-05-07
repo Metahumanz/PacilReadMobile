@@ -118,7 +118,6 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         }
 
         views = ReaderViewRefs.bind(this);
-        ScreenCornerClipper.apply(this, views.readerRoot);
         ui = new ReaderUiUtils(this);
         initializeControllers();
 
@@ -782,7 +781,8 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         }
         LaunchSourceTransition.Options options = LaunchSourceTransition.Options.defaults()
                 .withDuration(EXIT_TRANSITION_DURATION_MS)
-                .withSnapshotFadeStartFraction(0.72f);
+                .withSnapshotFadeStartFraction(0.72f)
+                .withExitScreenCornerClip(readerExitFromBackGesture);
         if (readerExitFromBackGesture && LaunchSourceTransition.animateExitToSourceWithClip(
                 views.readerRoot,
                 launchSource,
@@ -790,6 +790,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 this::finishReaderActivityNow
         )) {
             return;
+        }
+        if (!readerExitFromBackGesture) {
+            ScreenCornerClipper.setClipEnabled(views.readerRoot, false);
         }
         if (LaunchSourceTransition.animateExitToSource(
                 views.readerRoot,

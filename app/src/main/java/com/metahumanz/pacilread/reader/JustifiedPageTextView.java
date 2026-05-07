@@ -160,7 +160,7 @@ public class JustifiedPageTextView extends AppCompatTextView {
     @Override
     protected void onDraw(Canvas canvas) {
         Layout layout = getLayout();
-        if (!fullJustifyEnabled || layout == null) {
+        if (layout == null || (!fullJustifyEnabled && !bottomJustifyEnabled)) {
             drawHighlight(canvas, layout);
             super.onDraw(canvas);
             if (hasSelectionHighlight()) {
@@ -327,6 +327,9 @@ public class JustifiedPageTextView extends AppCompatTextView {
     }
 
     private boolean shouldJustify(String lineText, boolean paragraphEnd, float availableWidth, TextPaint paint) {
+        if (!fullJustifyEnabled) {
+            return false;
+        }
         if (paragraphEnd) {
             return false;
         }
@@ -407,7 +410,8 @@ public class JustifiedPageTextView extends AppCompatTextView {
         } else {
             lineIndex = layout.getLineForOffset(offset);
         }
-        float canvasY = layout.getLineBottom(lineIndex) + verticalAdjustments.offsetForLine(lineIndex);
+        float canvasY = visibleTextBottom(layout, lineIndex, getPaint())
+                + verticalAdjustments.offsetForLine(lineIndex);
 
         // Draw the handle circle
         canvas.drawCircle(canvasX, canvasY, handleRadius, handleStrokePaint);
@@ -488,20 +492,28 @@ public class JustifiedPageTextView extends AppCompatTextView {
         if (layout == null || text == null || lineIndex < 0 || lineIndex >= layout.getLineCount()) {
             return 0f;
         }
-        return ReaderPaginator.lineBottomForPageEnd(text, layout, lineIndex)
+        return visibleTextBottom(layout, lineIndex, getPaint())
                 + verticalAdjustments(layout, text).offsetForLine(lineIndex);
     }
 
     private int contentTopPadding() {
-        return getTotalPaddingTop();
+        return getCompoundPaddingTop();
     }
 
     private int contentHeight() {
-        return Math.max(0, getHeight() - contentTopPadding() - getTotalPaddingBottom());
+        return Math.max(0, getHeight() - contentTopPadding() - getCompoundPaddingBottom());
     }
 
     private LineVerticalAdjustments verticalAdjustments(Layout layout, CharSequence text) {
-        return LineVerticalAdjustments.create(layout, text, bottomJustifyEnabled, contentHeight());
+        return LineVerticalAdjustments.create(layout, text, getPaint(), bottomJustifyEnabled, contentHeight());
+    }
+
+    private static float visibleTextBottom(Layout layout, int lineIndex, Paint paint) {
+        if (layout == null || paint == null || lineIndex < 0 || lineIndex >= layout.getLineCount()) {
+            return 0f;
+        }
+        Paint.FontMetrics fontMetrics = paint.getFontMetrics();
+        return layout.getLineBaseline(lineIndex) + fontMetrics.descent;
     }
 
     private static String trimLineBreaks(String line) {
@@ -556,8 +568,8 @@ public class JustifiedPageTextView extends AppCompatTextView {
             this.surplus = Math.max(0f, surplus);
         }
 
-        static LineVerticalAdjustments create(Layout layout, CharSequence text, boolean enabled, int contentHeight) {
-            if (!enabled || layout == null || text == null || layout.getLineCount() <= 1 || contentHeight <= 0) {
+        static LineVerticalAdjustments create(Layout layout, CharSequence text, Paint paint, boolean enabled, int contentHeight) {
+            if (!enabled || layout == null || text == null || paint == null || layout.getLineCount() <= 1 || contentHeight <= 0) {
                 return NONE;
             }
             int first = -1;
@@ -575,11 +587,9 @@ public class JustifiedPageTextView extends AppCompatTextView {
             if (first < 0 || last <= first) {
                 return NONE;
             }
-            int lastVisualBottom = ReaderPaginator.lineBottomForPageEnd(text, layout, last);
-            int lastLineTop = layout.getLineTop(last);
-            float lastLineHeight = Math.max(1f, lastVisualBottom - lastLineTop);
-            float surplus = contentHeight - lastVisualBottom;
-            if (surplus <= 0f || surplus >= lastLineHeight) {
+            float lastVisibleBottom = visibleTextBottom(layout, last, paint);
+            float surplus = contentHeight - lastVisibleBottom;
+            if (surplus <= 0f) {
                 return NONE;
             }
             return new LineVerticalAdjustments(first, last, surplus);
@@ -593,6 +603,18 @@ public class JustifiedPageTextView extends AppCompatTextView {
                 return surplus;
             }
             return surplus * (lineIndex - firstLine) / (float) (lastLine - firstLine);
+        }
+
+        int firstLine() {
+            return firstLine;
+        }
+
+        int lastLine() {
+            return lastLine;
+        }
+
+        float surplus() {
+            return surplus;
         }
 
         int lineForVertical(Layout layout, float y) {
