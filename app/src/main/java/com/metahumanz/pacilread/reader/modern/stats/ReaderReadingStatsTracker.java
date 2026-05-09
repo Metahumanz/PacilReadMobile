@@ -37,12 +37,12 @@ public final class ReaderReadingStatsTracker {
         startWindow(SystemClock.elapsedRealtime(), System.currentTimeMillis());
         scheduleNextCheckpoint();
         if (runtime.readingStatsSyncManager.canAutoSync()) {
-            runtime.executor.execute(() -> {
+            runtime.safeExecute(() -> {
                 try {
                     runtime.readingStatsSyncManager.downloadAndMergeReadingStats();
                 } catch (Exception ignore) {
                 }
-            });
+            }, "download reading stats");
         }
     }
 
@@ -61,12 +61,12 @@ public final class ReaderReadingStatsTracker {
         cancelCheckpoint();
         runtime.mainHandler.removeCallbacks(uploadRunnable);
         if (runtime.readingStatsSyncManager.canAutoSync()) {
-            runtime.executor.execute(() -> {
+            runtime.safeExecute(() -> {
                 try {
                     runtime.readingStatsSyncManager.uploadLocalReadingStatsSnapshot();
                 } catch (Exception ignore) {
                 }
-            });
+            }, "upload reading stats on pause");
         }
     }
 
@@ -101,12 +101,12 @@ public final class ReaderReadingStatsTracker {
     }
 
     private void runUpload() {
-        runtime.executor.execute(() -> {
+        runtime.safeExecute(() -> {
             try {
                 runtime.readingStatsSyncManager.uploadLocalReadingStatsSnapshot();
             } catch (Exception ignore) {
             }
-        });
+        }, "upload reading stats");
     }
 
     private void flushWindow(long nowElapsed, boolean forceStop) {
@@ -142,7 +142,7 @@ public final class ReaderReadingStatsTracker {
         String bookIdentity = state.book.readingStatsKey;
         String bookTitle = state.book.title;
         String bookAuthor = state.book.author;
-        runtime.executor.execute(() -> {
+        runtime.safeExecute(() -> {
             for (DayBucket bucket : buckets) {
                 runtime.databaseHelper.recordReadingDuration(
                         sourceDeviceId,
@@ -155,7 +155,7 @@ public final class ReaderReadingStatsTracker {
                         bucket.updatedAt
                 );
             }
-        });
+        }, "persist reading stats range");
     }
 
     private List<DayBucket> splitRangeByDay(long startWallMs, long endWallMs) {

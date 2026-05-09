@@ -144,7 +144,10 @@ public final class ReaderOptionsDialogController {
                 chrome.applyMenuLayoutMode();
                 chrome.updateUiAfterPageChange();
             }
-            runtime.executor.execute(() -> runtime.databaseHelper.updateBookInfo(state.bookId, finalTitle, finalAuthor));
+            runtime.safeExecute(
+                    () -> runtime.databaseHelper.updateBookInfo(state.bookId, finalTitle, finalAuthor),
+                    "update reader book info"
+            );
         };
 
         TextWatcher textWatcher = new TextWatcher() {

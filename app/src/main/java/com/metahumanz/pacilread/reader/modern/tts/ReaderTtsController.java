@@ -512,7 +512,7 @@ public final class ReaderTtsController {
             int gc = computeGroupUnitCountAt(nextStart);
             String text = buildGroupText(nextStart, gc);
             int cacheKey = nextStart;
-            runtime.synthesisExecutor.execute(() -> {
+            runtime.safeExecuteSynthesis(() -> {
                 if (!state.ttsActive || sessionId != state.ttsSessionId) {
                     return;
                 }
@@ -525,7 +525,7 @@ public final class ReaderTtsController {
                     }
                 } catch (Exception ignored) {
                 }
-            });
+            }, "preload MiMo TTS");
             nextStart += gc;
         }
     }
@@ -674,7 +674,7 @@ public final class ReaderTtsController {
         String engineLabel = engineLabel(engine);
 
         if ("mimo".equals(engine)) {
-            runtime.ttsExecutor.execute(() -> {
+            runtime.safeExecuteTts(() -> {
                 try {
                     if (!state.ttsActive || sessionId != state.ttsSessionId) {
                         return;
@@ -701,14 +701,14 @@ public final class ReaderTtsController {
                             sessionId, pcm, playbackRate);
                     runtime.mimoTtsClient.playPcm(pcm, playbackRate);
                     cancelHighlightProgression();
-                    activity.runOnUiThread(() -> {
+                    activity.runOnReaderUiThread(() -> {
                         if (!state.ttsActive || sessionId != state.ttsSessionId) {
                             return;
                         }
                         advanceTtsPlayback(consumedUnits);
                     });
                 } catch (Exception error) {
-                    activity.runOnUiThread(() -> {
+                    activity.runOnReaderUiThread(() -> {
                         if (!state.ttsActive || sessionId != state.ttsSessionId) {
                             return;
                         }
@@ -716,7 +716,7 @@ public final class ReaderTtsController {
                         ui.showToast(engineLabel + " 听书失败: " + error.getMessage());
                     });
                 }
-            });
+            }, "play MiMo TTS");
             return;
         }
 
@@ -768,7 +768,7 @@ public final class ReaderTtsController {
                 completed[0] = i + 1;
                 int units = allGroupCounts.get(i);
                 Log.d("TtsHighlight", "onDone: i=" + i + " units=" + units + " totalGroups=" + allTexts.size());
-                activity.runOnUiThread(() -> {
+                activity.runOnReaderUiThread(() -> {
                     if (!state.ttsActive || sessionId != state.ttsSessionId) {
                         Log.d("TtsHighlight", "onDone ui: state inactive, skip");
                         return;
@@ -789,7 +789,7 @@ public final class ReaderTtsController {
             @Override
             public void onError(String message) {
                 batchQueued = false;
-                activity.runOnUiThread(() -> {
+                activity.runOnReaderUiThread(() -> {
                     if (!state.ttsActive || sessionId != state.ttsSessionId) return;
                     cancelHighlightProgression();
                     stopTts();

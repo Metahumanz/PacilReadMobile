@@ -392,9 +392,9 @@ public final class ReaderStyleDialogController {
 
     private void renderThemeRows(LinearLayout container, AlertDialog dialog, StyleDialogViews refs, String[] selectedReaderTheme) {
         container.removeAllViews();
-        runtime.executor.execute(() -> {
+        runtime.safeExecute(() -> {
             List<ReaderThemeRecord> themes = runtime.databaseHelper.getCustomThemes();
-            activity.runOnUiThread(() -> {
+            activity.runOnReaderUiThread(() -> {
                 if (!dialog.isShowing()) {
                     return;
                 }
@@ -422,14 +422,14 @@ public final class ReaderStyleDialogController {
                     );
                     Runnable autoApply = buildAutoApply(refs, selectedReaderTheme, refreshTextColorPreview);
                     applyButton.setOnClickListener(v -> autoApply.run());
-                    deleteButton.setOnClickListener(v -> runtime.executor.execute(() -> {
+                    deleteButton.setOnClickListener(v -> runtime.safeExecute(() -> {
                         runtime.databaseHelper.deleteCustomTheme(theme.id);
-                        activity.runOnUiThread(() -> renderThemeRows(container, dialog, refs, selectedReaderTheme));
-                    }));
+                        activity.runOnReaderUiThread(() -> renderThemeRows(container, dialog, refs, selectedReaderTheme));
+                    }, "delete reader theme"));
                     container.addView(row);
                 }
             });
-        });
+        }, "render reader themes");
     }
 
     private void promptSaveTheme(Runnable onSaved) {
@@ -445,10 +445,10 @@ public final class ReaderStyleDialogController {
                         ui.showToast("请输入主题名称");
                         return;
                     }
-                    runtime.executor.execute(() -> {
+                    runtime.safeExecute(() -> {
                         runtime.databaseHelper.saveCustomTheme(name, ReaderThemeConfig.export(runtime.settingsStore).toString());
-                        activity.runOnUiThread(onSaved);
-                    });
+                        activity.runOnReaderUiThread(onSaved);
+                    }, "save reader theme");
                 })
                 .create();
         dialogSupport.showStyledDialog(dialog);

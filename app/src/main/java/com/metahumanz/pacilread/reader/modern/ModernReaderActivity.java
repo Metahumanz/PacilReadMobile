@@ -60,6 +60,7 @@ import java.util.Locale;
 import java.util.UUID;
 
 public class ModernReaderActivity extends ThemedReaderActivity {
+    private static final String TAG = "PacilReadReader";
     private static final int REQUEST_PICK_BACKGROUND = 2001;
     private static final long ENTER_TRANSITION_DURATION_MS = 280L;
     private static final long ENTER_TEXT_FADE_DURATION_MS = 90L;
@@ -91,6 +92,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private boolean readerExitProgressPersisted;
     private boolean readerEnterAnimationStarted;
     private boolean readerExitFromBackGesture;
+    private volatile boolean readerDestroyed;
     private ValueAnimator readerForegroundAnimator;
     private Runnable readerEnterForegroundFadeRunnable;
     private LaunchSourceTransition.Source launchSource;
@@ -210,32 +212,72 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         if (readingStatsTracker != null) {
             readingStatsTracker.pause();
         }
-        chrome.cancelAutoHide();
+        if (chrome != null) {
+            chrome.cancelAutoHide();
+        }
         if (!readerExitProgressPersisted) {
             persistReaderProgress(readerExitFinishing);
         }
-        paging.cancelInteractiveAnimator();
-        paging.cancelInteractivePaging();
-        autoPage.stopAutoPage();
-        tts.stopTts();
-        content.cancelPendingReflow();
+        if (paging != null) {
+            paging.cancelInteractiveAnimator();
+            paging.cancelInteractivePaging();
+            paging.removeWarmupCallbacks();
+        }
+        if (autoPage != null) {
+            autoPage.stopAutoPage();
+        }
+        if (tts != null) {
+            tts.stopTts();
+        }
+        if (content != null) {
+            content.cancelPendingReflow();
+        }
         state.pendingTapPagingDelta = 0;
-        paging.removeWarmupCallbacks();
     }
 
     @Override
     protected void onDestroy() {
+        readerDestroyed = true;
         super.onDestroy();
         cancelReaderForegroundTransition();
         if (sysMetricsReceiver != null) {
-            unregisterReceiver(sysMetricsReceiver);
+            try {
+                unregisterReceiver(sysMetricsReceiver);
+            } catch (IllegalArgumentException error) {
+                Log.d(TAG, "System metrics receiver was already unregistered", error);
+            }
+            sysMetricsReceiver = null;
         }
         if (readingStatsTracker != null) {
             readingStatsTracker.shutdown();
         }
-        runtime.shutdown();
-        paging.cancelInteractiveAnimator();
-        paging.recyclePagingSnapshots();
+        if (runtime != null) {
+            runtime.shutdown();
+        }
+        if (paging != null) {
+            paging.cancelInteractiveAnimator();
+            paging.recyclePagingSnapshots();
+        }
+    }
+
+    public boolean isReaderActive() {
+        return !readerDestroyed && !isFinishing() && !isDestroyed();
+    }
+
+    public void runOnReaderUiThread(Runnable action) {
+        if (action == null || !isReaderActive()) {
+            return;
+        }
+        runOnUiThread(() -> {
+            if (!isReaderActive()) {
+                return;
+            }
+            try {
+                action.run();
+            } catch (RuntimeException error) {
+                Log.w(TAG, "Reader UI task failed after lifecycle change", error);
+            }
+        });
     }
 
     @Override
@@ -370,6 +412,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     }
 
     private void finishReaderEnterForegroundFade() {
+        if (!isReaderActive()) {
+            return;
+        }
         Log.d("PacilReadReader", "[时序] 动画结束 finishReaderEnterForegroundFade - cacheHit=" + (content != null && content.isCacheHit()));
         cancelScheduledReaderEnterForegroundFade();
         if (content != null) {
@@ -832,12 +877,17 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         if (content == null) {
             return false;
         }
-        if (settlePaging && paging != null) {
-            paging.settleInterruptedPagingAnimation();
+        try {
+            if (settlePaging && paging != null) {
+                paging.settleInterruptedPagingAnimation();
+            }
+            content.cancelPendingProgressSave();
+            content.persistProgress();
+            return true;
+        } catch (RuntimeException error) {
+            Log.w(TAG, "Failed to persist reader progress", error);
+            return false;
         }
-        content.cancelPendingProgressSave();
-        content.persistProgress();
-        return true;
     }
 
     private void handleReaderPopupAction(String item, LaunchSourceTransition.Source source) {
@@ -1085,13 +1135,13 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             ui.showToast("书籍尚未载入");
             return;
         }
-        runtime.executor.execute(() -> {
+        runtime.safeExecute(() -> {
             List<BookmarkRecord> bookmarks = runtime.databaseHelper.getBookmarksForBook(
                     state.book.id,
                     state.book.readingStatsKey
             );
-            runOnUiThread(() -> renderBookmarkDialog(bookmarks));
-        });
+            runOnReaderUiThread(() -> renderBookmarkDialog(bookmarks));
+        }, "load reader bookmarks");
     }
 
     private void renderBookmarkDialog(List<BookmarkRecord> bookmarks) {
@@ -1272,13 +1322,13 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 : summary.trim();
         bookmark.createdAt = now;
         bookmark.updatedAt = now;
-        runtime.executor.execute(() -> {
+        runtime.safeExecute(() -> {
             runtime.databaseHelper.upsertBookmark(bookmark);
-            runOnUiThread(() -> {
+            runOnReaderUiThread(() -> {
                 ui.showToast("已添加书签");
                 showBookmarkDialog();
             });
-        });
+        }, "save reader bookmark");
     }
 
     private void jumpToBookmark(BookmarkRecord bookmark) {

@@ -149,6 +149,9 @@ public final class ReaderContentController {
 
     /** 执行被推迟的初始排版。动画已完成，跳过 debounce 直接执行。 */
     public void performDeferredInitialReflow(Runnable onComplete) {
+        if (!activity.isReaderActive()) {
+            return;
+        }
         Log.d(TAG, "[时序] performDeferredInitialReflow 被调用 - deferred=" + initialReflowDeferred);
         deferReflow = false;
         onInitialReflowComplete = onComplete;
@@ -186,12 +189,18 @@ public final class ReaderContentController {
     /** 从 loadBook UI 回调调用，尽早启动后台分页（不等动画快照）。
      *  用 post 确保 view layout 完成后再捕获尺寸。 */
     private void startBackgroundPagination(int chapterIndex) {
+        if (!activity.isReaderActive()) {
+            return;
+        }
         View anchor = views.pageCurrent != null ? views.pageCurrent : views.pageBodyCurrent;
         if (anchor == null) return;
         anchor.post(() -> startBackgroundPaginationAfterLayout(chapterIndex));
     }
 
     private void startBackgroundPaginationAfterLayout(int chapterIndex) {
+        if (!activity.isReaderActive()) {
+            return;
+        }
         int pageWidth = getReaderPageTextWidth();
         int pageHeight = getRegularReaderPageHeight();
         if (pageWidth <= 0 || pageHeight <= 0) {
@@ -211,6 +220,9 @@ public final class ReaderContentController {
     }
 
     private void startBackgroundPaginationAfterLayoutRetry(int chapterIndex) {
+        if (!activity.isReaderActive()) {
+            return;
+        }
         int pageWidth = getReaderPageTextWidth();
         int pageHeight = getRegularReaderPageHeight();
         if (pageWidth <= 0 || pageHeight <= 0) return;
@@ -222,6 +234,9 @@ public final class ReaderContentController {
     }
 
     private void launchBackgroundPagination(int chapterIndex, int pageWidth, int pageHeight) {
+        if (!activity.isReaderActive()) {
+            return;
+        }
         synchronized (cachedPageSlicesMap) {
             if (cachedPageSlicesMap.containsKey(chapterIndex)) return;
         }
@@ -235,7 +250,10 @@ public final class ReaderContentController {
         int titleMargin = getChapterTitleBodyMarginPx();
         ReaderLayoutSignature sig = captureCurrentLayoutSignature();
 
-        runtime.paginationExecutor.execute(() -> {
+        runtime.safeExecutePagination(() -> {
+            if (!activity.isReaderActive()) {
+                return;
+            }
             synchronized (cachedPageSlicesMap) {
                 if (cachedPageSlicesMap.containsKey(chapterIndex)) return;
             }
@@ -253,7 +271,7 @@ public final class ReaderContentController {
             final long elapsed = System.currentTimeMillis() - startTime;
             Log.d(TAG, "[时序] 后台分页完成 - chapter=" + chapterIndex + " 页数=" + pages.size() + " 耗时=" + elapsed + "ms");
             final ReaderLayoutSignature capturedSig = sig;
-            activity.runOnUiThread(() -> {
+            activity.runOnReaderUiThread(() -> {
                 ReaderLayoutSignature currentSig = captureCurrentLayoutSignature();
                 if (capturedSig != null
                         && currentSig != null
@@ -285,7 +303,7 @@ public final class ReaderContentController {
                     runtime.mainHandler.post(scheduledReflowRunnable);
                 }
             });
-        });
+        }, "background pagination");
     }
 
     public boolean isCacheHit() {
@@ -328,7 +346,10 @@ public final class ReaderContentController {
             return;
         }
 
-        runtime.executor.execute(() -> {
+        runtime.safeExecute(() -> {
+            if (!activity.isReaderActive()) {
+                return;
+            }
             try {
                 BookRecord loadedBook = runtime.databaseHelper.getBook(state.bookId);
                 List<ChapterRecord> loadedChapters = runtime.databaseHelper.getChapters(state.bookId, false);
@@ -353,7 +374,7 @@ public final class ReaderContentController {
                 final String finalPrewarmedText = prewarmedText;
                 final int finalPrewarmIndex = prewarmChapterIndex;
 
-                activity.runOnUiThread(() -> {
+                activity.runOnReaderUiThread(() -> {
                     if (loadedBook == null || loadedChapters.isEmpty()) {
                         ui.showToast("书籍不存在或内容为空");
                         activity.finishReaderActivity();
@@ -413,12 +434,12 @@ public final class ReaderContentController {
                 });
             } catch (Exception error) {
                 Log.e(TAG, "Failed to load reader state", error);
-                activity.runOnUiThread(() -> {
+                activity.runOnReaderUiThread(() -> {
                     ui.showToast("打开书籍失败: " + readableError(error));
                     activity.finishReaderActivity();
                 });
             }
-        });
+        }, "load reader book");
     }
 
     public void persistProgress() {
@@ -461,9 +482,12 @@ public final class ReaderContentController {
             return;
         }
         RemoteProgressComparison initialComparison = captureInitialRemoteProgressComparison();
-        runtime.executor.execute(() -> {
+        runtime.safeExecute(() -> {
             boolean remoteApplied = false;
             try {
+                if (!activity.isReaderActive()) {
+                    return;
+                }
                 BookRecord currentBook = state.book;
                 if (currentBook == null) {
                     return;
@@ -479,11 +503,14 @@ public final class ReaderContentController {
                         runtime.progressSyncCoordinator.syncBookProgressIfNeeded(currentBook, baseline);
                 if (result.checkedRemote && !result.remoteAvailable) {
                     if (!silent) {
-                        activity.runOnUiThread(() -> ui.showToast("云端暂时没有可恢复的进度"));
+                        activity.runOnReaderUiThread(() -> ui.showToast("云端暂时没有可恢复的进度"));
                     }
                     return;
                 }
                 if (!result.remoteApplied) {
+                    return;
+                }
+                if (!activity.isReaderActive() || state.chapters.isEmpty()) {
                     return;
                 }
                 int remoteIndex = ui.clamp(
@@ -495,10 +522,10 @@ public final class ReaderContentController {
                 state.book.progressOffset = Math.max(result.chapterPosition, 0);
                 state.book.lastReadAt = result.chapterTime;
                 remoteApplied = true;
-                activity.runOnUiThread(() -> scheduleReflowAfterLayout(remoteIndex, result.chapterPosition));
+                activity.runOnReaderUiThread(() -> scheduleReflowAfterLayout(remoteIndex, result.chapterPosition));
             } catch (Exception error) {
                 if (!silent) {
-                    activity.runOnUiThread(() -> ui.showToast("同步失败: " + error.getMessage()));
+                    activity.runOnReaderUiThread(() -> ui.showToast("同步失败: " + error.getMessage()));
                 }
             } finally {
                 DeferredProgressUpload upload = finishInitialRemoteProgressSync(initialComparison, remoteApplied);
@@ -506,7 +533,7 @@ public final class ReaderContentController {
                     uploadProgressSnapshot(upload.book, upload.chapter, upload.offset);
                 }
             }
-        });
+        }, "sync reader progress from WebDAV");
     }
 
     private void scheduleRemoteProgressSync() {
@@ -515,6 +542,9 @@ public final class ReaderContentController {
             return;
         }
         runtime.mainHandler.postDelayed(() -> {
+            if (!activity.isReaderActive()) {
+                return;
+            }
             if (state.book != null && WebDavProgressSyncCoordinator.isProgressFresh(state.book.id)) {
                 completeInitialRemoteProgressSyncWithoutRemoteApply();
                 return;
@@ -788,7 +818,10 @@ public final class ReaderContentController {
         if (state.book == null || state.chapters.isEmpty()) return;
         if (chapterIndex < 0 || chapterIndex >= state.chapters.size()) return;
         int safeIndex = Math.max(0, Math.min(chapterIndex, state.chapters.size() - 1));
-        runtime.executor.execute(() -> {
+        runtime.safeExecute(() -> {
+            if (!activity.isReaderActive()) {
+                return;
+            }
             // 如果正文已缓存（例如 DB 查询时已预处理），跳过加载直接分页
             boolean textAlreadyCached;
             synchronized (processedChapterLruCache) {
@@ -814,7 +847,7 @@ public final class ReaderContentController {
                     processedChapterLengthCache.put(safeIndex, processed.length());
                 }
             }
-        });
+        }, "prewarm chapter text");
     }
 
     /** 排版快照就绪后调用，动画期间就启动首屏渐进分页。
@@ -830,7 +863,10 @@ public final class ReaderContentController {
     private void prewarmAdjacentChapters(int currentChapterIndex) {
         int nextIndex = currentChapterIndex + 1;
         if (nextIndex < 0 || nextIndex >= state.chapters.size()) return;
-        runtime.executor.execute(() -> {
+        runtime.safeExecute(() -> {
+            if (!activity.isReaderActive()) {
+                return;
+            }
             synchronized (processedChapterLruCache) {
                 if (processedChapterLruCache.get(nextIndex) != null) return;
             }
@@ -851,7 +887,7 @@ public final class ReaderContentController {
             synchronized (processedChapterLengthCache) {
                 processedChapterLengthCache.put(nextIndex, processed.length());
             }
-        });
+        }, "prewarm adjacent chapter text");
     }
 
     private DisplayChapterText buildDisplayChapterText(int chapterIndex) {
@@ -1175,6 +1211,9 @@ public final class ReaderContentController {
     }
 
     public void scheduleReflowAfterLayout(int chapterIndex, int anchorOffset) {
+        if (!activity.isReaderActive()) {
+            return;
+        }
         if (state.book == null || state.chapters.isEmpty()) {
             return;
         }
@@ -1193,6 +1232,9 @@ public final class ReaderContentController {
     }
 
     private void scheduleInitialReflowAfterLayout(int chapterIndex, int anchorOffset) {
+        if (!activity.isReaderActive()) {
+            return;
+        }
         initialReflowPending = true;
         scheduleReflowAfterLayoutInternal(chapterIndex, anchorOffset);
     }
@@ -1229,6 +1271,9 @@ public final class ReaderContentController {
     }
 
     public void onReaderInsetsChanged(boolean suppressReflow, boolean paginationInsetsChanged) {
+        if (!activity.isReaderActive()) {
+            return;
+        }
         if (style != null) {
             style.applyReaderSettings();
         }
@@ -1243,6 +1288,9 @@ public final class ReaderContentController {
             View target = views.pageCurrent == null ? views.pageBodyCurrent : views.pageCurrent;
             if (target != null) {
                 target.post(() -> {
+                    if (!activity.isReaderActive()) {
+                        return;
+                    }
                     capturePaginationSnapshot();
                     startInitialProgressivePaginationAfterSnapshot(0, true);
                 });
@@ -1404,6 +1452,9 @@ public final class ReaderContentController {
     }
 
     private void startInitialProgressivePaginationAfterSnapshot(int attempt, boolean styleApplied) {
+        if (!activity.isReaderActive()) {
+            return;
+        }
         if (!initialReflowDeferred || state.book == null || state.chapters.isEmpty()) {
             return;
         }
@@ -1518,7 +1569,10 @@ public final class ReaderContentController {
                 + " offset=" + anchorOffset + " extra=" + extraPagesAfterTarget
                 + " source=" + source + " w=" + snapshot.pageWidth
                 + " h=" + snapshot.regularPageHeight);
-        runtime.paginationExecutor.execute(() -> {
+        runtime.safeExecutePagination(() -> {
+            if (!activity.isReaderActive()) {
+                return;
+            }
             try {
                 long workerStartTime = System.currentTimeMillis();
                 if (isProgressivePaginationCancelled(chapterIndex, paginationGeneration)) {
@@ -1553,7 +1607,7 @@ public final class ReaderContentController {
                         + " complete=" + result.complete
                         + " worker耗时=" + (System.currentTimeMillis() - workerStartTime) + "ms"
                         + " total=" + elapsed + "ms");
-                activity.runOnUiThread(() -> handleInitialProgressivePaginationResult(
+                activity.runOnReaderUiThread(() -> handleInitialProgressivePaginationResult(
                         chapterIndex,
                         anchorOffset,
                         paginationGeneration,
@@ -1568,15 +1622,18 @@ public final class ReaderContentController {
                 Log.d(TAG, "[时序] 初始渐进分页worker取消 - chapter=" + chapterIndex
                         + " gen=" + paginationGeneration + " source=" + source);
             } catch (Exception error) {
-                activity.runOnUiThread(() -> fallbackInitialFullPagination(
+                activity.runOnReaderUiThread(() -> fallbackInitialFullPagination(
                         chapterIndex,
                         paginationGeneration,
                         "progressive_exception:" + source,
                         error
                 ));
             }
-        });
+        }, "initial progressive pagination");
         runtime.mainHandler.postDelayed(() -> {
+            if (!activity.isReaderActive()) {
+                return;
+            }
             if (paginationGeneration != progressivePaginationGeneration
                     || waitingForProgressiveChapterIndex != chapterIndex) {
                 return;
@@ -1586,12 +1643,17 @@ public final class ReaderContentController {
                     + "ms source=" + source);
         }, PROGRESSIVE_WAIT_LOG_MS);
         runtime.mainHandler.postDelayed(
-                () -> fallbackInitialFullPagination(
-                        chapterIndex,
-                        paginationGeneration,
-                        "progressive_timeout_hard:" + source,
-                        null
-                ),
+                () -> {
+                    if (!activity.isReaderActive()) {
+                        return;
+                    }
+                    fallbackInitialFullPagination(
+                            chapterIndex,
+                            paginationGeneration,
+                            "progressive_timeout_hard:" + source,
+                            null
+                    );
+                },
                 PROGRESSIVE_HARD_FALLBACK_MS
         );
     }
@@ -1701,6 +1763,9 @@ public final class ReaderContentController {
     }
 
     private void performScheduledReflow() {
+        if (!activity.isReaderActive()) {
+            return;
+        }
         if (state.book == null || state.chapters.isEmpty()) {
             return;
         }
@@ -1802,6 +1867,9 @@ public final class ReaderContentController {
     }
 
     private void runAfterNextPageLayout(int generation, Runnable action) {
+        if (!activity.isReaderActive()) {
+            return;
+        }
         View target = views.pageCurrent == null ? views.pageBodyCurrent : views.pageCurrent;
         if (target == null) {
             action.run();
@@ -1821,6 +1889,9 @@ public final class ReaderContentController {
         final boolean[] completed = new boolean[]{false};
         final ViewTreeObserver.OnPreDrawListener[] listenerRef = new ViewTreeObserver.OnPreDrawListener[1];
         Runnable complete = () -> {
+            if (!activity.isReaderActive()) {
+                return;
+            }
             if (completed[0]) {
                 return;
             }
