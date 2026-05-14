@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 public class BookshelfActivity extends ThemedActivity {
     private static final String TAG = "BookshelfActivity";
@@ -88,6 +89,7 @@ public class BookshelfActivity extends ThemedActivity {
     private boolean booksLoaded = false;
     private boolean booksLoading = false;
     private boolean autoOpenConsumed;
+    private volatile boolean bookshelfDestroyed;
     private PopupWindow bookActionsPopup;
 
     @Override
@@ -156,12 +158,66 @@ public class BookshelfActivity extends ThemedActivity {
 
     @Override
     protected void onDestroy() {
+        bookshelfDestroyed = true;
         if (homeSettingsController != null) {
             homeSettingsController.onDestroy();
         }
         super.onDestroy();
         executor.shutdownNow();
         progressPrefetchExecutor.shutdownNow();
+    }
+
+    private boolean isBookshelfActive() {
+        return !bookshelfDestroyed && !isFinishing() && !isDestroyed();
+    }
+
+    private void runOnBookshelfUiThread(Runnable action) {
+        if (action == null || !isBookshelfActive()) {
+            return;
+        }
+        runOnUiThread(() -> {
+            if (!isBookshelfActive()) {
+                return;
+            }
+            try {
+                action.run();
+            } catch (RuntimeException error) {
+                Log.w(TAG, "Bookshelf UI task failed after lifecycle change", error);
+            }
+        });
+    }
+
+    private boolean safeExecute(Runnable action, String label) {
+        return safeExecute(executor, action, label);
+    }
+
+    private boolean safeExecuteProgressPrefetch(Runnable action, String label) {
+        return safeExecute(progressPrefetchExecutor, action, label);
+    }
+
+    private boolean safeExecute(ExecutorService targetExecutor, Runnable action, String label) {
+        if (action == null || targetExecutor == null || bookshelfDestroyed || targetExecutor.isShutdown()) {
+            return false;
+        }
+        try {
+            targetExecutor.execute(() -> {
+                try {
+                    if (!bookshelfDestroyed) {
+                        action.run();
+                    }
+                } catch (RuntimeException error) {
+                    Log.w(TAG, "Bookshelf background task failed: " + safeTaskLabel(label), error);
+                }
+            });
+            return true;
+        } catch (RejectedExecutionException error) {
+            Log.d(TAG, "Bookshelf background task rejected after shutdown: " + safeTaskLabel(label), error);
+            return false;
+        }
+    }
+
+    private String safeTaskLabel(String label) {
+        return label == null || label.isBlank() ? "unnamed" : label;
     }
 
     @Override
@@ -450,10 +506,10 @@ public class BookshelfActivity extends ThemedActivity {
         if (!booksLoaded) {
             showBookshelfLoadingState();
         }
-        executor.execute(() -> {
+        safeExecute(() -> {
             try {
                 List<BookRecord> books = databaseHelper.getBooks();
-                runOnUiThread(() -> {
+                runOnBookshelfUiThread(() -> {
                     booksLoading = false;
                     booksLoaded = true;
                     allBooks.clear();
@@ -464,14 +520,14 @@ public class BookshelfActivity extends ThemedActivity {
                     }
                 });
             } catch (Exception error) {
-                runOnUiThread(() -> {
+                runOnBookshelfUiThread(() -> {
                     booksLoading = false;
                     booksLoaded = true;
                     applyFilter(currentQuery());
                     showToast("加载书架失败: " + readableError(error));
                 });
             }
-        });
+        }, "refresh books");
     }
 
     private void scheduleBookshelfProgressPrefetch(List<BookRecord> books) {
@@ -486,10 +542,10 @@ public class BookshelfActivity extends ThemedActivity {
         for (int i = 0; i < limit; i++) {
             candidates.add(snapshotBookForProgressPrefetch(books.get(i)));
         }
-        progressPrefetchExecutor.execute(() -> {
+        safeExecuteProgressPrefetch(() -> {
             boolean changed = false;
             for (BookRecord book : candidates) {
-                if (Thread.currentThread().isInterrupted()) {
+                if (Thread.currentThread().isInterrupted() || bookshelfDestroyed) {
                     return;
                 }
                 try {
@@ -501,13 +557,9 @@ public class BookshelfActivity extends ThemedActivity {
                 }
             }
             if (changed && !Thread.currentThread().isInterrupted()) {
-                runOnUiThread(() -> {
-                    if (!isFinishing()) {
-                        refreshBooks(false);
-                    }
-                });
+                runOnBookshelfUiThread(() -> refreshBooks(false));
             }
-        });
+        }, "prefetch bookshelf WebDAV progress");
     }
 
     private BookRecord snapshotBookForProgressPrefetch(BookRecord source) {
@@ -628,10 +680,13 @@ public class BookshelfActivity extends ThemedActivity {
     private void importBooks(List<Uri> uris) {
         if (uris == null || uris.isEmpty()) return;
         showLoading("正在导入 " + uris.size() + " 本书籍...");
-        executor.execute(() -> {
+        safeExecute(() -> {
             int successCount = 0, failCount = 0;
             String firstError = null;
             for (Uri uri : uris) {
+                if (Thread.currentThread().isInterrupted() || bookshelfDestroyed) {
+                    return;
+                }
                 try {
                     databaseHelper.insertImportedBook(importService.importFromUri(uri, false));
                     successCount++;
@@ -645,7 +700,7 @@ public class BookshelfActivity extends ThemedActivity {
             }
             final int sCount = successCount, fCount = failCount;
             final String errorMessage = firstError;
-            runOnUiThread(() -> {
+            runOnBookshelfUiThread(() -> {
                 hideLoading();
                 refreshBooks();
                 if (fCount > 0) {
@@ -658,7 +713,7 @@ public class BookshelfActivity extends ThemedActivity {
                     showToast("成功导入 " + sCount + " 本书籍");
                 }
             });
-        });
+        }, "import books");
     }
 
     private void openBook(long bookId) {
@@ -666,6 +721,9 @@ public class BookshelfActivity extends ThemedActivity {
     }
 
     private void openBook(long bookId, View sourceView) {
+        if (!isBookshelfActive()) {
+            return;
+        }
         Intent intent = new Intent(this, ReaderActivity.class);
         intent.putExtra("book_id", bookId);
         if (com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(settingsStore)) {
@@ -726,10 +784,10 @@ public class BookshelfActivity extends ThemedActivity {
                 } else if ("删除".equals(item)) {
                     confirmDelete(book);
                 } else {
-                    executor.execute(() -> {
+                    safeExecute(() -> {
                         databaseHelper.setPinned(book.id, !book.pinned);
-                        runOnUiThread(this::refreshBooks);
-                    });
+                        runOnBookshelfUiThread(this::refreshBooks);
+                    }, "toggle book pin");
                 }
             }));
         }
@@ -784,7 +842,7 @@ public class BookshelfActivity extends ThemedActivity {
 
     private void attachCover(long bookId, Uri uri) {
         showLoading("正在保存封面...");
-        executor.execute(() -> {
+        safeExecute(() -> {
             try {
                 BookRecord currentBook = databaseHelper.getBook(bookId);
                 File coverFile = CoverImageStore.saveCompressedCover(this, uri, "cover_" + bookId);
@@ -792,31 +850,31 @@ public class BookshelfActivity extends ThemedActivity {
                     FileAssetHelper.deleteIfExists(currentBook.coverPath);
                 }
                 databaseHelper.setCoverPath(bookId, coverFile.getAbsolutePath());
-                runOnUiThread(() -> {
+                runOnBookshelfUiThread(() -> {
                     pendingCoverBookId = -1L;
                     hideLoading();
                     refreshBooks();
                     showToast("封面已更新");
                 });
             } catch (Exception error) {
-                runOnUiThread(() -> {
+                runOnBookshelfUiThread(() -> {
                     pendingCoverBookId = -1L;
                     hideLoading();
                     showToast("保存封面失败: " + error.getMessage());
                 });
             }
-        });
+        }, "attach book cover");
     }
 
     private void removeCover(BookRecord book) {
-        executor.execute(() -> {
+        safeExecute(() -> {
             FileAssetHelper.deleteIfExists(book.coverPath);
             databaseHelper.setCoverPath(book.id, null);
-            runOnUiThread(() -> {
+            runOnBookshelfUiThread(() -> {
                 refreshBooks();
                 showToast("已移除封面");
             });
-        });
+        }, "remove book cover");
     }
 
     private void confirmDelete(BookRecord book) {
@@ -824,13 +882,13 @@ public class BookshelfActivity extends ThemedActivity {
                 .setTitle("删除书籍")
                 .setMessage("确定要删除《" + book.title + "》吗？")
                 .setNegativeButton("取消", null)
-                .setPositiveButton("删除", (ignoredDialog, which) -> executor.execute(() -> {
+                .setPositiveButton("删除", (ignoredDialog, which) -> safeExecute(() -> {
                     databaseHelper.deleteBook(book.id);
-                    runOnUiThread(() -> {
+                    runOnBookshelfUiThread(() -> {
                         refreshBooks();
                         showToast("已删除");
                     });
-                }))
+                }, "delete book"))
                 .create();
         dialog.setOnShowListener(unused -> {
             if (dialog.getWindow() != null) {
@@ -841,30 +899,30 @@ public class BookshelfActivity extends ThemedActivity {
     }
 
     private void maybeAutoOpenLastBook() {
-        executor.execute(() -> {
+        safeExecute(() -> {
             try {
                 long bookId = databaseHelper.getMostRecentBookId();
                 if (bookId > 0) {
-                    runOnUiThread(() -> openBook(bookId));
+                    runOnBookshelfUiThread(() -> openBook(bookId));
                 }
             } catch (Exception ignored) {}
-        });
+        }, "auto open last book");
     }
 
     private void performAutoOpenFastPath(long bookId) {
         autoOpenConsumed = true;
-        executor.execute(() -> {
+        safeExecute(() -> {
             try {
                 BookRecord book = databaseHelper.getBook(bookId);
                 if (book == null) {
-                    runOnUiThread(() -> {
+                    runOnBookshelfUiThread(() -> {
                         autoOpenConsumed = false;
                         showBookshelfLoadingState();
                         refreshBooks();
                     });
                     return;
                 }
-                runOnUiThread(() -> {
+                runOnBookshelfUiThread(() -> {
                     List<BookRecord> single = new ArrayList<>();
                     single.add(book);
                     listAdapter.setItems(single);
@@ -877,6 +935,9 @@ public class BookshelfActivity extends ThemedActivity {
 
                     View container = isCardMode() ? (View) gridBooks : (View) listBooks;
                     container.post(() -> {
+                        if (!isBookshelfActive()) {
+                            return;
+                        }
                         View sourceView = null;
                         if (isCardMode() && gridBooks.getChildCount() > 0) {
                             sourceView = gridBooks.getChildAt(0);
@@ -887,10 +948,10 @@ public class BookshelfActivity extends ThemedActivity {
                         autoOpenConsumed = false;
 
                         // 在阅读器背后异步加载完整书架
-                        executor.execute(() -> {
+                        safeExecute(() -> {
                             try {
                                 List<BookRecord> books = databaseHelper.getBooks();
-                                runOnUiThread(() -> {
+                                runOnBookshelfUiThread(() -> {
                                     booksLoading = false;
                                     booksLoaded = true;
                                     allBooks.clear();
@@ -899,22 +960,22 @@ public class BookshelfActivity extends ThemedActivity {
                                     scrollToBook(bookId);
                                 });
                             } catch (Exception error) {
-                                runOnUiThread(() -> {
+                                runOnBookshelfUiThread(() -> {
                                     booksLoading = false;
                                     applyFilter(currentQuery());
                                 });
                             }
-                        });
+                        }, "load full bookshelf behind reader");
                     });
                 });
             } catch (Exception e) {
-                runOnUiThread(() -> {
+                runOnBookshelfUiThread(() -> {
                     autoOpenConsumed = false;
                     showBookshelfLoadingState();
                     refreshBooks();
                 });
             }
-        });
+        }, "auto open fast path");
     }
 
     private void scrollToBook(long bookId) {

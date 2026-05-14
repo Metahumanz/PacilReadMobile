@@ -169,9 +169,12 @@ public final class ReaderLibraryDialogs {
             adapter.clear();
             resultCount.setText("正在搜索...");
             refreshListScrubber(listView, scrubberHost, scrubberTrack, scrubberThumb, scrubberPreview, results.size());
-            runtime.executor.execute(() -> {
+            runtime.safeExecute(() -> {
                 List<SearchResult> tempResults = new ArrayList<>();
                 for (int i = 0; i < state.chapters.size(); i++) {
+                    if (!activity.isReaderActive()) {
+                        return;
+                    }
                     String text = content.getProcessedChapterText(i);
                     int index = text.toLowerCase(Locale.ROOT).indexOf(query);
                     if (index >= 0) {
@@ -182,7 +185,7 @@ public final class ReaderLibraryDialogs {
                         tempResults.add(new SearchResult(i, state.chapters.get(i).title, snippet, index));
                     }
                 }
-                activity.runOnUiThread(() -> {
+                activity.runOnReaderUiThread(() -> {
                     results.clear();
                     results.addAll(tempResults);
                     adapter.clear();
@@ -200,7 +203,7 @@ public final class ReaderLibraryDialogs {
                             results.size()
                     ));
                 });
-            });
+            }, "search reader text");
         };
         searchButton.setOnClickListener(v -> runSearch.run());
         String safeInitialQuery = initialQuery == null ? "" : initialQuery.trim();
@@ -253,7 +256,7 @@ public final class ReaderLibraryDialogs {
                 }
             }
             int offset = content.currentCharOffset();
-            runtime.executor.execute(() -> {
+            runtime.safeExecute(() -> {
                 runtime.databaseHelper.addReplacementRule(
                         pattern,
                         replacementInput.getText().toString(),
@@ -262,7 +265,7 @@ public final class ReaderLibraryDialogs {
                         regexCheck.isChecked()
                 );
                 List<com.metahumanz.pacilread.model.ReplacementRuleRecord> rules = runtime.databaseHelper.getReplacementRules(state.bookId);
-                activity.runOnUiThread(() -> {
+                activity.runOnReaderUiThread(() -> {
                     state.replacementRules.clear();
                     state.replacementRules.addAll(rules);
                     content.clearAllReaderCaches();
@@ -272,35 +275,35 @@ public final class ReaderLibraryDialogs {
                     regexCheck.setChecked(false);
                     navigation.openChapter(state.currentChapterIndex, offset, false, 0);
                 });
-            });
+            }, "add replacement rule");
         });
         listView.setOnItemClickListener((parent, view, position, id) -> {
             ReplacementRuleRecord rule = state.replacementRules.get(position);
             int offset = content.currentCharOffset();
-            runtime.executor.execute(() -> {
+            runtime.safeExecute(() -> {
                 runtime.databaseHelper.toggleReplacementRule(rule.id, !rule.active);
                 List<com.metahumanz.pacilread.model.ReplacementRuleRecord> rules = runtime.databaseHelper.getReplacementRules(state.bookId);
-                activity.runOnUiThread(() -> {
+                activity.runOnReaderUiThread(() -> {
                     state.replacementRules.clear();
                     state.replacementRules.addAll(rules);
                     content.clearAllReaderCaches();
                     refreshRuleLabels(adapter);
                     navigation.openChapter(state.currentChapterIndex, offset, false, 0);
                 });
-            });
+            }, "toggle replacement rule");
         });
         listView.setOnItemLongClickListener((parent, view, position, id) -> {
             ReplacementRuleRecord rule = state.replacementRules.get(position);
-            runtime.executor.execute(() -> {
+            runtime.safeExecute(() -> {
                 runtime.databaseHelper.deleteReplacementRule(rule.id);
                 List<com.metahumanz.pacilread.model.ReplacementRuleRecord> rules = runtime.databaseHelper.getReplacementRules(state.bookId);
-                activity.runOnUiThread(() -> {
+                activity.runOnReaderUiThread(() -> {
                     state.replacementRules.clear();
                     state.replacementRules.addAll(rules);
                     content.clearAllReaderCaches();
                     refreshRuleLabels(adapter);
                 });
-            });
+            }, "delete replacement rule");
             return true;
         });
         dialogSupport.showStyledDialog(dialog);

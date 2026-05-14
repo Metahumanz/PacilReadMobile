@@ -90,10 +90,15 @@ public final class WebDavProgressSyncCoordinator {
         }
     }
 
-    private boolean beginSync(long bookId) throws InterruptedException {
+    private boolean beginSync(long bookId) {
         synchronized (LOCK) {
             while (IN_FLIGHT_BOOK_IDS.contains(bookId)) {
-                LOCK.wait(250L);
+                try {
+                    LOCK.wait(250L);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                }
                 if (isProgressFreshLocked(bookId, System.currentTimeMillis())) {
                     return false;
                 }

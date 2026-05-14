@@ -148,19 +148,22 @@ public final class ReaderStyleController {
     }
 
     public void attachBackground(Uri uri) {
-        runtime.executor.execute(() -> {
+        runtime.safeExecute(() -> {
             try {
+                if (!activity.isReaderActive()) {
+                    return;
+                }
                 String oldPath = runtime.settingsStore.getReaderBackgroundPath();
                 File newFile = FileAssetHelper.copyUriToFolder(activity, uri, "backgrounds", "reader_bg");
                 if (oldPath != null && !oldPath.isBlank()) {
                     FileAssetHelper.deleteIfExists(oldPath);
                 }
                 runtime.settingsStore.setReaderBackgroundPath(newFile.getAbsolutePath());
-                activity.runOnUiThread(this::applyReaderSettings);
+                activity.runOnReaderUiThread(this::applyReaderSettings);
             } catch (Exception error) {
-                activity.runOnUiThread(() -> ui.showToast("设置背景失败: " + error.getMessage()));
+                activity.runOnReaderUiThread(() -> ui.showToast("设置背景失败: " + error.getMessage()));
             }
-        });
+        }, "attach reader background");
     }
 
     public void applyBackgroundImage() {
