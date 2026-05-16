@@ -307,6 +307,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 case KeyEvent.KEYCODE_DPAD_UP:
                 case KeyEvent.KEYCODE_DPAD_LEFT:
                 case KeyEvent.KEYCODE_PAGE_UP:
+                    state.lastTapY = -1f;
                     navigation.pageUp();
                     return true;
                 case KeyEvent.KEYCODE_DPAD_DOWN:
@@ -315,6 +316,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 case KeyEvent.KEYCODE_SPACE:
                 case KeyEvent.KEYCODE_ENTER:
                 case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                    state.lastTapY = -1f;
                     navigation.pageDown();
                     return true;
             }
@@ -332,6 +334,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 long now = System.currentTimeMillis();
                 if (now - lastScrollPageTurnTime > 300L) {
                     lastScrollPageTurnTime = now;
+                    state.lastTapY = -1f;
                     if (vScroll < 0) {
                         navigation.pageDown();
                     } else {
@@ -944,25 +947,30 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                 float y = e.getY();
                 float thirdW = width / 3f;
                 float thirdH = height / 3f;
-                int col = (int) (x / thirdW);
-                int row = (int) (y / thirdH);
-                state.lastTapY = y;
+                int col = ui.clamp((int) (x / thirdW), 0, 2);
+                int row = ui.clamp((int) (y / thirdH), 0, 2);
                 if (col == 1 && row == 1) {
+                    state.lastTapY = -1f;
                     chrome.setControlsVisible(true);
                 } else if (state.ttsActive && tts != null) {
                     int offset = bodyCharOffsetFromTouch(e);
                     if (offset >= 0) {
+                        state.lastTapY = -1f;
                         tts.startTtsFrom(state.currentChapterIndex, offset);
                     } else if (col == 0 || (col == 1 && row == 0)) {
+                        state.lastTapY = y;
                         navigation.requestTapPageTurn(-1);
                         resumeTtsAfterPageTurn();
                     } else {
+                        state.lastTapY = y;
                         navigation.requestTapPageTurn(1);
                         resumeTtsAfterPageTurn();
                     }
                 } else if (col == 0 || (col == 1 && row == 0)) {
+                    state.lastTapY = y;
                     navigation.requestTapPageTurn(-1);
                 } else {
+                    state.lastTapY = y;
                     navigation.requestTapPageTurn(1);
                 }
                 return true;

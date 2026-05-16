@@ -10,24 +10,33 @@ import android.graphics.Rect;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.animation.AccelerateDecelerateInterpolator;
+import android.view.ViewTreeObserver;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.TextView;
 
 import com.metahumanz.pacilread.reader.PageSlice;
+import com.metahumanz.pacilread.reader.SimulationPageTurnView;
 import com.metahumanz.pacilread.reader.modern.ModernReaderActivity;
 import com.metahumanz.pacilread.reader.modern.ReaderRuntime;
 import com.metahumanz.pacilread.reader.modern.ReaderSessionState;
 import com.metahumanz.pacilread.reader.modern.ReaderUiUtils;
 import com.metahumanz.pacilread.reader.modern.ReaderViewRefs;
 import com.metahumanz.pacilread.reader.modern.content.ReaderContentController;
+import com.metahumanz.pacilread.reader.modern.theme.ReaderDisplayModeHelper;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
 
 import java.util.List;
 
 public final class ReaderPagingAnimator {
     private static final DecelerateInterpolator PAGE_SLIDE_INTERPOLATOR = new DecelerateInterpolator(1.35f);
-    private static final AccelerateDecelerateInterpolator PAGE_TURN_INTERPOLATOR = new AccelerateDecelerateInterpolator();
+    private static final DecelerateInterpolator PAGE_TURN_INTERPOLATOR = new DecelerateInterpolator(0.95f);
+    private static final float PHONE_SIMULATION_DIAGONAL_RATIO = 1.35f;
+    private static final float TABLET_SIMULATION_DIAGONAL_RATIO = 1.25f;
+    private static final float DEFAULT_DIAGONAL_RATIO = 1.15f;
+    private static final int FINISH_SWAP_PREDRAW_PASSES = 2;
+    private static final long FINISH_SWAP_PREDRAW_FALLBACK_MS = 240L;
+    private static final long FINISH_SWAP_COVER_HOLD_MS = 96L;
+    private static final float SIMULATION_FINISH_COVER_PROGRESS = 0.9995f;
 
     private final ModernReaderActivity activity;
     private final ReaderRuntime runtime;
@@ -98,20 +107,21 @@ public final class ReaderPagingAnimator {
                 if (!state.interactivePaging) {
                     float deltaX = currentTouchX - state.pagingDownX;
                     float deltaY = currentTouchY - state.pagingDownY;
-                    float slop = Math.max(state.pagingTouchSlop, 1);
+                    float slop = effectivePagingTouchSlop(event);
                     float distanceSquare = deltaX * deltaX + deltaY * deltaY;
                     if (distanceSquare <= slop * slop) {
                         return false;
                     }
                     boolean simulationDiagonalStart = isSimulationFlipMode()
                             && isSimulationDiagonalStartZone(state.pagingDownY);
-                    if (!simulationDiagonalStart && Math.abs(deltaY) > Math.abs(deltaX)) {
+                    float diagonalRatio = horizontalGestureRatio();
+                    if (!simulationDiagonalStart && Math.abs(deltaY) > Math.abs(deltaX) * diagonalRatio) {
                         state.pagingGestureCandidate = false;
                         return false;
                     }
                     float minHorizontalDelta = simulationDiagonalStart
                             ? Math.max(1f, slop * 0.5f)
-                            : Math.abs(deltaY);
+                            : Math.abs(deltaY) / diagonalRatio;
                     if (Math.abs(deltaX) <= minHorizontalDelta) {
                         return false;
                     }
@@ -123,7 +133,7 @@ public final class ReaderPagingAnimator {
                 }
                 updateInteractiveTouchPoint(currentTouchX, currentTouchY);
                 updateInteractiveCancelState();
-                float width = Math.max(views.pageStage.getWidth(), ui.dp(240));
+                float width = interactiveProgressWidth();
                 float deltaX = currentTouchX - state.pagingDownX;
                 float progress = state.interactiveDirection > 0 ? -deltaX / width : deltaX / width;
                 applyInteractivePagingProgress(progress, state.interactiveTouchY);
@@ -135,6 +145,13 @@ public final class ReaderPagingAnimator {
                     return false;
                 }
                 updatePagingVelocity(event);
+                if (event.getActionMasked() != MotionEvent.ACTION_CANCEL && isSimulationFlipMode()) {
+                    updateInteractiveTouchPoint(localTouchX(event), localTouchY(event));
+                    if (shouldCompleteSimulationDragAtEdge(state.interactiveTouchX)) {
+                        finishInteractivePaging(true);
+                        return true;
+                    }
+                }
                 boolean commit = event.getActionMasked() != MotionEvent.ACTION_CANCEL && shouldCommitInteractivePaging();
                 finishInteractivePaging(commit);
                 return true;
@@ -157,6 +174,7 @@ public final class ReaderPagingAnimator {
             return false;
         }
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            state.lastTapY = -1f;
             navigation.requestTapPageTurn("page_up".equals(action) ? -1 : 1);
             return true;
         }
@@ -203,16 +221,27 @@ public final class ReaderPagingAnimator {
                 ? resolveSimulationTargetTouchY(direction)
                 : height * 0.5f;
         final boolean[] cancelled = new boolean[]{false};
+        final boolean[] finishCoverShown = new boolean[]{false};
         state.interactiveAnimator.addUpdateListener(animation -> {
+            float animatedProgress = (float) animation.getAnimatedValue();
             if ("simulation".equals(mode)) {
-                float fraction = animation.getAnimatedFraction();
-                state.interactiveTouchX = lerp(startTouchX, targetTouchX, fraction);
-                state.interactiveTouchY = lerp(startTouchY, targetTouchY, fraction);
+                state.interactiveTouchX = lerp(startTouchX, targetTouchX, animatedProgress);
+                state.interactiveTouchY = lerp(startTouchY, targetTouchY, animatedProgress);
+                if (animatedProgress >= SIMULATION_FINISH_COVER_PROGRESS) {
+                    finishCoverShown[0] = showSimulationTargetSnapshotAndStopCurl(
+                            targetChapterIndex,
+                            targetPageIndex,
+                            direction
+                    ) || finishCoverShown[0];
+                    if (finishCoverShown[0]) {
+                        return;
+                    }
+                }
             }
             applyPagingVisuals(
                     mode,
                     direction,
-                    (float) animation.getAnimatedValue(),
+                    animatedProgress,
                     "simulation".equals(mode) ? state.interactiveTouchY : height * 0.5f
             );
         });
@@ -229,6 +258,11 @@ public final class ReaderPagingAnimator {
                 if (cancelled[0] || token != state.animationToken) {
                     return;
                 }
+                if ("simulation".equals(mode)) {
+                    if (!finishCoverShown[0]) {
+                        showSimulationTargetSnapshotAndStopCurl(targetChapterIndex, targetPageIndex, direction);
+                    }
+                }
                 finishAnimation(targetChapterIndex, targetPageIndex, direction, token);
             }
         });
@@ -244,7 +278,7 @@ public final class ReaderPagingAnimator {
         if ("cover".equals(mode)) {
             baseDuration = 220L;
         } else if ("simulation".equals(mode)) {
-            baseDuration = 300L;
+            baseDuration = 360L;
         } else if ("scroll".equals(mode)) {
             baseDuration = 190L;
         }
@@ -278,6 +312,7 @@ public final class ReaderPagingAnimator {
     }
 
     public void invalidatePreparedPagingSnapshots() {
+        state.simulationFinishCoverVisible = false;
         state.preparedCurrentSnapshotChapterIndex = -1;
         state.preparedCurrentSnapshotPageIndex = -1;
         state.preparedIncomingSnapshotChapterIndex = -1;
@@ -293,6 +328,7 @@ public final class ReaderPagingAnimator {
 
     public void restoreLivePageLayers(boolean incomingVisible) {
         state.pagingSnapshotsVisible = false;
+        state.simulationFinishCoverVisible = false;
         clearSimulationPagingLayer();
         if (views.pageSnapshotCurrent != null) {
             resetAnimatedPage(views.pageSnapshotCurrent);
@@ -367,6 +403,7 @@ public final class ReaderPagingAnimator {
         state.interactiveDirection = 0;
         state.interactiveCancel = false;
         state.interactiveProgress = 0f;
+        state.simulationFinishCoverVisible = false;
         state.interactiveTargetChapterIndex = -1;
         state.interactiveTargetPageIndex = -1;
         clearAnimationTarget();
@@ -416,6 +453,7 @@ public final class ReaderPagingAnimator {
         int safePageIndex = ui.clamp(targetPageIndex, 0, pages.size() - 1);
         state.currentChapterIndex = safeChapterIndex;
         state.currentPageIndex = safePageIndex;
+        state.simulationFinishCoverVisible = false;
         navigation.bindCurrentSpread(safeChapterIndex, safePageIndex);
         restoreLivePageLayers(false);
         resetAnimatedPage(views.pageCurrent);
@@ -557,9 +595,8 @@ public final class ReaderPagingAnimator {
     private boolean shouldCommitInteractivePaging() {
         float directionalVelocity = state.interactiveDirection > 0 ? -state.pagingVelocityX : state.pagingVelocityX;
         String mode = runtime.settingsStore.getFlipMode();
-        float progressThreshold = "cover".equals(mode) ? 0.18f
-                : ("simulation".equals(mode) ? 0.24f : ("scroll".equals(mode) ? 0.28f : 0.22f));
-        float velocityThreshold = "scroll".equals(mode) ? 0.7f : 0.85f;
+        float progressThreshold = progressCommitThreshold(mode);
+        float velocityThreshold = velocityCommitThreshold(mode);
         if (state.interactiveProgress >= progressThreshold) {
             return true;
         }
@@ -570,6 +607,64 @@ public final class ReaderPagingAnimator {
             return false;
         }
         return false;
+    }
+
+    private float effectivePagingTouchSlop(MotionEvent event) {
+        float slop = Math.max(state.pagingTouchSlop, 1);
+        if (event == null || !isPhoneReaderViewport()) {
+            return slop;
+        }
+        int toolType = event.getPointerCount() > 0 ? event.getToolType(0) : MotionEvent.TOOL_TYPE_UNKNOWN;
+        if (toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_MOUSE) {
+            return Math.max(1f, slop * 0.75f);
+        }
+        if (isSimulationFlipMode()) {
+            return Math.max(2f, Math.min(slop, ui.dp(4)));
+        }
+        return Math.max(slop, ui.dp(9));
+    }
+
+    private float horizontalGestureRatio() {
+        if (!isSimulationFlipMode()) {
+            return DEFAULT_DIAGONAL_RATIO;
+        }
+        if (isPhoneReaderViewport()) {
+            return PHONE_SIMULATION_DIAGONAL_RATIO;
+        }
+        if (isTabletReaderViewport()) {
+            return TABLET_SIMULATION_DIAGONAL_RATIO;
+        }
+        return DEFAULT_DIAGONAL_RATIO;
+    }
+
+    private float progressCommitThreshold(String mode) {
+        if ("cover".equals(mode)) {
+            return isPhoneReaderViewport() ? 0.16f : 0.18f;
+        }
+        if ("simulation".equals(mode)) {
+            if (isPhoneReaderViewport()) {
+                return 0.21f;
+            }
+            return isTabletReaderViewport() ? 0.23f : 0.24f;
+        }
+        if ("scroll".equals(mode)) {
+            if (isPhoneReaderViewport()) {
+                return 0.26f;
+            }
+            return isTabletReaderViewport() ? 0.27f : 0.28f;
+        }
+        if (isPhoneReaderViewport()) {
+            return 0.20f;
+        }
+        return isTabletReaderViewport() ? 0.21f : 0.22f;
+    }
+
+    private float velocityCommitThreshold(String mode) {
+        float baseThreshold = "scroll".equals(mode) ? 0.7f : 0.85f;
+        if (isPhoneReaderViewport()) {
+            return baseThreshold * 0.9f;
+        }
+        return baseThreshold;
     }
 
     private void finishInteractivePaging(boolean commit) {
@@ -600,13 +695,25 @@ public final class ReaderPagingAnimator {
                 ? resolveSimulationTargetTouchY(state.interactiveDirection)
                 : state.interactiveTouchY;
         final boolean[] cancelled = new boolean[]{false};
+        final boolean[] finishCoverShown = new boolean[]{false};
         state.interactiveAnimator.addUpdateListener(animation -> {
+            float animatedProgress = (float) animation.getAnimatedValue();
             if ("simulation".equals(mode)) {
-                float fraction = animation.getAnimatedFraction();
-                state.interactiveTouchX = lerp(startTouchX, targetTouchX, fraction);
-                state.interactiveTouchY = lerp(startTouchY, targetTouchY, fraction);
+                float touchFraction = normalizedAnimationValue(animatedProgress, start, end);
+                state.interactiveTouchX = lerp(startTouchX, targetTouchX, touchFraction);
+                state.interactiveTouchY = lerp(startTouchY, targetTouchY, touchFraction);
+                if (commit && animatedProgress >= SIMULATION_FINISH_COVER_PROGRESS) {
+                    finishCoverShown[0] = showSimulationTargetSnapshotAndStopCurl(
+                            state.interactiveTargetChapterIndex,
+                            state.interactiveTargetPageIndex,
+                            state.interactiveDirection
+                    ) || finishCoverShown[0];
+                    if (finishCoverShown[0]) {
+                        return;
+                    }
+                }
             }
-            applyInteractivePagingProgress((float) animation.getAnimatedValue(), state.interactiveTouchY);
+            applyInteractivePagingProgress(animatedProgress, state.interactiveTouchY);
         });
         state.interactiveAnimator.addListener(new AnimatorListenerAdapter() {
             @Override
@@ -622,6 +729,15 @@ public final class ReaderPagingAnimator {
                     return;
                 }
                 if (commit) {
+                    if ("simulation".equals(mode)) {
+                        if (!finishCoverShown[0]) {
+                            showSimulationTargetSnapshotAndStopCurl(
+                                    state.interactiveTargetChapterIndex,
+                                    state.interactiveTargetPageIndex,
+                                    state.interactiveDirection
+                            );
+                        }
+                    }
                     finishAnimation(
                             state.interactiveTargetChapterIndex,
                             state.interactiveTargetPageIndex,
@@ -634,6 +750,24 @@ public final class ReaderPagingAnimator {
             }
         });
         state.interactiveAnimator.start();
+    }
+
+    private boolean shouldCompleteSimulationDragAtEdge(float touchX) {
+        if (!isSimulationFlipMode()
+                || !isSimulationOuterPageTurnActive()
+                || !state.interactivePaging
+                || state.interactiveDirection == 0
+                || state.interactiveTargetChapterIndex < 0
+                || state.interactiveTargetPageIndex < 0
+                || state.interactiveCancel
+                || state.interactiveProgress < 0.92f) {
+            return false;
+        }
+        float width = Math.max(views.pageStage == null ? 0f : views.pageStage.getWidth(), ui.dp(240));
+        float edgeInset = Math.max(ui.dp(10), width * 0.018f);
+        return state.interactiveDirection > 0
+                ? touchX <= edgeInset
+                : touchX >= width - edgeInset;
     }
 
     private void rememberAnimationTarget(int targetChapterIndex, int targetPageIndex) {
@@ -674,6 +808,26 @@ public final class ReaderPagingAnimator {
                 direction
         );
         navigation.bindCurrentSpread(targetChapterIndex, targetPageIndex);
+        if ("simulation".equals(runtime.settingsStore.getFlipMode())) {
+            resetAnimatedPage(views.pageCurrent);
+            resetAnimatedPage(views.pageIncoming);
+            resetShadowView();
+            views.pageCurrent.setVisibility(View.VISIBLE);
+            layoutPageLayerForSnapshot(views.pageCurrent);
+            views.pageCurrent.invalidate();
+            if (showPromotedCurrentSnapshotCover()) {
+                state.pagingGestureCandidate = false;
+                state.interactivePaging = false;
+                state.interactiveDirection = 0;
+                state.interactiveCancel = false;
+                state.interactiveProgress = 0f;
+                state.interactiveTargetChapterIndex = -1;
+                state.interactiveTargetPageIndex = -1;
+                clearAnimationTarget();
+                completeFinishedAnimationSwapAfterLiveDraw(targetChapterIndex, targetPageIndex, token);
+                return;
+            }
+        }
         boolean keepIncomingCover = views.pageIncoming != null && views.pageIncoming.getVisibility() == View.VISIBLE;
         restoreLivePageLayers(keepIncomingCover);
         resetAnimatedPage(views.pageCurrent);
@@ -700,9 +854,26 @@ public final class ReaderPagingAnimator {
         if (token != state.animationToken) {
             return;
         }
+        boolean finishingSimulationCover = state.simulationFinishCoverVisible;
+        if (views.simulationPageTurnView != null) {
+            views.simulationPageTurnView.clear();
+        }
+        state.pagingSnapshotsVisible = false;
         views.pageCurrent.setVisibility(View.VISIBLE);
-        views.pageCurrent.bringToFront();
+        if (!finishingSimulationCover) {
+            views.pageCurrent.bringToFront();
+        }
+        if (views.pageSnapshotCurrent != null) {
+            resetAnimatedPage(views.pageSnapshotCurrent);
+            views.pageSnapshotCurrent.setVisibility(View.GONE);
+        }
+        if (views.pageSnapshotIncoming != null) {
+            resetAnimatedPage(views.pageSnapshotIncoming);
+            views.pageSnapshotIncoming.setVisibility(View.GONE);
+        }
         views.pageIncoming.setVisibility(View.GONE);
+        state.simulationFinishCoverVisible = false;
+        bringStableBookSpineOverlayToFront();
         resetInteractiveTouchState();
         state.isAnimating = false;
         state.pendingTapPagingDelta = 0;
@@ -714,7 +885,212 @@ public final class ReaderPagingAnimator {
         schedulePagingSnapshotWarmup();
     }
 
+    private boolean showPromotedCurrentSnapshotCover() {
+        if (views.pageSnapshotCurrent == null || !ensureCurrentSnapshotCoverBitmap()) {
+            return false;
+        }
+        state.pagingSnapshotsVisible = true;
+        state.simulationFinishCoverVisible = true;
+        views.pageSnapshotCurrent.setImageBitmap(state.currentPageSnapshotBitmap);
+        resetAnimatedPage(views.pageSnapshotCurrent);
+        views.pageSnapshotCurrent.setVisibility(View.VISIBLE);
+        views.pageSnapshotCurrent.bringToFront();
+        bringStableBookSpineOverlayToFront();
+        if (views.pageSnapshotIncoming != null) {
+            resetAnimatedPage(views.pageSnapshotIncoming);
+            views.pageSnapshotIncoming.setVisibility(View.GONE);
+        }
+        if (views.simulationPageTurnView != null) {
+            views.simulationPageTurnView.clear();
+        }
+        views.pageIncoming.setVisibility(View.GONE);
+        resetAnimatedPage(views.pageCurrent);
+        views.pageCurrent.setVisibility(View.VISIBLE);
+        views.pageCurrent.invalidate();
+        return true;
+    }
+
+    private boolean showIncomingSnapshotCoverBeforeCommit(int targetChapterIndex, int targetPageIndex, int direction) {
+        if (views.pageSnapshotCurrent == null) {
+            return false;
+        }
+        Bitmap targetSnapshot = preparedTargetSnapshot(targetChapterIndex, targetPageIndex);
+        if (targetSnapshot == null || targetSnapshot.isRecycled()) {
+            targetSnapshot = captureDirectionalPreparedSnapshot(direction, targetChapterIndex, targetPageIndex);
+        }
+        if (targetSnapshot == null || targetSnapshot.isRecycled()) {
+            return false;
+        }
+        setActiveIncomingSnapshot(targetSnapshot, targetChapterIndex, targetPageIndex);
+        state.pagingSnapshotsVisible = true;
+        views.pageSnapshotCurrent.setImageBitmap(targetSnapshot);
+        resetAnimatedPage(views.pageSnapshotCurrent);
+        views.pageSnapshotCurrent.setVisibility(View.VISIBLE);
+        views.pageSnapshotCurrent.bringToFront();
+        if (views.pageSnapshotIncoming != null) {
+            resetAnimatedPage(views.pageSnapshotIncoming);
+            views.pageSnapshotIncoming.setVisibility(View.GONE);
+        }
+        bringStableBookSpineOverlayToFront();
+        return true;
+    }
+
+    private boolean showSimulationTargetSnapshotAndStopCurl(int targetChapterIndex, int targetPageIndex, int direction) {
+        boolean shown = showIncomingSnapshotCoverBeforeCommit(targetChapterIndex, targetPageIndex, direction);
+        if (shown) {
+            state.simulationFinishCoverVisible = true;
+            clearSimulationPagingLayer();
+            keepSimulationFinishCoverOnTop();
+        }
+        return shown;
+    }
+
+    private void keepSimulationFinishCoverOnTop() {
+        state.pagingSnapshotsVisible = true;
+        resetShadowView();
+        hideInteractiveFoldEffects();
+        if (views.simulationPageTurnView != null) {
+            views.simulationPageTurnView.clear();
+        }
+        if (views.pageSnapshotIncoming != null) {
+            resetAnimatedPage(views.pageSnapshotIncoming);
+            views.pageSnapshotIncoming.setVisibility(View.GONE);
+        }
+        if (views.pageIncoming != null) {
+            views.pageIncoming.setVisibility(View.GONE);
+        }
+        if (views.pageSnapshotCurrent != null) {
+            resetAnimatedPage(views.pageSnapshotCurrent);
+            views.pageSnapshotCurrent.setVisibility(View.VISIBLE);
+            views.pageSnapshotCurrent.bringToFront();
+        }
+        bringStableBookSpineOverlayToFront();
+    }
+
+    private void bringStableBookSpineOverlayToFront() {
+        if (views.pageBookSpineOverlay == null || !isSimulationOuterPageTurnActive()) {
+            return;
+        }
+        views.pageBookSpineOverlay.setVisibility(View.VISIBLE);
+        views.pageBookSpineOverlay.bringToFront();
+    }
+
+    private boolean ensureCurrentSnapshotCoverBitmap() {
+        if (hasPreparedCurrentSnapshot(state.currentChapterIndex, state.currentPageIndex)) {
+            return true;
+        }
+        if (views.pageCurrent == null) {
+            return false;
+        }
+        resetAnimatedPage(views.pageCurrent);
+        views.pageCurrent.setVisibility(View.VISIBLE);
+        if (!layoutPageLayerForSnapshot(views.pageCurrent)) {
+            return false;
+        }
+        Bitmap bitmap = screenshotPageLayer(
+                views.pageCurrent,
+                state.currentPageSnapshotBitmap,
+                state.currentChapterIndex,
+                state.currentPageIndex
+        );
+        if (bitmap == null || bitmap.isRecycled()) {
+            state.preparedCurrentSnapshotChapterIndex = -1;
+            state.preparedCurrentSnapshotPageIndex = -1;
+            return false;
+        }
+        state.currentPageSnapshotBitmap = bitmap;
+        state.preparedCurrentSnapshotChapterIndex = state.currentChapterIndex;
+        state.preparedCurrentSnapshotPageIndex = state.currentPageIndex;
+        return true;
+    }
+
+    private void completeFinishedAnimationSwapAfterLiveDraw(int targetChapterIndex, int targetPageIndex, long token) {
+        waitForFinishedAnimationPreDraw(
+                targetChapterIndex,
+                targetPageIndex,
+                token,
+                FINISH_SWAP_PREDRAW_PASSES
+        );
+    }
+
+    private void waitForFinishedAnimationPreDraw(
+            int targetChapterIndex,
+            int targetPageIndex,
+            long token,
+            int remainingPasses
+    ) {
+        if (token != state.animationToken) {
+            return;
+        }
+        if (remainingPasses <= 0) {
+            scheduleFinishedAnimationSwap(targetChapterIndex, targetPageIndex, token);
+            return;
+        }
+        View target = views.pageStage != null ? views.pageStage : views.pageCurrent;
+        if (target == null || !target.isAttachedToWindow()) {
+            completeFinishedAnimationSwap(targetChapterIndex, targetPageIndex, token);
+            return;
+        }
+        final boolean[] completed = new boolean[]{false};
+        final ViewTreeObserver.OnPreDrawListener[] listenerRef = new ViewTreeObserver.OnPreDrawListener[1];
+        Runnable complete = () -> {
+            if (completed[0]) {
+                return;
+            }
+            completed[0] = true;
+            removePreDrawListener(target, listenerRef[0]);
+            waitForFinishedAnimationPreDraw(
+                    targetChapterIndex,
+                    targetPageIndex,
+                    token,
+                    remainingPasses - 1
+            );
+        };
+        listenerRef[0] = new ViewTreeObserver.OnPreDrawListener() {
+            @Override
+            public boolean onPreDraw() {
+                target.post(complete);
+                return true;
+            }
+        };
+        ViewTreeObserver observer = target.getViewTreeObserver();
+        if (observer == null || !observer.isAlive()) {
+            target.post(complete);
+            return;
+        }
+        observer.addOnPreDrawListener(listenerRef[0]);
+        if (views.pageCurrent != null) {
+            views.pageCurrent.requestLayout();
+            views.pageCurrent.invalidate();
+        }
+        target.invalidate();
+        target.postDelayed(complete, FINISH_SWAP_PREDRAW_FALLBACK_MS);
+    }
+
+    private void scheduleFinishedAnimationSwap(int targetChapterIndex, int targetPageIndex, long token) {
+        View target = views.pageStage != null ? views.pageStage : views.pageCurrent;
+        if (target == null) {
+            completeFinishedAnimationSwap(targetChapterIndex, targetPageIndex, token);
+            return;
+        }
+        target.postDelayed(
+                () -> completeFinishedAnimationSwap(targetChapterIndex, targetPageIndex, token),
+                FINISH_SWAP_COVER_HOLD_MS
+        );
+    }
+
+    private void removePreDrawListener(View target, ViewTreeObserver.OnPreDrawListener listener) {
+        if (target == null || listener == null) {
+            return;
+        }
+        ViewTreeObserver observer = target.getViewTreeObserver();
+        if (observer != null && observer.isAlive()) {
+            observer.removeOnPreDrawListener(listener);
+        }
+    }
+
     private void preparePagingSnapshots(int targetChapterIndex, int targetPageIndex, int direction) {
+        state.simulationFinishCoverVisible = false;
         if (views.pageSnapshotCurrent == null || views.pageSnapshotIncoming == null) {
             state.pagingSnapshotsVisible = false;
             return;
@@ -1221,6 +1597,10 @@ public final class ReaderPagingAnimator {
     }
 
     private void applyPagingVisuals(String mode, int direction, float progress, float touchY) {
+        if ("simulation".equals(mode) && state.simulationFinishCoverVisible) {
+            keepSimulationFinishCoverOnTop();
+            return;
+        }
         float width = Math.max(views.pageStage.getWidth(), ui.dp(240));
         float height = Math.max(views.pageStage.getHeight(), ui.dp(320));
         float safeProgress = Math.max(0f, Math.min(1f, progress));
@@ -1258,6 +1638,7 @@ public final class ReaderPagingAnimator {
                         state.interactiveStartY,
                         state.interactiveTouchX,
                         state.interactiveTouchY,
+                        simulationTurnMode(),
                         state.currentReaderPageColor
                 );
             }
@@ -1335,7 +1716,7 @@ public final class ReaderPagingAnimator {
 
     private void captureInteractiveStartPoint(float startX, float startY) {
         if (isSimulationFlipMode() && state.interactiveDirection != 0) {
-            captureSimulationStartPoint(state.interactiveDirection, startY);
+            captureSimulationStartPoint(state.interactiveDirection, startY, false);
             return;
         }
         state.interactiveStartX = sanitizeStageTouchX(startX);
@@ -1346,20 +1727,30 @@ public final class ReaderPagingAnimator {
 
     private void updateInteractiveTouchPoint(float touchX, float touchY) {
         state.interactiveTouchX = sanitizeStageTouchX(touchX);
+        if (isSimulationSpineBoundTurn()) {
+            state.interactiveTouchX = sanitizeSimulationSpineBoundTouchX(state.interactiveTouchX);
+        }
         state.interactiveTouchY = sanitizeStageTouchY(touchY);
     }
 
     private void initializeSimulationAutoStart(int direction, float height) {
         state.interactiveDirection = direction;
-        float tapY = state.lastTapY >= 0 ? state.lastTapY : height / 2f;
-        captureSimulationStartPoint(direction, tapY);
+        float tapY = state.lastTapY >= 0
+                ? state.lastTapY
+                : (direction > 0 ? height * 0.85f : height * 0.15f);
+        captureSimulationStartPoint(direction, tapY, true);
         state.lastTapY = -1f;
     }
 
-    private void captureSimulationStartPoint(int direction, float startY) {
+    private void captureSimulationStartPoint(int direction, float startY, boolean expandedCornerFold) {
         float width = Math.max(views.pageStage == null ? 0f : views.pageStage.getWidth(), ui.dp(240));
-        state.interactiveStartX = sanitizeStageTouchX(direction > 0 ? width - 5f : 5f);
-        state.interactiveStartY = sanitizeStageTouchY(resolveSimulationStartY(startY));
+        float cornerInset = expandedCornerFold ? simulationAutoStartInsetPx(width) : simulationCornerInsetPx();
+        state.interactiveStartX = sanitizeStageTouchX(direction > 0 ? width - cornerInset : cornerInset);
+        state.interactiveStartY = sanitizeStageTouchY(
+                expandedCornerFold
+                        ? resolveSimulationAutoStartY(startY, width)
+                        : resolveSimulationStartY(startY)
+        );
         state.interactiveTouchX = state.interactiveStartX;
         state.interactiveTouchY = state.interactiveStartY;
     }
@@ -1368,16 +1759,40 @@ public final class ReaderPagingAnimator {
         float height = Math.max(views.pageStage == null ? 0f : views.pageStage.getHeight(), ui.dp(320));
         float safeTouchY = Math.max(0f, Math.min(height, touchY));
         if (safeTouchY < height / 3f) {
-            return 5f;
+            return 0.1f;
         }
         if (safeTouchY > height * 2f / 3f) {
-            return height - 5f;
+            return height - 0.1f;
         }
         return height / 2f;
     }
 
+    private float simulationCornerInsetPx() {
+        return Math.max(2f, ui.dp(isPhoneReaderViewport() ? 2 : 4));
+    }
+
+    private float simulationAutoStartInsetPx(float stageWidth) {
+        float height = Math.max(views.pageStage == null ? 0f : views.pageStage.getHeight(), ui.dp(320));
+        float pageWidth = isSimulationSpineBoundTurn() ? stageWidth * 0.5f : stageWidth;
+        return Math.max(simulationCornerInsetPx(), Math.min(pageWidth * 0.28f, height / 10f));
+    }
+
+    private float resolveSimulationAutoStartY(float touchY, float stageWidth) {
+        float height = Math.max(views.pageStage == null ? 0f : views.pageStage.getHeight(), ui.dp(320));
+        float safeTouchY = Math.max(0f, Math.min(height, touchY));
+        float inset = simulationAutoStartInsetPx(stageWidth);
+        if (safeTouchY > height * 2f / 3f) {
+            return height - inset;
+        }
+        return inset;
+    }
+
     private float sanitizeStageTouchX(float value) {
         float width = Math.max(views.pageStage == null ? 0f : views.pageStage.getWidth(), 1f);
+        if (isSimulationSpineBoundTurn()) {
+            float pageWidth = width * 0.5f;
+            return Math.max(-pageWidth * 0.14f, Math.min(width + pageWidth * 0.14f, value));
+        }
         if ("simulation".equals(runtime.settingsStore.getFlipMode())) {
             return Math.max(0.1f, Math.min(width - 0.1f, value));
         }
@@ -1394,20 +1809,29 @@ public final class ReaderPagingAnimator {
 
     private float resolveSimulationTargetTouchX(int direction, boolean commit) {
         float width = Math.max(views.pageStage == null ? 0f : views.pageStage.getWidth(), ui.dp(240));
-        if (commit) {
-            return direction > 0 ? -width * 2.5f : width * 3.5f;
+        if (isSimulationSpineBoundTurn()) {
+            float pageWidth = width * 0.5f;
+            float cornerInset = simulationCornerInsetPx();
+            if (commit) {
+                return direction > 0 ? -pageWidth * 0.12f : width + pageWidth * 0.12f;
+            }
+            return direction > 0 ? width - cornerInset : cornerInset;
         }
-        return direction > 0 ? width * 1.5f : -width * 0.5f;
+        if (commit) {
+            return direction > 0 ? -width * 1.12f : width * 2.12f;
+        }
+        float cornerInset = simulationCornerInsetPx();
+        return direction > 0 ? width - cornerInset : cornerInset;
     }
 
     private float resolveSimulationTargetTouchY(int direction) {
         float height = Math.max(views.pageStage == null ? 0f : views.pageStage.getHeight(), ui.dp(320));
         if (state.interactiveStartY < height / 3f) {
-            return height * 1.5f;
+            return 0.1f;
         } else if (state.interactiveStartY > height * 2f / 3f) {
-            return -height * 0.5f;
+            return height - 0.1f;
         } else {
-            return state.interactiveStartY;
+            return 0.1f;
         }
     }
 
@@ -1420,6 +1844,60 @@ public final class ReaderPagingAnimator {
         return "simulation".equals(runtime.settingsStore.getFlipMode());
     }
 
+    private boolean isSimulationSpineBoundTurn() {
+        return isSimulationOuterPageTurnActive()
+                && views.pageStage != null
+                && views.pageStage.getWidth() > 0;
+    }
+
+    private boolean isSimulationOuterPageTurnActive() {
+        return isSimulationFlipMode()
+                && content != null
+                && content.isDoublePageActive()
+                && "outerPage".equals(runtime.settingsStore.getSimulationDoublePageTurnMode());
+    }
+
+    private int simulationTurnMode() {
+        if (!isSimulationFlipMode() || content == null || !content.isDoublePageActive()) {
+            return SimulationPageTurnView.TURN_MODE_SINGLE;
+        }
+        return "outerPage".equals(runtime.settingsStore.getSimulationDoublePageTurnMode())
+                ? SimulationPageTurnView.TURN_MODE_OUTER_PAGE
+                : SimulationPageTurnView.TURN_MODE_SPREAD;
+    }
+
+    private float interactiveProgressWidth() {
+        float width = Math.max(views.pageStage == null ? 0f : views.pageStage.getWidth(), ui.dp(240));
+        return width;
+    }
+
+    private float sanitizeSimulationSpineBoundTouchX(float touchX) {
+        float width = Math.max(views.pageStage == null ? 0f : views.pageStage.getWidth(), ui.dp(240));
+        float pageWidth = width * 0.5f;
+        float minX = state.interactiveDirection > 0 ? -pageWidth * 0.14f : 0.1f;
+        float maxX = state.interactiveDirection > 0 ? width - 0.1f : width + pageWidth * 0.14f;
+        if (maxX < minX) {
+            return touchX;
+        }
+        return Math.max(minX, Math.min(maxX, touchX));
+    }
+
+    private boolean isPhoneReaderViewport() {
+        return ReaderDisplayModeHelper.isPhoneViewport(
+                activity,
+                views.pageStage == null ? 0 : views.pageStage.getWidth(),
+                views.pageStage == null ? 0 : views.pageStage.getHeight()
+        );
+    }
+
+    private boolean isTabletReaderViewport() {
+        return ReaderDisplayModeHelper.isTabletViewport(
+                activity,
+                views.pageStage == null ? 0 : views.pageStage.getWidth(),
+                views.pageStage == null ? 0 : views.pageStage.getHeight()
+        );
+    }
+
     private void resetInteractiveTouchState() {
         state.interactiveStartX = 0f;
         state.interactiveStartY = 0f;
@@ -1429,6 +1907,14 @@ public final class ReaderPagingAnimator {
 
     private float lerp(float start, float end, float fraction) {
         return start + (end - start) * fraction;
+    }
+
+    private float normalizedAnimationValue(float value, float start, float end) {
+        float range = end - start;
+        if (Math.abs(range) < 0.0001f) {
+            return 1f;
+        }
+        return Math.max(0f, Math.min(1f, (value - start) / range));
     }
 
     private void resetShadowView() {

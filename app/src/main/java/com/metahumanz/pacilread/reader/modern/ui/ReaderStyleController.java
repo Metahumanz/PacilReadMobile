@@ -5,6 +5,8 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.view.Gravity;
@@ -82,10 +84,10 @@ public final class ReaderStyleController {
                 runtime.settingsStore.getReaderFontFamily(),
                 Math.max(600, Math.min(900, runtime.settingsStore.getReaderFontWeight() + 200))
         );
-        applyDoublePageVisibility();
         int resolvedTextColor = resolveReaderTextColor(palette);
         state.currentReaderPageColor = palette.pageColor;
         state.currentReaderTextColor = resolvedTextColor;
+        applyDoublePageVisibility();
         views.readerRoot.setBackgroundColor(palette.backgroundColor);
         chrome.applyReaderMenuPalette(palette, resolvedTextColor);
         views.pageCurrent.setBackgroundColor(android.graphics.Color.TRANSPARENT);
@@ -343,8 +345,54 @@ public final class ReaderStyleController {
         int visibility = active ? View.VISIBLE : View.GONE;
         views.pageCurrentRightPane.setVisibility(visibility);
         views.pageIncomingRightPane.setVisibility(visibility);
-        views.pageCurrentGutter.setVisibility(visibility);
-        views.pageIncomingGutter.setVisibility(visibility);
+        int gutterVisibility = active && shouldShowDoublePageGutter() ? View.VISIBLE : View.GONE;
+        views.pageCurrentGutter.setVisibility(gutterVisibility);
+        views.pageIncomingGutter.setVisibility(gutterVisibility);
+        if (views.pageBookSpineOverlay != null) {
+            boolean showOuterPageSimulationSpine = active
+                    && "simulation".equals(runtime.settingsStore.getFlipMode())
+                    && "outerPage".equals(runtime.settingsStore.getSimulationDoublePageTurnMode());
+            if (showOuterPageSimulationSpine) {
+                views.pageBookSpineOverlay.setBackground(buildAdaptiveBookSpineDrawable(state.currentReaderPageColor));
+            }
+            views.pageBookSpineOverlay.setVisibility(showOuterPageSimulationSpine ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    private boolean shouldShowDoublePageGutter() {
+        return true;
+    }
+
+    private Drawable buildAdaptiveBookSpineDrawable(int pageColor) {
+        boolean lightInk = shouldUseLightSpineInk(pageColor);
+        GradientDrawable centerLine = new GradientDrawable();
+        centerLine.setColor(spineInkColor(lightInk, lightInk ? 184 : 132));
+        return centerLine;
+    }
+
+    private boolean shouldUseLightSpineInk(int pageColor) {
+        return relativeLuminance(pageColor) < 0.45f;
+    }
+
+    private int spineInkColor(boolean lightInk, int alpha) {
+        return lightInk
+                ? Color.argb(alpha, 255, 255, 255)
+                : Color.argb(alpha, 0, 0, 0);
+    }
+
+    private float relativeLuminance(int color) {
+        return (float) (
+                0.2126 * linearizedChannel(Color.red(color))
+                        + 0.7152 * linearizedChannel(Color.green(color))
+                        + 0.0722 * linearizedChannel(Color.blue(color))
+        );
+    }
+
+    private double linearizedChannel(int value) {
+        double channel = value / 255.0;
+        return channel <= 0.03928
+                ? channel / 12.92
+                : Math.pow((channel + 0.055) / 1.055, 2.4);
     }
 
     private boolean shouldUseCustomBackground(String path) {

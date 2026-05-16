@@ -3,6 +3,7 @@ package com.metahumanz.pacilread.reader;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Matrix;
@@ -15,6 +16,10 @@ import android.util.AttributeSet;
 import android.view.View;
 
 public class SimulationPageTurnView extends View {
+    public static final int TURN_MODE_SINGLE = 0;
+    public static final int TURN_MODE_OUTER_PAGE = 1;
+    public static final int TURN_MODE_SPREAD = 2;
+
     private static final float MIN_TOUCH = 0.1f;
 
     private final Path path0 = new Path();
@@ -28,13 +33,19 @@ public class SimulationPageTurnView extends View {
     private final PointF bezierVertex2 = new PointF();
     private final PointF bezierEnd2 = new PointF();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint foldShadowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint foldHighlightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint bookSpinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Path desktopPagePath = new Path();
+    private final PointF desktopTouchPoint = new PointF();
+    private final DesktopFlipCalculation desktopFlipCalculation = new DesktopFlipCalculation();
     private final Matrix matrix = new Matrix();
     private final float[] matrixArray = new float[]{0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 1f};
     private final ColorMatrixColorFilter backColorFilter = new ColorMatrixColorFilter(
             new ColorMatrix(new float[]{
-                    1f, 0f, 0f, 0f, 0f,
-                    0f, 1f, 0f, 0f, 0f,
-                    0f, 0f, 1f, 0f, 0f,
+                    0.9f, 0f, 0f, 0f, 12f,
+                    0f, 0.9f, 0f, 0f, 12f,
+                    0f, 0f, 0.9f, 0f, 12f,
                     0f, 0f, 0f, 1f, 0f
             })
     );
@@ -45,6 +56,11 @@ public class SimulationPageTurnView extends View {
     private int cornerX = 1;
     private int cornerY = 1;
     private boolean active = false;
+    private int turnMode = TURN_MODE_SINGLE;
+    private boolean outerPageTurn = false;
+    private boolean middleZoneTurn = false;
+    private float turnPageLeft = 0f;
+    private float turnPageWidth = 0f;
     private float startX = MIN_TOUCH;
     private float startY = MIN_TOUCH;
     private float touchX = MIN_TOUCH;
@@ -64,6 +80,11 @@ public class SimulationPageTurnView extends View {
     public SimulationPageTurnView(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
         paint.setStyle(Paint.Style.FILL);
+        foldShadowPaint.setStyle(Paint.Style.STROKE);
+        foldShadowPaint.setStrokeCap(Paint.Cap.ROUND);
+        foldHighlightPaint.setStyle(Paint.Style.STROKE);
+        foldHighlightPaint.setStrokeCap(Paint.Cap.ROUND);
+        bookSpinePaint.setStyle(Paint.Style.FILL);
         setVisibility(GONE);
     }
 
@@ -75,6 +96,7 @@ public class SimulationPageTurnView extends View {
             float startY,
             float touchX,
             float touchY,
+            int turnMode,
             int pageBackgroundColor
     ) {
         if (direction == 0 || currentBitmap == null || incomingBitmap == null) {
@@ -83,12 +105,14 @@ public class SimulationPageTurnView extends View {
         }
         this.direction = direction;
         this.pageBackgroundColor = pageBackgroundColor;
+        this.turnMode = normalizeTurnMode(turnMode);
+        this.startY = ensureTouch(startY);
+        configureTurnPageBounds(this.turnMode, direction, this.startY);
         this.frontBitmap = currentBitmap;
         this.backBitmap = incomingBitmap;
-        this.startX = ensureTouch(startX);
-        this.startY = ensureTouch(startY);
+        this.startX = ensureTouch(toTurnPageX(startX));
         configureCorner();
-        updateTouchInternal(touchX, touchY);
+        updateTouchInternal(toTurnPageX(touchX), touchY);
         active = true;
         setVisibility(VISIBLE);
         invalidate();
@@ -97,6 +121,11 @@ public class SimulationPageTurnView extends View {
     public void clear() {
         active = false;
         direction = 0;
+        turnMode = TURN_MODE_SINGLE;
+        outerPageTurn = false;
+        middleZoneTurn = false;
+        turnPageLeft = 0f;
+        turnPageWidth = 0f;
         frontBitmap = null;
         backBitmap = null;
         path0.reset();
@@ -115,23 +144,48 @@ public class SimulationPageTurnView extends View {
         if (!active || frontBitmap == null || backBitmap == null || getWidth() <= 0 || getHeight() <= 0) {
             return;
         }
+        if (isTurnPageCompletionFrame()) {
+            drawCompletedTarget(canvas);
+            return;
+        }
+        if (outerPageTurn) {
+            drawOuterPageTurn(canvas);
+            return;
+        }
         calcPoints();
         buildCurrentFoldPath();
         
         // 1. Draw the area of the NEXT page that is revealed (clipping out the folded part of the current page)
-        drawNextPageArea(canvas, backBitmap);
+        drawNextPageArea(canvas, backBitmap, 0f);
         
         // 2. Draw the area of the CURRENT page that is still visible
-        drawCurrentPageArea(canvas, frontBitmap);
+        drawCurrentPageArea(canvas, frontBitmap, 0f);
         
         // 3. Draw the BACK of the turning page (the fold itself)
-        drawCurrentBackArea(canvas, direction > 0 ? frontBitmap : backBitmap);
-        
+        drawCurrentBackArea(canvas, direction > 0 ? frontBitmap : backBitmap, 0f);
+
+        // 4. Add a subtle crease/highlight so the mobile curl keeps depth on narrow screens.
+        drawFoldDepth(canvas);
+
+    }
+
+    private void drawOuterPageTurn(Canvas canvas) {
+        canvas.drawColor(pageBackgroundColor);
+        if (isTurnPageCompletionFrame()) {
+            drawCompletedTarget(canvas);
+            return;
+        }
+        drawOuterPageFixedHalf(canvas);
+        drawOuterPageActiveBaseHalf(canvas);
+        drawFixedBookSpine(canvas);
+        if (!drawOuterPageCurl(canvas) && isTurnPageCompletionFrame()) {
+            drawCompletedTarget(canvas);
+        }
     }
 
     private void configureCorner() {
         calcCornerXY(startX, startY);
-        float width = getWidth();
+        float width = activeWidth();
         float height = getHeight();
         if (direction > 0 && width / 2f > startX) {
             calcCornerXY(width - startX, startY);
@@ -141,9 +195,12 @@ public class SimulationPageTurnView extends View {
     private void updateTouchInternal(float touchX, float touchY) {
         float adjustedTouchY = touchY;
         float height = getHeight();
-        if (startY > height / 3f && startY < height * 2f / 3f) {
-            // Force horizontal turn in the middle zone by aligning touchY with the active corner
-            adjustedTouchY = startY <= height / 2f ? MIN_TOUCH : height;
+        if (middleZoneTurn) {
+            // Match desktop: middle-zone taps/drags use the corner line instead of a free vertical pull.
+            float edgeInset = outerPageTurn
+                    ? Math.max(getResources().getDisplayMetrics().density, height * 0.018f)
+                    : Math.max(1f, getResources().getDisplayMetrics().density);
+            adjustedTouchY = startY <= height / 2f ? edgeInset : height - edgeInset;
         }
         this.touchX = ensureTouch(touchX);
         this.touchY = ensureTouch(adjustedTouchY);
@@ -156,7 +213,7 @@ public class SimulationPageTurnView extends View {
         return value;
     }
 
-    private void drawCurrentBackArea(Canvas canvas, Bitmap bitmap) {
+    private void drawCurrentBackArea(Canvas canvas, Bitmap bitmap, float sourceLeft) {
         path1.reset();
         path1.moveTo(bezierVertex2.x, bezierVertex2.y);
         path1.lineTo(bezierVertex1.x, bezierVertex1.y);
@@ -189,12 +246,15 @@ public class SimulationPageTurnView extends View {
         matrix.preTranslate(-bezierControl1.x, -bezierControl1.y);
         matrix.postTranslate(bezierControl1.x, bezierControl1.y);
         canvas.drawColor(pageBackgroundColor);
+        if (outerPageTurn) {
+            matrix.preTranslate(-sourceLeft, 0f);
+        }
         canvas.drawBitmap(bitmap, matrix, paint);
         paint.setColorFilter(null);
         canvas.restore();
     }
 
-    private void drawNextPageArea(Canvas canvas, Bitmap bitmap) {
+    private void drawNextPageArea(Canvas canvas, Bitmap bitmap, float sourceLeft) {
         // Path1 is the total revealed area (from crease to corner)
         path1.reset();
         path1.moveTo(bezierStart1.x, bezierStart1.y);
@@ -205,30 +265,65 @@ public class SimulationPageTurnView extends View {
         path1.close();
 
         canvas.save();
+        clipOuterPageRect(canvas);
         // The total area that is lifted off the flat page is path0.
         // We draw the next page in this entire lifted area.
         // The folded back of the current page will be drawn ON TOP of this later, covering the fold precisely.
         canvas.clipPath(path0);
         
         canvas.drawColor(pageBackgroundColor);
-        canvas.drawBitmap(bitmap, 0f, 0f, null);
+        canvas.drawBitmap(bitmap, bitmapDrawLeft(sourceLeft), 0f, null);
         canvas.restore();
     }
 
-    private void drawCurrentPageArea(Canvas canvas, Bitmap bitmap) {
+    private void drawCurrentPageArea(Canvas canvas, Bitmap bitmap, float sourceLeft) {
         canvas.save();
+        clipOuterPageRect(canvas);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             canvas.clipOutPath(path0);
         } else {
             canvas.clipPath(path0, Region.Op.XOR);
         }
         canvas.drawColor(pageBackgroundColor);
-        canvas.drawBitmap(bitmap, 0f, 0f, null);
+        canvas.drawBitmap(bitmap, bitmapDrawLeft(sourceLeft), 0f, null);
+        canvas.restore();
+    }
+
+    private void drawFoldDepth(Canvas canvas) {
+        if (outerPageTurn || turnMode == TURN_MODE_SPREAD) {
+            return;
+        }
+        float dx = bezierStart2.x - bezierStart1.x;
+        float dy = bezierStart2.y - bezierStart1.y;
+        if (Float.isNaN(dx) || Float.isNaN(dy) || Math.hypot(dx, dy) < 1f) {
+            return;
+        }
+        float width = Math.max(getWidth(), 1);
+        float height = Math.max(getHeight(), 1);
+        float pull = clamp(Math.abs(cornerX - touchX) / width, 0f, 1f);
+        float shadowWidth = clamp(Math.min(width, height) * 0.022f, 6f, 24f);
+        int shadowAlpha = Math.round(42f + pull * 54f);
+        int highlightAlpha = Math.round(18f + pull * 34f);
+
+        canvas.save();
+        canvas.clipPath(path0);
+        foldShadowPaint.setShader(null);
+        foldShadowPaint.setStrokeWidth(shadowWidth);
+        foldShadowPaint.setColor(0xFF000000);
+        foldShadowPaint.setAlpha(shadowAlpha);
+        canvas.drawLine(bezierStart1.x, bezierStart1.y, bezierStart2.x, bezierStart2.y, foldShadowPaint);
+
+        foldHighlightPaint.setShader(null);
+        foldHighlightPaint.setStrokeWidth(Math.max(1.5f, shadowWidth * 0.28f));
+        foldHighlightPaint.setColor(0xFFFFFFFF);
+        foldHighlightPaint.setAlpha(highlightAlpha);
+        canvas.drawLine(bezierStart1.x, bezierStart1.y, bezierStart2.x, bezierStart2.y, foldHighlightPaint);
         canvas.restore();
     }
 
     private void calcCornerXY(float x, float y) {
-        cornerX = x <= getWidth() / 2f ? 0 : getWidth();
+        float width = activeWidth();
+        cornerX = Math.round(x <= width / 2f ? 0f : width);
         cornerY = y <= getHeight() / 2f ? 0 : getHeight();
     }
 
@@ -256,17 +351,18 @@ public class SimulationPageTurnView extends View {
         bezierStart1.x = bezierControl1.x - (cornerX - bezierControl1.x) / 2f;
         bezierStart1.y = cornerY;
 
-        if (localTouchX > 0 && localTouchX < getWidth()) {
-            if (bezierStart1.x < 0 || bezierStart1.x > getWidth()) {
+        float width = activeWidth();
+        if (localTouchX > 0 && localTouchX < width) {
+            if (bezierStart1.x < 0 || bezierStart1.x > width) {
                 if (bezierStart1.x < 0) {
-                    bezierStart1.x = getWidth() - bezierStart1.x;
+                    bezierStart1.x = width - bezierStart1.x;
                 }
 
                 float f1 = Math.abs(cornerX - localTouchX);
                 if (f1 <= 0f) {
                     f1 = 1f;
                 }
-                float f2 = getWidth() * f1 / safeDivisor(bezierStart1.x);
+                float f2 = width * f1 / safeDivisor(bezierStart1.x);
                 localTouchX = Math.abs(cornerX - f2);
                 float f3 = Math.abs(cornerX - localTouchX) * Math.abs(cornerY - localTouchY) / f1;
                 localTouchY = Math.abs(cornerY - f3);
@@ -301,6 +397,566 @@ public class SimulationPageTurnView extends View {
             return 0.1f;
         }
         return value;
+    }
+
+    private float clamp(float value, float min, float max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private void configureTurnPageBounds(int turnMode, int direction, float gestureStartY) {
+        float width = getWidth();
+        outerPageTurn = turnMode == TURN_MODE_OUTER_PAGE && width > 0f;
+        middleZoneTurn = gestureStartY > getHeight() / 3f && gestureStartY < getHeight() * 2f / 3f;
+        if (!outerPageTurn) {
+            turnPageLeft = 0f;
+            turnPageWidth = width;
+            return;
+        }
+        turnPageWidth = width * 0.5f;
+        turnPageLeft = direction > 0 ? turnPageWidth : 0f;
+    }
+
+    private float activeWidth() {
+        if (outerPageTurn && turnPageWidth > 0f) {
+            return turnPageWidth;
+        }
+        return Math.max(getWidth(), 1);
+    }
+
+    private float toTurnPageX(float x) {
+        return outerPageTurn ? x - turnPageLeft : x;
+    }
+
+    private float bitmapDrawLeft(float sourceLeft) {
+        return outerPageTurn ? -sourceLeft : 0f;
+    }
+
+    private void drawFixedBookSpine(Canvas canvas) {
+        if (turnMode != TURN_MODE_OUTER_PAGE || getWidth() <= 0 || getHeight() <= 0) {
+            return;
+        }
+        drawAdaptiveBookSpineLine(canvas);
+    }
+
+    private void drawOuterPageFixedHalf(Canvas canvas) {
+        if (!outerPageTurn || turnPageWidth <= 0f) {
+            canvas.drawBitmap(frontBitmap, 0f, 0f, null);
+            return;
+        }
+        canvas.save();
+        if (direction > 0) {
+            canvas.clipRect(0f, 0f, turnPageWidth, getHeight());
+        } else {
+            canvas.clipRect(turnPageWidth, 0f, getWidth(), getHeight());
+        }
+        canvas.drawBitmap(frontBitmap, 0f, 0f, null);
+        canvas.restore();
+    }
+
+    private void drawOuterPageBottomHalf(Canvas canvas) {
+        if (!outerPageTurn || turnPageWidth <= 0f) {
+            return;
+        }
+        canvas.save();
+        if (direction > 0) {
+            canvas.clipRect(turnPageWidth, 0f, getWidth(), getHeight());
+            canvas.drawBitmap(backBitmap, -turnPageWidth, 0f, null);
+        } else {
+            canvas.clipRect(0f, 0f, turnPageWidth, getHeight());
+            canvas.drawBitmap(backBitmap, 0f, 0f, null);
+        }
+        canvas.restore();
+    }
+
+    private void drawOuterPageActiveBaseHalf(Canvas canvas) {
+        if (!outerPageTurn || turnPageWidth <= 0f) {
+            return;
+        }
+        canvas.save();
+        if (direction > 0) {
+            canvas.clipRect(turnPageWidth, 0f, getWidth(), getHeight());
+        } else {
+            canvas.clipRect(0f, 0f, turnPageWidth, getHeight());
+        }
+        canvas.drawBitmap(frontBitmap, 0f, 0f, null);
+        canvas.restore();
+    }
+
+    private boolean drawOuterPageCurl(Canvas canvas) {
+        if (!outerPageTurn || turnPageWidth <= 0f || frontBitmap == null || backBitmap == null) {
+            return false;
+        }
+        int desktopDirection = direction > 0 ? DesktopFlipCalculation.DIRECTION_NEXT : DesktopFlipCalculation.DIRECTION_PREV;
+        boolean topCorner = cornerY <= getHeight() / 2f;
+        desktopFlipCalculation.configure(
+                desktopDirection,
+                topCorner,
+                turnPageWidth,
+                getHeight()
+        );
+        setOuterDesktopTouchPoint(desktopDirection);
+        if (!desktopFlipCalculation.calc(desktopTouchPoint)) {
+            return false;
+        }
+        paint.setFilterBitmap(true);
+        paint.setDither(true);
+        boolean drewBottom = drawDesktopPage(
+                canvas,
+                backBitmap,
+                desktopDirection == DesktopFlipCalculation.DIRECTION_NEXT ? turnPageWidth : 0f,
+                desktopFlipCalculation.getBottomClipArea(),
+                desktopFlipCalculation.getBottomPagePosition(),
+                0f,
+                desktopDirection,
+                null
+        );
+        boolean drewFlip = drawDesktopPage(
+                canvas,
+                backBitmap,
+                desktopDirection == DesktopFlipCalculation.DIRECTION_NEXT ? 0f : turnPageWidth,
+                desktopFlipCalculation.getFlippingClipArea(),
+                desktopFlipCalculation.getActiveCorner(),
+                desktopFlipCalculation.getAngle(),
+                desktopDirection,
+                backColorFilter
+        );
+        paint.setColorFilter(null);
+        return drewBottom || drewFlip;
+    }
+
+    private void setOuterDesktopTouchPoint(int desktopDirection) {
+        if (desktopDirection == DesktopFlipCalculation.DIRECTION_NEXT) {
+            desktopTouchPoint.set(touchX, touchY);
+            return;
+        }
+        desktopTouchPoint.set(turnPageWidth - touchX, touchY);
+    }
+
+    private boolean drawDesktopPage(
+            Canvas canvas,
+            Bitmap bitmap,
+            float sourceLeft,
+            PointF[] area,
+            PointF position,
+            float angle,
+            int desktopDirection,
+            ColorMatrixColorFilter colorFilter
+    ) {
+        if (bitmap == null || area == null || position == null) {
+            return false;
+        }
+        float globalPositionX = outerDesktopToGlobalX(position.x, desktopDirection);
+        float globalPositionY = position.y;
+        desktopPagePath.reset();
+        boolean hasPoint = false;
+        float cos = (float) Math.cos(angle);
+        float sin = (float) Math.sin(angle);
+        for (PointF point : area) {
+            if (point == null) {
+                continue;
+            }
+            float localX = desktopDirection == DesktopFlipCalculation.DIRECTION_PREV
+                    ? -point.x + position.x
+                    : point.x - position.x;
+            float localY = point.y - position.y;
+            float clipX = localX * cos + localY * sin;
+            float clipY = localY * cos - localX * sin;
+            if (hasPoint) {
+                desktopPagePath.lineTo(clipX, clipY);
+            } else {
+                desktopPagePath.moveTo(clipX, clipY);
+                hasPoint = true;
+            }
+        }
+        if (!hasPoint) {
+            return false;
+        }
+        desktopPagePath.close();
+
+        canvas.save();
+        canvas.translate(globalPositionX, globalPositionY);
+        canvas.rotate((float) Math.toDegrees(angle));
+        canvas.clipPath(desktopPagePath);
+        canvas.drawColor(pageBackgroundColor);
+        paint.setColorFilter(colorFilter);
+        canvas.drawBitmap(bitmap, -sourceLeft, 0f, paint);
+        paint.setColorFilter(null);
+        canvas.restore();
+        return true;
+    }
+
+    private boolean isTurnPageCompletionFrame() {
+        float width = activeWidth();
+        if (direction == 0 || width <= 0f) {
+            return false;
+        }
+        return direction > 0
+                ? touchX <= -width * 1.10f
+                : touchX >= width * 2.10f;
+    }
+
+    private void drawCompletedTarget(Canvas canvas) {
+        canvas.drawColor(pageBackgroundColor);
+        if (backBitmap != null) {
+            canvas.drawBitmap(backBitmap, 0f, 0f, null);
+        }
+        if (outerPageTurn) {
+            drawFixedBookSpine(canvas);
+        }
+    }
+
+    private float outerDesktopToGlobalX(float x, int desktopDirection) {
+        if (desktopDirection == DesktopFlipCalculation.DIRECTION_NEXT) {
+            return x + turnPageWidth;
+        }
+        return turnPageWidth - x;
+    }
+
+    private void clipOuterPageRect(Canvas canvas) {
+        if (!outerPageTurn || turnPageWidth <= 0f) {
+            return;
+        }
+        canvas.clipRect(0f, 0f, turnPageWidth, getHeight());
+    }
+
+    private void drawAdaptiveBookSpineLine(Canvas canvas) {
+        float centerX = getWidth() * 0.5f;
+        float height = getHeight();
+        bookSpinePaint.setShader(null);
+        bookSpinePaint.setColor(spineInkColor(lightSpineInk() ? 184 : 132));
+        float spineWidth = Math.max(1f, getResources().getDisplayMetrics().density);
+        canvas.drawRect(centerX - spineWidth / 2f, 0f, centerX + spineWidth / 2f, height, bookSpinePaint);
+    }
+
+    private boolean lightSpineInk() {
+        return relativeLuminance(pageBackgroundColor) < 0.45f;
+    }
+
+    private int spineInkColor(int alpha) {
+        return lightSpineInk()
+                ? Color.argb(alpha, 255, 255, 255)
+                : Color.argb(alpha, 0, 0, 0);
+    }
+
+    private float relativeLuminance(int color) {
+        return (float) (
+                0.2126 * linearizedChannel(Color.red(color))
+                        + 0.7152 * linearizedChannel(Color.green(color))
+                        + 0.0722 * linearizedChannel(Color.blue(color))
+        );
+    }
+
+    private double linearizedChannel(int value) {
+        double channel = value / 255.0;
+        return channel <= 0.03928
+                ? channel / 12.92
+                : Math.pow((channel + 0.055) / 1.055, 2.4);
+    }
+
+    private int normalizeTurnMode(int mode) {
+        if (mode == TURN_MODE_OUTER_PAGE || mode == TURN_MODE_SPREAD) {
+            return mode;
+        }
+        return TURN_MODE_SINGLE;
+    }
+
+    private static final class DesktopFlipCalculation {
+        static final int DIRECTION_NEXT = 0;
+        static final int DIRECTION_PREV = 1;
+
+        private int direction = DIRECTION_NEXT;
+        private boolean topCorner = true;
+        private float pageWidth = 1f;
+        private float pageHeight = 1f;
+        private final PageRect rect = new PageRect();
+        private float angle = 0f;
+        private final PointF position = new PointF();
+        private final PointF safeTouch = new PointF();
+        private final PointF firstCenter = new PointF();
+        private final PointF secondCenter = new PointF();
+        private final PointF pageTopLeft = new PointF();
+        private final PointF pageTopRight = new PointF();
+        private final PointF pageBottomLeft = new PointF();
+        private final PointF pageBottomRight = new PointF();
+        private final PointF bottomPagePosition = new PointF();
+        private final PointF[] flippingArea = new PointF[]{null, null, null, null, null};
+        private final PointF[] bottomArea = new PointF[]{null, null, null, null, null, null};
+        private PointF topIntersectPoint;
+        private PointF sideIntersectPoint;
+        private PointF bottomIntersectPoint;
+
+        void configure(int direction, boolean topCorner, float pageWidth, float pageHeight) {
+            this.direction = direction;
+            this.topCorner = topCorner;
+            this.pageWidth = Math.max(1f, pageWidth);
+            this.pageHeight = Math.max(1f, pageHeight);
+            pageTopLeft.set(0f, 0f);
+            pageTopRight.set(this.pageWidth, 0f);
+            pageBottomLeft.set(0f, this.pageHeight);
+            pageBottomRight.set(this.pageWidth, this.pageHeight);
+        }
+
+        boolean calc(PointF touch) {
+            try {
+                position.set(calcAngleAndPosition(touch));
+                calculateIntersectPoint(position);
+                return true;
+            } catch (RuntimeException ignored) {
+                return false;
+            }
+        }
+
+        PointF[] getFlippingClipArea() {
+            boolean includeBottomLeft = false;
+            clearArea(flippingArea);
+            int index = 0;
+            flippingArea[index++] = rect.topLeft;
+            flippingArea[index++] = topIntersectPoint;
+            if (sideIntersectPoint == null) {
+                includeBottomLeft = true;
+            } else {
+                flippingArea[index++] = sideIntersectPoint;
+                if (bottomIntersectPoint == null) {
+                    includeBottomLeft = false;
+                }
+            }
+            flippingArea[index++] = bottomIntersectPoint;
+            if (includeBottomLeft || !topCorner) {
+                flippingArea[index] = rect.bottomLeft;
+            }
+            return flippingArea;
+        }
+
+        PointF[] getBottomClipArea() {
+            clearArea(bottomArea);
+            int index = 0;
+            bottomArea[index++] = topIntersectPoint;
+            if (topCorner) {
+                bottomArea[index++] = pageTopRight;
+            } else {
+                if (topIntersectPoint != null) {
+                    bottomArea[index++] = pageTopRight;
+                }
+                bottomArea[index++] = pageBottomRight;
+            }
+            if (sideIntersectPoint != null) {
+                if (distance(sideIntersectPoint, topIntersectPoint) >= 10f) {
+                    bottomArea[index++] = sideIntersectPoint;
+                }
+            } else if (topCorner) {
+                bottomArea[index++] = pageBottomRight;
+            }
+            bottomArea[index++] = bottomIntersectPoint;
+            bottomArea[index] = topIntersectPoint;
+            return bottomArea;
+        }
+
+        float getAngle() {
+            return direction == DIRECTION_NEXT ? -angle : angle;
+        }
+
+        PointF getActiveCorner() {
+            return direction == DIRECTION_NEXT ? rect.topLeft : rect.topRight;
+        }
+
+        PointF getBottomPagePosition() {
+            bottomPagePosition.set(direction == DIRECTION_PREV ? pageWidth : 0f, 0f);
+            return bottomPagePosition;
+        }
+
+        private PointF calcAngleAndPosition(PointF touch) {
+            safeTouch.set(touch);
+            updateAngleAndGeometry(safeTouch);
+            if (topCorner) {
+                firstCenter.set(0f, 0f);
+                secondCenter.set(0f, pageHeight);
+            } else {
+                firstCenter.set(0f, pageHeight);
+                secondCenter.set(0f, 0f);
+            }
+            PointF result = checkPositionAtCenterLine(safeTouch, firstCenter, secondCenter);
+            safeTouch.set(result);
+            if (Math.abs(safeTouch.x - pageWidth) < 1f && Math.abs(safeTouch.y) < 1f) {
+                throw new IllegalStateException("Point is too small");
+            }
+            return safeTouch;
+        }
+
+        private void updateAngleAndGeometry(PointF point) {
+            angle = calculateAngle(point);
+            updatePageRect(point);
+        }
+
+        private float calculateAngle(PointF point) {
+            float x = pageWidth - point.x + 1f;
+            float y = topCorner ? point.y : pageHeight - point.y;
+            float radius = (float) Math.hypot(y, x);
+            if (radius <= 0f) {
+                throw new IllegalStateException("Invalid point");
+            }
+            float value = Math.max(-1f, Math.min(1f, x / radius));
+            float result = (float) (2f * Math.acos(value));
+            if (y < 0f) {
+                result = -result;
+            }
+            float foldedAngle = (float) Math.PI - result;
+            if (!Float.isFinite(result) || (foldedAngle >= 0f && foldedAngle < 0.003f)) {
+                throw new IllegalStateException("The G point is too small");
+            }
+            return topCorner ? result : -result;
+        }
+
+        private void updatePageRect(PointF point) {
+            if (topCorner) {
+                setRotatedPoint(rect.topLeft, 0f, 0f, point);
+                setRotatedPoint(rect.topRight, pageWidth, 0f, point);
+                setRotatedPoint(rect.bottomLeft, 0f, pageHeight, point);
+                setRotatedPoint(rect.bottomRight, pageWidth, pageHeight, point);
+            } else {
+                setRotatedPoint(rect.topLeft, 0f, -pageHeight, point);
+                setRotatedPoint(rect.topRight, pageWidth, -pageHeight, point);
+                setRotatedPoint(rect.bottomLeft, 0f, 0f, point);
+                setRotatedPoint(rect.bottomRight, pageWidth, 0f, point);
+            }
+        }
+
+        private void setRotatedPoint(PointF target, float x, float y, PointF origin) {
+            float cos = (float) Math.cos(angle);
+            float sin = (float) Math.sin(angle);
+            target.set(
+                    x * cos + y * sin + origin.x,
+                    y * cos - x * sin + origin.y
+            );
+        }
+
+        private void calculateIntersectPoint(PointF point) {
+            if (topCorner) {
+                topIntersectPoint = getIntersectBetweenTwoSegment(
+                        point,
+                        rect.topRight,
+                        pageTopLeft,
+                        pageTopRight
+                );
+                sideIntersectPoint = getIntersectBetweenTwoSegment(
+                        point,
+                        rect.bottomLeft,
+                        pageTopRight,
+                        pageBottomRight
+                );
+                bottomIntersectPoint = getIntersectBetweenTwoSegment(
+                        rect.bottomLeft,
+                        rect.bottomRight,
+                        pageBottomLeft,
+                        pageBottomRight
+                );
+            } else {
+                topIntersectPoint = getIntersectBetweenTwoSegment(
+                        rect.topLeft,
+                        rect.topRight,
+                        pageTopLeft,
+                        pageTopRight
+                );
+                sideIntersectPoint = getIntersectBetweenTwoSegment(
+                        point,
+                        rect.topLeft,
+                        pageTopRight,
+                        pageBottomRight
+                );
+                bottomIntersectPoint = getIntersectBetweenTwoSegment(
+                        rect.bottomLeft,
+                        rect.bottomRight,
+                        pageBottomLeft,
+                        pageBottomRight
+                );
+            }
+        }
+
+        private PointF checkPositionAtCenterLine(PointF point, PointF firstCenter, PointF secondCenter) {
+            PointF safePoint = point;
+            PointF limited = limitPointToCircle(firstCenter, pageWidth, safePoint);
+            if (!samePoint(limited, safePoint)) {
+                safePoint = limited;
+                updateAngleAndGeometry(safePoint);
+            }
+            float diagonal = (float) Math.hypot(pageWidth, pageHeight);
+            PointF outerCorner = topCorner ? rect.bottomRight : rect.topRight;
+            PointF innerCorner = topCorner ? rect.topLeft : rect.bottomLeft;
+            if (outerCorner.x <= 0f) {
+                limited = limitPointToCircle(secondCenter, diagonal, innerCorner);
+                if (!samePoint(limited, safePoint)) {
+                    safePoint = limited;
+                    updateAngleAndGeometry(safePoint);
+                }
+            }
+            return safePoint;
+        }
+
+        private PointF getIntersectBetweenTwoSegment(PointF line1Start, PointF line1End, PointF line2Start, PointF line2End) {
+            PointF intersect = getIntersectBetweenTwoLine(line1Start, line1End, line2Start, line2End);
+            if (intersect == null) {
+                return null;
+            }
+            return pointInCalculationRect(intersect) ? intersect : null;
+        }
+
+        private PointF getIntersectBetweenTwoLine(PointF p1, PointF p2, PointF p3, PointF p4) {
+            float a1 = p1.y - p2.y;
+            float a2 = p3.y - p4.y;
+            float b1 = p2.x - p1.x;
+            float b2 = p4.x - p3.x;
+            float c1 = p1.x * p2.y - p2.x * p1.y;
+            float c2 = p3.x * p4.y - p4.x * p3.y;
+            float denominator = a1 * b2 - a2 * b1;
+            if (Math.abs(denominator) < 0.0001f) {
+                return null;
+            }
+            return new PointF(
+                    -(c1 * b2 - c2 * b1) / denominator,
+                    -(a1 * c2 - a2 * c1) / denominator
+            );
+        }
+
+        private boolean pointInCalculationRect(PointF point) {
+            return point.x >= -1f
+                    && point.x <= pageWidth + 1f
+                    && point.y >= -1f
+                    && point.y <= pageHeight + 1f;
+        }
+
+        private PointF limitPointToCircle(PointF center, float radius, PointF point) {
+            float dx = point.x - center.x;
+            float dy = point.y - center.y;
+            float distance = (float) Math.hypot(dx, dy);
+            if (distance <= radius || distance <= 0.0001f) {
+                return point;
+            }
+            float scale = radius / distance;
+            return new PointF(center.x + dx * scale, center.y + dy * scale);
+        }
+
+        private boolean samePoint(PointF a, PointF b) {
+            return Math.abs(a.x - b.x) < 0.001f && Math.abs(a.y - b.y) < 0.001f;
+        }
+
+        private float distance(PointF a, PointF b) {
+            if (a == null || b == null) {
+                return Float.POSITIVE_INFINITY;
+            }
+            return (float) Math.hypot(a.x - b.x, a.y - b.y);
+        }
+
+        private void clearArea(PointF[] area) {
+            for (int i = 0; i < area.length; i++) {
+                area[i] = null;
+            }
+        }
+    }
+
+    private static final class PageRect {
+        final PointF topLeft = new PointF();
+        final PointF topRight = new PointF();
+        final PointF bottomLeft = new PointF();
+        final PointF bottomRight = new PointF();
     }
 
     private PointF getCross(PointF p1, PointF p2, PointF p3, PointF p4) {
