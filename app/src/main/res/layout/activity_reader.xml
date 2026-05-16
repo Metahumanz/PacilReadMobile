@@ -184,6 +184,15 @@
             </LinearLayout>
         </LinearLayout>
 
+        <View
+            android:id="@+id/page_book_spine_overlay"
+            android:layout_width="1dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="center_horizontal"
+            android:background="@drawable/bg_reader_book_spine"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
+
         <ImageView
             android:id="@+id/page_snapshot_current"
             android:layout_width="match_parent"

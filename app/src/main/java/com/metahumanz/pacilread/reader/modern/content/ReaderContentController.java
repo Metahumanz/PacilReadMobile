@@ -742,10 +742,7 @@ public final class ReaderContentController {
                         - views.pageCurrent.getPaddingLeft()
                         - views.pageCurrent.getPaddingRight());
                 if (isDoublePageActive()) {
-                    int gutterWidth = views.pageCurrentGutter == null
-                            ? ui.dp(22)
-                            : Math.max(views.pageCurrentGutter.getWidth(), ui.dp(22));
-                    return Math.max(0, (contentWidth - gutterWidth) / 2);
+                    return Math.max(0, (contentWidth - doublePageGutterWidth()) / 2);
                 }
                 return contentWidth;
             }
@@ -1978,9 +1975,12 @@ public final class ReaderContentController {
             return false;
         }
         boolean doublePageActive = isDoublePageActive();
-        int expectedVisibility = doublePageActive ? View.VISIBLE : View.GONE;
-        if (!hasVisibility(views.pageCurrentRightPane, expectedVisibility)
-                || !hasVisibility(views.pageCurrentGutter, expectedVisibility)) {
+        int expectedRightVisibility = doublePageActive ? View.VISIBLE : View.GONE;
+        int expectedGutterVisibility = doublePageActive && shouldShowDoublePageGutter()
+                ? View.VISIBLE
+                : View.GONE;
+        if (!hasVisibility(views.pageCurrentRightPane, expectedRightVisibility)
+                || !hasVisibility(views.pageCurrentGutter, expectedGutterVisibility)) {
             return false;
         }
         if (!doublePageActive) {
@@ -1991,11 +1991,22 @@ public final class ReaderContentController {
                 && Math.abs(views.pageBodyCurrentRight.getHeight() - availableHeight) > tolerance) {
             return false;
         }
-        int gutterWidth = views.pageCurrentGutter == null
-                ? ui.dp(22)
-                : Math.max(views.pageCurrentGutter.getWidth(), ui.dp(22));
-        int expectedPaneWidth = Math.max(0, (contentWidth - gutterWidth) / 2);
+        int expectedPaneWidth = Math.max(0, (contentWidth - doublePageGutterWidth()) / 2);
         return Math.abs(bodyWidth - expectedPaneWidth) <= tolerance;
+    }
+
+    public boolean shouldShowDoublePageGutter() {
+        return true;
+    }
+
+    private int doublePageGutterWidth() {
+        if (!shouldShowDoublePageGutter()) {
+            return 0;
+        }
+        if (views.pageCurrentGutter == null) {
+            return ui.dp(22);
+        }
+        return Math.max(views.pageCurrentGutter.getWidth(), ui.dp(22));
     }
 
     private boolean hasVisibility(View view, int visibility) {

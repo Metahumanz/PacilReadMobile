@@ -9,6 +9,7 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -75,10 +76,13 @@ public final class ReaderOptionsDialogController {
         refs.flipSpeedSpinner.setSelection(ReaderOptionCatalog.indexOf(speedKeys, runtime.settingsStore.getFlipSpeed(), 1), false);
 
         final String[] sliderMode = new String[]{runtime.settingsStore.getReaderSliderMode()};
+        final String[] simulationTurnMode = new String[]{runtime.settingsStore.getSimulationDoublePageTurnMode()};
         AlertDialog dialog = new AlertDialog.Builder(activity).setView(contentView).create();
         dialogSupport.addAlignedCloseButton(contentView, R.id.options_title, refs.contentContainer, dialog);
         chrome.styleThemeButton(refs.sliderBookButton, "book".equals(sliderMode[0]));
         chrome.styleThemeButton(refs.sliderChapterButton, "chapter".equals(sliderMode[0]));
+        applySimulationDoublePageTurnModeButtons(refs, simulationTurnMode[0]);
+        updateSimulationDoublePageTurnModeVisibility(refs);
 
         ArrayAdapter<String> hudAdapter = dialogSupport.buildSpinnerAdapter(
                 new String[]{"无", "书名", "章节名", "书名 / 章节名", "现在时间", "系统电量", "本章页数进度", "全书进度", "页数及进度", "时间及电量"}
@@ -112,10 +116,12 @@ public final class ReaderOptionsDialogController {
             boolean chapterTitleVisibilityChanged = runtime.settingsStore.isChapterTitleVisible() != refs.showTitleCheck.isChecked();
             String previousFlipMode = runtime.settingsStore.getFlipMode();
             String previousFlipSpeed = runtime.settingsStore.getFlipSpeed();
+            String previousSimulationTurnMode = runtime.settingsStore.getSimulationDoublePageTurnMode();
             String nextFlipMode = ReaderOptionCatalog.FLIP_KEYS[refs.flipSpinner.getSelectedItemPosition()];
             String nextFlipSpeed = speedKeys[refs.flipSpeedSpinner.getSelectedItemPosition()];
             boolean flipSettingsChanged = !previousFlipMode.equals(nextFlipMode)
-                    || !previousFlipSpeed.equals(nextFlipSpeed);
+                    || !previousFlipSpeed.equals(nextFlipSpeed)
+                    || !previousSimulationTurnMode.equals(simulationTurnMode[0]);
             if (state.book != null) {
                 state.book.title = finalTitle;
                 state.book.author = finalAuthor;
@@ -123,6 +129,7 @@ public final class ReaderOptionsDialogController {
             }
             runtime.settingsStore.setFlipMode(nextFlipMode);
             runtime.settingsStore.setFlipSpeed(nextFlipSpeed);
+            runtime.settingsStore.setSimulationDoublePageTurnMode(simulationTurnMode[0]);
             runtime.settingsStore.setReaderSliderMode(sliderMode[0]);
             runtime.settingsStore.setChapterTitleVisible(refs.showTitleCheck.isChecked());
             runtime.settingsStore.setReaderMenuPersistentActionsEnabled(refs.persistentActionsCheck.isChecked());
@@ -137,6 +144,7 @@ public final class ReaderOptionsDialogController {
             if (chapterTitleVisibilityChanged) {
                 content.scheduleReflowAfterLayout(state.currentChapterIndex, anchorOffset);
             } else if (flipSettingsChanged) {
+                style.applyReaderSettings();
                 chrome.applyMenuLayoutMode();
                 navigation.refreshPagingPresentationAfterSettingsChange();
             } else {
@@ -191,6 +199,7 @@ public final class ReaderOptionsDialogController {
         android.widget.AdapterView.OnItemSelectedListener flipListener = new android.widget.AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                updateSimulationDoublePageTurnModeVisibility(refs);
                 autoApply.run();
             }
 
@@ -245,9 +254,36 @@ public final class ReaderOptionsDialogController {
             chrome.styleThemeButton(refs.sliderChapterButton, true);
             autoApply.run();
         });
+        refs.simulationOuterPageButton.setOnClickListener(v -> {
+            simulationTurnMode[0] = "outerPage";
+            applySimulationDoublePageTurnModeButtons(refs, simulationTurnMode[0]);
+            autoApply.run();
+        });
+        refs.simulationSpreadButton.setOnClickListener(v -> {
+            simulationTurnMode[0] = "spread";
+            applySimulationDoublePageTurnModeButtons(refs, simulationTurnMode[0]);
+            autoApply.run();
+        });
 
         dialogSupport.showImmersiveFullscreenDialog(dialog, state.controlsVisible);
         contentView.requestApplyInsets();
+    }
+
+    private void updateSimulationDoublePageTurnModeVisibility(OptionsDialogViews refs) {
+        boolean visible = content != null
+                && content.isDoublePageActive()
+                && "simulation".equals(ReaderOptionCatalog.FLIP_KEYS[refs.flipSpinner.getSelectedItemPosition()]);
+        int visibility = visible ? View.VISIBLE : View.GONE;
+        refs.simulationTurnModeLabel.setVisibility(visibility);
+        refs.simulationTurnModeLayout.setVisibility(visibility);
+    }
+
+    private void applySimulationDoublePageTurnModeButtons(OptionsDialogViews refs, String mode) {
+        boolean spread = "spread".equals(mode);
+        refs.simulationOuterPageButton.setSelected(!spread);
+        refs.simulationSpreadButton.setSelected(spread);
+        chrome.styleThemeButton(refs.simulationOuterPageButton, !spread);
+        chrome.styleThemeButton(refs.simulationSpreadButton, spread);
     }
 
     private void updateHudMarginLabels(OptionsDialogViews refs) {
@@ -263,6 +299,10 @@ public final class ReaderOptionsDialogController {
         final CheckBox persistentActionsCheck;
         final Spinner flipSpinner;
         final Spinner flipSpeedSpinner;
+        final TextView simulationTurnModeLabel;
+        final LinearLayout simulationTurnModeLayout;
+        final Button simulationOuterPageButton;
+        final Button simulationSpreadButton;
         final Button sliderBookButton;
         final Button sliderChapterButton;
         final SeekBar hudTopMarginSeek;
@@ -284,6 +324,10 @@ public final class ReaderOptionsDialogController {
             persistentActionsCheck = root.findViewById(R.id.options_check_persistent_actions);
             flipSpinner = root.findViewById(R.id.options_spinner_flip_mode);
             flipSpeedSpinner = root.findViewById(R.id.options_spinner_flip_speed);
+            simulationTurnModeLabel = root.findViewById(R.id.options_text_simulation_double_page_turn_mode_label);
+            simulationTurnModeLayout = root.findViewById(R.id.options_layout_simulation_double_page_turn_mode);
+            simulationOuterPageButton = root.findViewById(R.id.options_button_simulation_outer_page);
+            simulationSpreadButton = root.findViewById(R.id.options_button_simulation_spread);
             sliderBookButton = root.findViewById(R.id.options_button_slider_book);
             sliderChapterButton = root.findViewById(R.id.options_button_slider_chapter);
             hudTopMarginSeek = root.findViewById(R.id.options_seek_hud_top_margin);

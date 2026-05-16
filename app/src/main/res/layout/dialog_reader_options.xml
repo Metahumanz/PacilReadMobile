@@ -157,6 +157,50 @@
                 android:paddingBottom="8dp" />
         </LinearLayout>
 
+        <TextView
+            android:id="@+id/options_text_simulation_double_page_turn_mode_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="双页仿真方式"
+            android:textColor="?attr/themeColorOnSurface"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:id="@+id/options_layout_simulation_double_page_turn_mode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/options_button_simulation_outer_page"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_outline_button"
+                android:minHeight="44dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:text="外侧单页"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorOnSurface" />
+
+            <Button
+                android:id="@+id/options_button_simulation_spread"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_outline_button"
+                android:minHeight="44dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:text="整张双页"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorOnSurface" />
+        </LinearLayout>
+
         <CheckBox
             android:id="@+id/options_check_show_title"
             android:layout_width="wrap_content"

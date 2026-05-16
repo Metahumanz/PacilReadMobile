@@ -93,6 +93,7 @@ public class SettingsStore {
     private static final String KEY_READER_DOUBLE_PAGE_ENABLED = "reader_double_page_enabled";
     private static final String KEY_READER_DOUBLE_PAGE_MODE = "reader_double_page_mode";
     private static final String KEY_READER_DOUBLE_PAGE_TURN_STEP = "reader_double_page_turn_step";
+    private static final String KEY_READER_SIMULATION_DOUBLE_PAGE_TURN_MODE = "reader_simulationDoublePageTurnMode";
     private static final String KEY_READER_AUTO_NIGHT_ENABLED = "reader_auto_night_enabled";
     private static final String KEY_READER_AUTO_NIGHT_CUSTOM_POLICY = "reader_auto_night_custom_policy";
     private static final String KEY_BOOKSHELF_SHOW_ADD_ENTRY = "bookshelf_show_add_entry";
@@ -157,6 +158,7 @@ public class SettingsStore {
             KEY_READER_DOUBLE_PAGE_ENABLED,
             KEY_READER_DOUBLE_PAGE_MODE,
             KEY_READER_DOUBLE_PAGE_TURN_STEP,
+            KEY_READER_SIMULATION_DOUBLE_PAGE_TURN_MODE,
             KEY_READER_AUTO_NIGHT_ENABLED,
             KEY_READER_AUTO_NIGHT_CUSTOM_POLICY,
             KEY_BOOKSHELF_SHOW_ADD_ENTRY,
@@ -607,6 +609,19 @@ public class SettingsStore {
         preferences.edit().putString(KEY_READER_DOUBLE_PAGE_TURN_STEP, normalizeReaderDoublePageTurnStep(value)).apply();
     }
 
+    public String getSimulationDoublePageTurnMode() {
+        return normalizeSimulationDoublePageTurnMode(
+                preferences.getString(KEY_READER_SIMULATION_DOUBLE_PAGE_TURN_MODE, "outerPage")
+        );
+    }
+
+    public void setSimulationDoublePageTurnMode(String value) {
+        preferences.edit().putString(
+                KEY_READER_SIMULATION_DOUBLE_PAGE_TURN_MODE,
+                normalizeSimulationDoublePageTurnMode(value)
+        ).apply();
+    }
+
     public boolean isReaderAutoNightEnabled() {
         return preferences.getBoolean(KEY_READER_AUTO_NIGHT_ENABLED, true);
     }
@@ -1055,6 +1070,10 @@ public class SettingsStore {
 
     public static String normalizeReaderDoublePageTurnStep(String value) {
         return "one".equals(value) ? "one" : "two";
+    }
+
+    public static String normalizeSimulationDoublePageTurnMode(String value) {
+        return "spread".equals(value) ? "spread" : "outerPage";
     }
 
     public static String normalizeReaderAutoNightCustomPolicy(String value) {

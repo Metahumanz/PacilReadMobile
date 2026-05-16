@@ -322,7 +322,7 @@ public final class ReaderNavigationController {
             rightPane.setVisibility(View.VISIBLE);
         }
         if (gutter != null) {
-            gutter.setVisibility(View.VISIBLE);
+            gutter.setVisibility(shouldShowDoublePageGutter() ? View.VISIBLE : View.GONE);
         }
         bindPage(rightTitleView, rightBodyView, chapterIndex, rightPageIndex);
     }
@@ -355,7 +355,7 @@ public final class ReaderNavigationController {
             rightPane.setVisibility(View.VISIBLE);
         }
         if (gutter != null) {
-            gutter.setVisibility(View.VISIBLE);
+            gutter.setVisibility(shouldShowDoublePageGutter() ? View.VISIBLE : View.GONE);
         }
         bindPageFromPages(rightTitleView, rightBodyView, pages, rightPageIndex, complete);
     }
@@ -380,8 +380,12 @@ public final class ReaderNavigationController {
             rightPane.setVisibility(reserveSpace ? View.VISIBLE : View.GONE);
         }
         if (gutter != null) {
-            gutter.setVisibility(reserveSpace ? View.VISIBLE : View.GONE);
+            gutter.setVisibility(reserveSpace && shouldShowDoublePageGutter() ? View.VISIBLE : View.GONE);
         }
+    }
+
+    private boolean shouldShowDoublePageGutter() {
+        return content == null || content.shouldShowDoublePageGutter();
     }
 
     public int chapterIndexFromOrder(int orderIndex) {

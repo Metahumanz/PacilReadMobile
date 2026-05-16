@@ -24,6 +24,7 @@ public final class ReaderViewRefs {
     public final View pageCurrentLeftPane;
     public final View pageCurrentRightPane;
     public final View pageCurrentGutter;
+    public final View pageBookSpineOverlay;
     public final View pageIncomingLeftPane;
     public final View pageIncomingRightPane;
     public final View pageIncomingGutter;
@@ -69,6 +70,7 @@ public final class ReaderViewRefs {
         pageCurrentLeftPane = activity.findViewById(R.id.page_current_left_pane);
         pageCurrentRightPane = activity.findViewById(R.id.page_current_right_pane);
         pageCurrentGutter = activity.findViewById(R.id.page_current_gutter);
+        pageBookSpineOverlay = activity.findViewById(R.id.page_book_spine_overlay);
         pageIncomingLeftPane = activity.findViewById(R.id.page_incoming_left_pane);
         pageIncomingRightPane = activity.findViewById(R.id.page_incoming_right_pane);
         pageIncomingGutter = activity.findViewById(R.id.page_incoming_gutter);
