@@ -25,6 +25,7 @@ public final class ReaderThemeConfig {
             jsonObject.put("reader_background_path", settingsStore.getReaderBackgroundPath());
             jsonObject.put("keep_screen_on", settingsStore.isKeepScreenOn());
             jsonObject.put("flip_mode", settingsStore.getFlipMode());
+            jsonObject.put("reader_simulationDoublePageTurnMode", settingsStore.getSimulationDoublePageTurnMode());
             jsonObject.put("chapter_title_visibility", settingsStore.isChapterTitleVisible());
             jsonObject.put("auto_page_seconds", settingsStore.getAutoPageSeconds());
             jsonObject.put("tts_rate", settingsStore.getTtsRate());
@@ -52,6 +53,10 @@ public final class ReaderThemeConfig {
         settingsStore.setReaderBackgroundPath(jsonObject.optString("reader_background_path", settingsStore.getReaderBackgroundPath()));
         settingsStore.setKeepScreenOn(jsonObject.optBoolean("keep_screen_on", settingsStore.isKeepScreenOn()));
         settingsStore.setFlipMode(jsonObject.optString("flip_mode", settingsStore.getFlipMode()));
+        settingsStore.setSimulationDoublePageTurnMode(jsonObject.optString(
+                "reader_simulationDoublePageTurnMode",
+                settingsStore.getSimulationDoublePageTurnMode()
+        ));
         settingsStore.setChapterTitleVisible(jsonObject.optBoolean("chapter_title_visibility", settingsStore.isChapterTitleVisible()));
         settingsStore.setAutoPageSeconds(jsonObject.optInt("auto_page_seconds", settingsStore.getAutoPageSeconds()));
         settingsStore.setTtsRate((float) jsonObject.optDouble("tts_rate", settingsStore.getTtsRate()));
