@@ -105,7 +105,9 @@ public final class ReaderNavigationController {
             return;
         }
         bindIncomingSpread(safeChapterIndex, safePageIndex);
-        views.pageIncoming.setVisibility(View.VISIBLE);
+        views.pageIncoming.setVisibility(
+                "simulation".equals(runtime.settingsStore.getFlipMode()) ? View.GONE : View.VISIBLE
+        );
         paging.animateTransition(safeChapterIndex, safePageIndex, direction == 0 ? 1 : direction);
     }
 

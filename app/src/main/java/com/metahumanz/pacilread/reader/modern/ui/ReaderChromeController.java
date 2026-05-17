@@ -272,7 +272,10 @@ public final class ReaderChromeController {
             hideHudSlot(views.hudBottomCenter);
         }
         applyHudSlot(views.hudBottomRight, runtime.settingsStore.getHudBottomRight());
-        if (paging != null && !state.isAnimating && !state.interactivePaging) {
+        if (paging != null
+                && !state.isAnimating
+                && !state.interactivePaging
+                && !state.simulationStableCoverVisible) {
             paging.invalidatePreparedPagingSnapshots();
         }
     }
@@ -400,6 +403,9 @@ public final class ReaderChromeController {
     }
 
     public void setControlsVisible(boolean visible) {
+        if (visible && paging != null) {
+            paging.clearStableSimulationCoverForLiveView();
+        }
         if (visible) {
             state.pendingTapPagingDelta = 0;
             applyMenuLayoutMode();
