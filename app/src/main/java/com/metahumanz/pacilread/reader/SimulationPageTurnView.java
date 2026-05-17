@@ -295,34 +295,54 @@ public class SimulationPageTurnView extends View {
     }
 
     private void drawFoldDepth(Canvas canvas) {
-        if (outerPageTurn || turnMode == TURN_MODE_SPREAD) {
+        if (outerPageTurn) {
             return;
         }
-        float dx = bezierStart2.x - bezierStart1.x;
-        float dy = bezierStart2.y - bezierStart1.y;
-        if (Float.isNaN(dx) || Float.isNaN(dy) || Math.hypot(dx, dy) < 1f) {
+        if (!isFinitePoint(bezierEnd1)
+                || !isFinitePoint(bezierEnd2)
+                || !isFinitePoint(touchX, touchY)) {
             return;
         }
         float width = Math.max(getWidth(), 1);
         float height = Math.max(getHeight(), 1);
         float pull = clamp(Math.abs(cornerX - touchX) / width, 0f, 1f);
-        float shadowWidth = clamp(Math.min(width, height) * 0.022f, 6f, 24f);
-        int shadowAlpha = Math.round(42f + pull * 54f);
-        int highlightAlpha = Math.round(18f + pull * 34f);
+        float pageMin = Math.min(width, height);
+        float lipShadowWidth = clamp(pageMin * 0.026f, 7f, 28f);
+        int lipShadowAlpha = Math.round(42f + pull * 60f);
+        int lipHighlightAlpha = Math.round(16f + pull * 30f);
 
         canvas.save();
         canvas.clipPath(path0);
+        drawCurlLipDepth(canvas, lipShadowWidth, lipShadowAlpha, lipHighlightAlpha);
+        canvas.restore();
+    }
+
+    private void drawCurlLipDepth(
+            Canvas canvas,
+            float shadowWidth,
+            int shadowAlpha,
+            int highlightAlpha
+    ) {
         drawCreaseDepthGradient(
                 canvas,
-                bezierStart1.x,
-                bezierStart1.y,
-                bezierStart2.x,
-                bezierStart2.y,
+                bezierEnd1.x,
+                bezierEnd1.y,
+                touchX,
+                touchY,
                 shadowWidth,
                 shadowAlpha,
                 highlightAlpha
         );
-        canvas.restore();
+        drawCreaseDepthGradient(
+                canvas,
+                touchX,
+                touchY,
+                bezierEnd2.x,
+                bezierEnd2.y,
+                shadowWidth,
+                shadowAlpha,
+                highlightAlpha
+        );
     }
 
     private void calcCornerXY(float x, float y) {
@@ -406,6 +426,14 @@ public class SimulationPageTurnView extends View {
 
     private float clamp(float value, float min, float max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private boolean isFinitePoint(PointF point) {
+        return point != null && isFinitePoint(point.x, point.y);
+    }
+
+    private boolean isFinitePoint(float x, float y) {
+        return Float.isFinite(x) && Float.isFinite(y);
     }
 
     private void configureTurnPageBounds(int turnMode, int direction, float gestureStartY) {
