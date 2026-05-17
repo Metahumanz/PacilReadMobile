@@ -49,6 +49,7 @@ public final class ReaderSessionState {
     public boolean interactivePaging = false;
     public boolean pagingSnapshotsVisible = false;
     public boolean simulationFinishCoverVisible = false;
+    public boolean simulationStableCoverVisible = false;
     public float pagingDownX = 0f;
     public float pagingDownY = 0f;
     public float pagingLastX = 0f;
