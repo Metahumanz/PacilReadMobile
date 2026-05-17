@@ -6,11 +6,13 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
+import android.graphics.LinearGradient;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PointF;
 import android.graphics.Region;
+import android.graphics.Shader;
 import android.os.Build;
 import android.util.AttributeSet;
 import android.view.View;
@@ -106,10 +108,10 @@ public class SimulationPageTurnView extends View {
         this.direction = direction;
         this.pageBackgroundColor = pageBackgroundColor;
         this.turnMode = normalizeTurnMode(turnMode);
-        this.startY = ensureTouch(startY);
-        configureTurnPageBounds(this.turnMode, direction, this.startY);
         this.frontBitmap = currentBitmap;
         this.backBitmap = incomingBitmap;
+        this.startY = ensureTouch(startY);
+        configureTurnPageBounds(this.turnMode, direction, this.startY);
         this.startX = ensureTouch(toTurnPageX(startX));
         configureCorner();
         updateTouchInternal(toTurnPageX(touchX), touchY);
@@ -178,7 +180,10 @@ public class SimulationPageTurnView extends View {
         drawOuterPageFixedHalf(canvas);
         drawOuterPageActiveBaseHalf(canvas);
         drawFixedBookSpine(canvas);
-        if (!drawOuterPageCurl(canvas) && isTurnPageCompletionFrame()) {
+        boolean drewCurl = drawOuterPageCurl(canvas);
+        if (drewCurl) {
+            drawOuterPageFoldDepth(canvas);
+        } else if (isTurnPageCompletionFrame()) {
             drawCompletedTarget(canvas);
         }
     }
@@ -186,7 +191,7 @@ public class SimulationPageTurnView extends View {
     private void configureCorner() {
         calcCornerXY(startX, startY);
         float width = activeWidth();
-        float height = getHeight();
+        float height = stateHeight();
         if (direction > 0 && width / 2f > startX) {
             calcCornerXY(width - startX, startY);
         }
@@ -194,7 +199,7 @@ public class SimulationPageTurnView extends View {
 
     private void updateTouchInternal(float touchX, float touchY) {
         float adjustedTouchY = touchY;
-        float height = getHeight();
+        float height = stateHeight();
         if (middleZoneTurn) {
             // Match desktop: middle-zone taps/drags use the corner line instead of a free vertical pull.
             float edgeInset = outerPageTurn
@@ -307,24 +312,24 @@ public class SimulationPageTurnView extends View {
 
         canvas.save();
         canvas.clipPath(path0);
-        foldShadowPaint.setShader(null);
-        foldShadowPaint.setStrokeWidth(shadowWidth);
-        foldShadowPaint.setColor(0xFF000000);
-        foldShadowPaint.setAlpha(shadowAlpha);
-        canvas.drawLine(bezierStart1.x, bezierStart1.y, bezierStart2.x, bezierStart2.y, foldShadowPaint);
-
-        foldHighlightPaint.setShader(null);
-        foldHighlightPaint.setStrokeWidth(Math.max(1.5f, shadowWidth * 0.28f));
-        foldHighlightPaint.setColor(0xFFFFFFFF);
-        foldHighlightPaint.setAlpha(highlightAlpha);
-        canvas.drawLine(bezierStart1.x, bezierStart1.y, bezierStart2.x, bezierStart2.y, foldHighlightPaint);
+        drawCreaseDepthGradient(
+                canvas,
+                bezierStart1.x,
+                bezierStart1.y,
+                bezierStart2.x,
+                bezierStart2.y,
+                shadowWidth,
+                shadowAlpha,
+                highlightAlpha
+        );
         canvas.restore();
     }
 
     private void calcCornerXY(float x, float y) {
         float width = activeWidth();
         cornerX = Math.round(x <= width / 2f ? 0f : width);
-        cornerY = y <= getHeight() / 2f ? 0 : getHeight();
+        float height = stateHeight();
+        cornerY = y <= height / 2f ? 0 : Math.round(height);
     }
 
     private void buildCurrentFoldPath() {
@@ -404,9 +409,10 @@ public class SimulationPageTurnView extends View {
     }
 
     private void configureTurnPageBounds(int turnMode, int direction, float gestureStartY) {
-        float width = getWidth();
+        float width = stateWidth();
         outerPageTurn = turnMode == TURN_MODE_OUTER_PAGE && width > 0f;
-        middleZoneTurn = gestureStartY > getHeight() / 3f && gestureStartY < getHeight() * 2f / 3f;
+        float height = stateHeight();
+        middleZoneTurn = gestureStartY > height / 3f && gestureStartY < height * 2f / 3f;
         if (!outerPageTurn) {
             turnPageLeft = 0f;
             turnPageWidth = width;
@@ -420,7 +426,35 @@ public class SimulationPageTurnView extends View {
         if (outerPageTurn && turnPageWidth > 0f) {
             return turnPageWidth;
         }
-        return Math.max(getWidth(), 1);
+        return stateWidth();
+    }
+
+    private float stateWidth() {
+        int width = getWidth();
+        if (width > 0) {
+            return width;
+        }
+        if (frontBitmap != null && !frontBitmap.isRecycled() && frontBitmap.getWidth() > 0) {
+            return frontBitmap.getWidth();
+        }
+        if (backBitmap != null && !backBitmap.isRecycled() && backBitmap.getWidth() > 0) {
+            return backBitmap.getWidth();
+        }
+        return 1f;
+    }
+
+    private float stateHeight() {
+        int height = getHeight();
+        if (height > 0) {
+            return height;
+        }
+        if (frontBitmap != null && !frontBitmap.isRecycled() && frontBitmap.getHeight() > 0) {
+            return frontBitmap.getHeight();
+        }
+        if (backBitmap != null && !backBitmap.isRecycled() && backBitmap.getHeight() > 0) {
+            return backBitmap.getHeight();
+        }
+        return 1f;
     }
 
     private float toTurnPageX(float x) {
@@ -522,6 +556,139 @@ public class SimulationPageTurnView extends View {
         );
         paint.setColorFilter(null);
         return drewBottom || drewFlip;
+    }
+
+    private void drawOuterPageFoldDepth(Canvas canvas) {
+        PointF creaseStart = desktopFlipCalculation.getTopIntersectPoint();
+        PointF creaseEnd = desktopFlipCalculation.getBottomIntersectPoint();
+        PointF sideIntersect = desktopFlipCalculation.getSideIntersectPoint();
+        if (creaseStart == null) {
+            creaseStart = sideIntersect;
+        }
+        if (creaseStart == null || creaseEnd == null) {
+            creaseEnd = sideIntersect;
+        }
+        if (creaseStart == null || creaseEnd == null) {
+            return;
+        }
+        int desktopDirection = direction > 0
+                ? DesktopFlipCalculation.DIRECTION_NEXT
+                : DesktopFlipCalculation.DIRECTION_PREV;
+        float startX = outerDesktopToGlobalX(creaseStart.x, desktopDirection);
+        float startY = creaseStart.y;
+        float endX = outerDesktopToGlobalX(creaseEnd.x, desktopDirection);
+        float endY = creaseEnd.y;
+        if (!Float.isFinite(startX) || !Float.isFinite(startY)
+                || !Float.isFinite(endX) || !Float.isFinite(endY)
+                || Math.hypot(endX - startX, endY - startY) < 1f) {
+            return;
+        }
+
+        float pull = direction > 0
+                ? (turnPageWidth - touchX) / (turnPageWidth * 2.1f)
+                : touchX / (turnPageWidth * 2.1f);
+        pull = clamp(pull, 0f, 1f);
+        float depthWidth = clamp(Math.min(turnPageWidth, getHeight()) * 0.035f, 8f, 30f);
+        int shadowAlpha = Math.round(34f + pull * 62f);
+        int highlightAlpha = Math.round(16f + pull * 34f);
+
+        canvas.save();
+        canvas.clipRect(0f, 0f, getWidth(), getHeight());
+        drawCreaseDepthGradient(canvas, startX, startY, endX, endY, depthWidth, shadowAlpha, highlightAlpha);
+        canvas.restore();
+    }
+
+    private void drawCreaseDepthGradient(
+            Canvas canvas,
+            float startX,
+            float startY,
+            float endX,
+            float endY,
+            float shadowWidth,
+            int shadowAlpha,
+            int highlightAlpha
+    ) {
+        float dx = endX - startX;
+        float dy = endY - startY;
+        float length = (float) Math.hypot(dx, dy);
+        if (!Float.isFinite(length) || length < 1f) {
+            return;
+        }
+        float normalX = -dy / length;
+        float normalY = dx / length;
+        float safeShadowWidth = Math.max(1f, shadowWidth);
+        drawGradientStroke(
+                canvas,
+                foldShadowPaint,
+                startX,
+                startY,
+                endX,
+                endY,
+                normalX,
+                normalY,
+                safeShadowWidth,
+                new int[]{
+                        Color.argb(0, 0, 0, 0),
+                        Color.argb(shadowAlpha, 0, 0, 0),
+                        Color.argb(Math.round(shadowAlpha * 0.42f), 0, 0, 0),
+                        Color.argb(0, 0, 0, 0)
+                },
+                new float[]{0f, 0.42f, 0.62f, 1f}
+        );
+
+        float highlightWidth = Math.max(1.5f, safeShadowWidth * 0.24f);
+        float highlightOffset = safeShadowWidth * 0.18f;
+        drawGradientStroke(
+                canvas,
+                foldHighlightPaint,
+                startX + normalX * highlightOffset,
+                startY + normalY * highlightOffset,
+                endX + normalX * highlightOffset,
+                endY + normalY * highlightOffset,
+                normalX,
+                normalY,
+                highlightWidth,
+                new int[]{
+                        Color.argb(0, 255, 255, 255),
+                        Color.argb(highlightAlpha, 255, 255, 255),
+                        Color.argb(0, 255, 255, 255)
+                },
+                new float[]{0f, 0.5f, 1f}
+        );
+    }
+
+    private void drawGradientStroke(
+            Canvas canvas,
+            Paint targetPaint,
+            float startX,
+            float startY,
+            float endX,
+            float endY,
+            float normalX,
+            float normalY,
+            float strokeWidth,
+            int[] colors,
+            float[] positions
+    ) {
+        float halfWidth = Math.max(0.5f, strokeWidth * 0.5f);
+        float midX = (startX + endX) * 0.5f;
+        float midY = (startY + endY) * 0.5f;
+        Shader shader = new LinearGradient(
+                midX - normalX * halfWidth,
+                midY - normalY * halfWidth,
+                midX + normalX * halfWidth,
+                midY + normalY * halfWidth,
+                colors,
+                positions,
+                Shader.TileMode.CLAMP
+        );
+        targetPaint.setShader(shader);
+        targetPaint.setStrokeWidth(strokeWidth);
+        targetPaint.setColor(Color.WHITE);
+        targetPaint.setAlpha(255);
+        canvas.drawLine(startX, startY, endX, endY, targetPaint);
+        targetPaint.setShader(null);
+        targetPaint.setAlpha(255);
     }
 
     private void setOuterDesktopTouchPoint(int desktopDirection) {
@@ -762,6 +929,18 @@ public class SimulationPageTurnView extends View {
         PointF getBottomPagePosition() {
             bottomPagePosition.set(direction == DIRECTION_PREV ? pageWidth : 0f, 0f);
             return bottomPagePosition;
+        }
+
+        PointF getTopIntersectPoint() {
+            return topIntersectPoint;
+        }
+
+        PointF getSideIntersectPoint() {
+            return sideIntersectPoint;
+        }
+
+        PointF getBottomIntersectPoint() {
+            return bottomIntersectPoint;
         }
 
         private PointF calcAngleAndPosition(PointF touch) {
