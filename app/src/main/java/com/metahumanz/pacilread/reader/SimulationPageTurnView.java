@@ -154,6 +154,10 @@ public class SimulationPageTurnView extends View {
             drawOuterPageTurn(canvas);
             return;
         }
+        if (direction < 0) {
+            drawPreviousPageReturn(canvas);
+            return;
+        }
         calcPoints();
         buildCurrentFoldPath();
         
@@ -169,6 +173,69 @@ public class SimulationPageTurnView extends View {
         // 4. Add a subtle crease/highlight so the mobile curl keeps depth on narrow screens.
         drawFoldDepth(canvas);
 
+    }
+
+    private void drawPreviousPageReturn(Canvas canvas) {
+        float width = activeWidth();
+        if (width <= 0f) {
+            return;
+        }
+        float progress = previousReturnProgress(width);
+        if (progress <= 0.001f) {
+            canvas.drawColor(pageBackgroundColor);
+            canvas.drawBitmap(frontBitmap, 0f, 0f, null);
+            return;
+        }
+        if (progress >= 0.999f) {
+            canvas.drawColor(pageBackgroundColor);
+            canvas.drawBitmap(backBitmap, 0f, 0f, null);
+            return;
+        }
+
+        int savedDirection = direction;
+        int savedCornerX = cornerX;
+        int savedCornerY = cornerY;
+        float savedStartX = startX;
+        float savedStartY = startY;
+        float savedTouchX = touchX;
+        float savedTouchY = touchY;
+        float savedMiddleX = middleX;
+        float savedMiddleY = middleY;
+        try {
+            direction = 1;
+            startX = clamp(width - savedStartX, MIN_TOUCH, width - MIN_TOUCH);
+            startY = savedStartY;
+            touchX = lerp(-width * 1.12f, startX, progress);
+            touchY = savedStartY;
+            calcCornerXY(startX, startY);
+            calcPoints();
+            buildCurrentFoldPath();
+            drawNextPageArea(canvas, frontBitmap, 0f);
+            drawCurrentPageArea(canvas, backBitmap, 0f);
+            drawCurrentBackArea(canvas, backBitmap, 0f);
+            drawFoldDepth(canvas);
+        } finally {
+            direction = savedDirection;
+            cornerX = savedCornerX;
+            cornerY = savedCornerY;
+            startX = savedStartX;
+            startY = savedStartY;
+            touchX = savedTouchX;
+            touchY = savedTouchY;
+            middleX = savedMiddleX;
+            middleY = savedMiddleY;
+        }
+    }
+
+    private float previousReturnProgress(float width) {
+        float start = clamp(startX, MIN_TOUCH, width - MIN_TOUCH);
+        float finish = width - MIN_TOUCH;
+        float denominator = Math.max(1f, finish - start);
+        return clamp((touchX - start) / denominator, 0f, 1f);
+    }
+
+    private float lerp(float start, float end, float progress) {
+        return start + (end - start) * progress;
     }
 
     private void drawOuterPageTurn(Canvas canvas) {
