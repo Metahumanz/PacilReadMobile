@@ -1,8 +1,10 @@
 package com.metahumanz.pacilread.reader.modern.paging;
 
+import android.app.ActivityManager;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -40,6 +42,13 @@ public final class ReaderPagingAnimator {
     private static final long SNAPSHOT_WARMUP_PREDRAW_FALLBACK_MS = 96L;
     private static final float SIMULATION_FINISH_COVER_PROGRESS = 0.9995f;
     private static final float OUTER_PAGE_FINISH_COVER_PROGRESS = 0.95f;
+    private static final long SIMULATION_PRIMARY_WARMUP_DELAY_MS = 72L;
+    private static final long SIMULATION_SECONDARY_WARMUP_DELAY_MS = 180L;
+    private static final long LOW_MEMORY_MAX_HEAP_BYTES = 192L * 1024L * 1024L;
+    private static final long BALANCED_MEMORY_MAX_HEAP_BYTES = 256L * 1024L * 1024L;
+    private static final long BALANCED_VIEWPORT_PIXELS = 2_000_000L;
+    private static final long LOW_VIEWPORT_PIXELS = 3_600_000L;
+    private static final long DOUBLE_PAGE_LOW_VIEWPORT_PIXELS = 2_600_000L;
 
     private final ModernReaderActivity activity;
     private final ReaderRuntime runtime;
@@ -48,11 +57,17 @@ public final class ReaderPagingAnimator {
     private final ReaderUiUtils ui;
     private final Canvas pagingSnapshotCanvas = new Canvas();
     private final Runnable pagingSnapshotWarmupRunnable = this::warmPreparedPagingSnapshots;
+    private final Runnable simulationNextSnapshotWarmupRunnable =
+            () -> warmDeferredSimulationDirectionalSnapshot(1);
+    private final Runnable simulationPreviousSnapshotWarmupRunnable =
+            () -> warmDeferredSimulationDirectionalSnapshot(-1);
+    private final long runtimeMaxMemoryBytes = Runtime.getRuntime().maxMemory();
 
     private ReaderNavigationController navigation;
     private ReaderContentController content;
     private ReaderChromeController chrome;
     private int pagingSnapshotWarmupRequestId = 0;
+    private Boolean lowRamDevice = null;
 
     public ReaderPagingAnimator(
             ModernReaderActivity activity,
@@ -316,11 +331,12 @@ public final class ReaderPagingAnimator {
         }
         int requestId = ++pagingSnapshotWarmupRequestId;
         views.pageStage.removeCallbacks(pagingSnapshotWarmupRunnable);
+        removeSimulationWarmupCallbacks();
         if (shouldSkipPagingSnapshotWarmup()) {
             return;
         }
         views.pageStage.postOnAnimation(() ->
-                waitForPagingSnapshotWarmupPreDraw(requestId, SNAPSHOT_WARMUP_PREDRAW_PASSES)
+                waitForPagingSnapshotWarmupPreDraw(requestId, snapshotWarmupPreDrawPasses())
         );
     }
 
@@ -390,6 +406,7 @@ public final class ReaderPagingAnimator {
         state.preparedIncomingSnapshotPageIndex = -1;
         if (views.pageStage != null) {
             views.pageStage.removeCallbacks(pagingSnapshotWarmupRunnable);
+            removeSimulationWarmupCallbacks();
         }
         state.preparedNextSnapshotChapterIndex = -1;
         state.preparedNextSnapshotPageIndex = -1;
@@ -538,6 +555,7 @@ public final class ReaderPagingAnimator {
         pagingSnapshotWarmupRequestId++;
         if (views.pageStage != null) {
             views.pageStage.removeCallbacks(pagingSnapshotWarmupRunnable);
+            removeSimulationWarmupCallbacks();
         }
     }
 
@@ -1342,8 +1360,48 @@ public final class ReaderPagingAnimator {
             return;
         }
         ensurePreparedCurrentSnapshot();
+        if (isSimulationFlipMode()) {
+            scheduleSimulationDirectionalWarmup(1, SIMULATION_PRIMARY_WARMUP_DELAY_MS);
+            if (resolveSimulationRenderQuality() != SimulationPageTurnView.RENDER_QUALITY_LOW) {
+                scheduleSimulationDirectionalWarmup(-1, SIMULATION_SECONDARY_WARMUP_DELAY_MS);
+            }
+            return;
+        }
         warmDirectionalSnapshot(1);
         warmDirectionalSnapshot(-1);
+    }
+
+    private int snapshotWarmupPreDrawPasses() {
+        return isSimulationFlipMode() ? 1 : SNAPSHOT_WARMUP_PREDRAW_PASSES;
+    }
+
+    private void scheduleSimulationDirectionalWarmup(int direction, long delayMs) {
+        if (views.pageStage == null) {
+            return;
+        }
+        Runnable runnable = direction >= 0
+                ? simulationNextSnapshotWarmupRunnable
+                : simulationPreviousSnapshotWarmupRunnable;
+        views.pageStage.removeCallbacks(runnable);
+        views.pageStage.postDelayed(runnable, Math.max(0L, delayMs));
+    }
+
+    private void warmDeferredSimulationDirectionalSnapshot(int direction) {
+        if (shouldSkipPagingSnapshotWarmup() || !isSimulationFlipMode()) {
+            return;
+        }
+        if (!ensurePageAreaReady(this::schedulePagingSnapshotWarmup)) {
+            return;
+        }
+        warmDirectionalSnapshot(direction);
+    }
+
+    private void removeSimulationWarmupCallbacks() {
+        if (views.pageStage == null) {
+            return;
+        }
+        views.pageStage.removeCallbacks(simulationNextSnapshotWarmupRunnable);
+        views.pageStage.removeCallbacks(simulationPreviousSnapshotWarmupRunnable);
     }
 
     private void ensurePreparedCurrentSnapshot() {
@@ -1799,46 +1857,22 @@ public final class ReaderPagingAnimator {
             keepSimulationFinishCoverOnTop();
             return;
         }
+        if ("simulation".equals(mode)) {
+            applySimulationPagingVisuals(direction);
+            return;
+        }
         float width = Math.max(views.pageStage.getWidth(), ui.dp(240));
         float height = Math.max(views.pageStage.getHeight(), ui.dp(320));
         float safeProgress = Math.max(0f, Math.min(1f, progress));
-        float safeTouchY = Math.max(0f, Math.min(height, touchY));
-        float touchRatio = safeTouchY / height;
-        float diagonalBias = touchRatio - 0.5f;
         int widthPx = Math.max(1, Math.round(width));
         int heightPx = Math.max(1, Math.round(height));
         View currentLayer = activeCurrentPageLayer();
         View incomingLayer = activeIncomingPageLayer();
         resetAnimatedPage(currentLayer);
         resetAnimatedPage(incomingLayer);
-        if (!"simulation".equals(mode)) {
-            incomingLayer.setVisibility(View.VISIBLE);
-        }
-        if (!"simulation".equals(mode)) {
-            clearSimulationPagingLayer();
-            hideInteractiveFoldEffects();
-        }
-
-        if ("simulation".equals(mode)) {
-            resetShadowView();
-            if (views.simulationPageTurnView != null
-                    && state.currentPageSnapshotBitmap != null
-                    && state.incomingPageSnapshotBitmap != null) {
-                views.simulationPageTurnView.setPagingState(
-                        direction,
-                        state.currentPageSnapshotBitmap,
-                        state.incomingPageSnapshotBitmap,
-                        state.interactiveStartX,
-                        state.interactiveStartY,
-                        state.interactiveTouchX,
-                        state.interactiveTouchY,
-                        simulationTurnMode(),
-                        state.currentReaderPageColor
-                );
-                views.simulationPageTurnView.bringToFront();
-            }
-            return;
-        }
+        incomingLayer.setVisibility(View.VISIBLE);
+        clearSimulationPagingLayer();
+        hideInteractiveFoldEffects();
 
         if ("cover".equals(mode)) {
             float revealWidth = width * safeProgress;
@@ -1879,6 +1913,31 @@ public final class ReaderPagingAnimator {
             applyPageClip(incomingLayer, widthPx - Math.round(revealWidth), widthPx, heightPx);
             hideInteractiveShadow();
         }
+    }
+
+    private void applySimulationPagingVisuals(int direction) {
+        if (views.simulationPageTurnView == null) {
+            return;
+        }
+        if (state.currentPageSnapshotBitmap == null || state.incomingPageSnapshotBitmap == null) {
+            views.simulationPageTurnView.clear();
+            return;
+        }
+        if (!views.simulationPageTurnView.isActive()) {
+            views.simulationPageTurnView.bringToFront();
+        }
+        views.simulationPageTurnView.setRenderQuality(resolveSimulationRenderQuality());
+        views.simulationPageTurnView.setPagingState(
+                direction,
+                state.currentPageSnapshotBitmap,
+                state.incomingPageSnapshotBitmap,
+                state.interactiveStartX,
+                state.interactiveStartY,
+                state.interactiveTouchX,
+                state.interactiveTouchY,
+                simulationTurnMode(),
+                state.currentReaderPageColor
+        );
     }
 
     private void applyPageClip(View view, int left, int right, int height) {
@@ -2094,6 +2153,36 @@ public final class ReaderPagingAnimator {
                 views.pageStage == null ? 0 : views.pageStage.getWidth(),
                 views.pageStage == null ? 0 : views.pageStage.getHeight()
         );
+    }
+
+    private int resolveSimulationRenderQuality() {
+        int width = Math.max(views.pageStage == null ? 0 : views.pageStage.getWidth(), ui.dp(240));
+        int height = Math.max(views.pageStage == null ? 0 : views.pageStage.getHeight(), ui.dp(320));
+        long viewportPixels = (long) Math.max(width, 1) * Math.max(height, 1);
+        boolean doublePage = content != null && content.isDoublePageActive();
+        if (isLowMemoryDevice()
+                || viewportPixels >= LOW_VIEWPORT_PIXELS
+                || (doublePage && viewportPixels >= DOUBLE_PAGE_LOW_VIEWPORT_PIXELS)) {
+            return SimulationPageTurnView.RENDER_QUALITY_LOW;
+        }
+        if (doublePage
+                || viewportPixels >= BALANCED_VIEWPORT_PIXELS
+                || runtimeMaxMemoryBytes <= BALANCED_MEMORY_MAX_HEAP_BYTES) {
+            return SimulationPageTurnView.RENDER_QUALITY_BALANCED;
+        }
+        return SimulationPageTurnView.RENDER_QUALITY_FULL;
+    }
+
+    private boolean isLowMemoryDevice() {
+        if (runtimeMaxMemoryBytes > 0 && runtimeMaxMemoryBytes <= LOW_MEMORY_MAX_HEAP_BYTES) {
+            return true;
+        }
+        if (lowRamDevice == null) {
+            Object service = activity.getSystemService(Context.ACTIVITY_SERVICE);
+            lowRamDevice = service instanceof ActivityManager
+                    && ((ActivityManager) service).isLowRamDevice();
+        }
+        return lowRamDevice;
     }
 
     private void resetInteractiveTouchState() {
