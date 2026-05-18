@@ -63,6 +63,32 @@ if not exist "%CANDIDATE%\bin\java.exe" exit /b 1
 set "JAVA_HOME=%CANDIDATE%"
 exit /b 0
 
+:resolve_latest_file
+set "OUTPUT_PATTERN=%~1"
+set "OUTPUT_VAR=%~2"
+set "%OUTPUT_VAR%="
+for /f "delims=" %%F in ('dir /b /a-d /o-d "%OUTPUT_PATTERN%" 2^>nul') do (
+  if not defined %OUTPUT_VAR% (
+    for %%P in ("%OUTPUT_PATTERN%") do set "%OUTPUT_VAR%=%%~dpP%%F"
+  )
+)
+if not defined %OUTPUT_VAR% exit /b 1
+exit /b 0
+
+:open_explorer_for_output
+set "OPEN_TARGET=%~1"
+if not defined OPEN_TARGET exit /b 0
+if exist "%OPEN_TARGET%\" (
+  for %%P in ("%OPEN_TARGET%") do set "OPEN_TARGET_ABS=%%~fP"
+  start "" explorer.exe "!OPEN_TARGET_ABS!"
+  exit /b 0
+)
+if exist "%OPEN_TARGET%" (
+  for %%P in ("%OPEN_TARGET%") do set "OPEN_TARGET_ABS=%%~fP"
+  start "" explorer.exe /select,"!OPEN_TARGET_ABS!"
+)
+exit /b 0
+
 :ensure_sdk
 if exist "local.properties" (
   call :load_sdk_from_local_properties
@@ -158,16 +184,21 @@ set "MODE=%~1"
 if "%MODE%"=="" set "MODE=debug"
 set "INSTALL_APK="
 set "INSTALL_APK_PATTERN="
+set "OUTPUT_PATTERN="
+set "OPEN_OUTPUT="
 
 if /I "%MODE%"=="debug" (
   set "TASK=assembleDebug"
   set "OUTPUT=app\build\outputs\apk\debug\PacilRead-v*-debug.apk"
+  set "OUTPUT_PATTERN=app\build\outputs\apk\debug\PacilRead-v*-debug.apk"
 ) else if /I "%MODE%"=="release" (
   set "TASK=assembleRelease"
   set "OUTPUT=app\build\outputs\apk\release\PacilRead-v*-release.apk"
+  set "OUTPUT_PATTERN=app\build\outputs\apk\release\PacilRead-v*-release.apk"
 ) else if /I "%MODE%"=="bundle" (
   set "TASK=bundleRelease"
-  set "OUTPUT=app\build\outputs\bundle\release\"
+  set "OUTPUT=app\build\outputs\bundle\release\app-release.aab"
+  set "OUTPUT_PATTERN=app\build\outputs\bundle\release\*.aab"
 ) else if /I "%MODE%"=="install" (
   set "TASK=installDebug"
   set "OUTPUT=installed-to-device"
@@ -209,13 +240,13 @@ call .\gradlew.bat %TASK% --no-daemon --console plain
 if errorlevel 1 exit /b %errorlevel%
 
 if defined INSTALL_APK_PATTERN (
-  for /f "delims=" %%F in ('dir /b /a-d /o-d "!INSTALL_APK_PATTERN!" 2^>nul') do (
-    if not defined INSTALL_APK set "INSTALL_APK=app\build\outputs\apk\release\%%F"
-  )
+  call :resolve_latest_file "!INSTALL_APK_PATTERN!" INSTALL_APK
   if not defined INSTALL_APK (
     echo [PacilRead] Release APK not found: !INSTALL_APK_PATTERN!
     exit /b 1
   )
+  set "OUTPUT=!INSTALL_APK!"
+  set "OPEN_OUTPUT=!INSTALL_APK!"
 )
 
 if defined INSTALL_APK (
@@ -229,7 +260,16 @@ if defined INSTALL_APK (
   if errorlevel 1 exit /b %errorlevel%
 )
 
+if defined OUTPUT_PATTERN (
+  call :resolve_latest_file "!OUTPUT_PATTERN!" RESOLVED_OUTPUT
+  if not errorlevel 1 (
+    set "OUTPUT=!RESOLVED_OUTPUT!"
+    set "OPEN_OUTPUT=!RESOLVED_OUTPUT!"
+  )
+)
+
 echo.
 echo [PacilRead] Done: %TASK%
 echo [PacilRead] Output: %OUTPUT%
+if defined OPEN_OUTPUT call :open_explorer_for_output "!OPEN_OUTPUT!"
 exit /b 0
