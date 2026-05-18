@@ -150,20 +150,21 @@ if defined OFFLINE_DEVICE (
 
 echo [PacilRead] No online Android device found.
 echo [PacilRead] Connect a phone with USB debugging enabled, or install manually using:
-echo [PacilRead]   app\build\outputs\apk\debug\app-debug.apk
+echo [PacilRead]   app\build\outputs\apk\debug\PacilRead-v*-debug.apk
 exit /b 1
 
 :main
 set "MODE=%~1"
 if "%MODE%"=="" set "MODE=debug"
 set "INSTALL_APK="
+set "INSTALL_APK_PATTERN="
 
 if /I "%MODE%"=="debug" (
   set "TASK=assembleDebug"
-  set "OUTPUT=app\build\outputs\apk\debug\app-debug.apk"
+  set "OUTPUT=app\build\outputs\apk\debug\PacilRead-v*-debug.apk"
 ) else if /I "%MODE%"=="release" (
   set "TASK=assembleRelease"
-  set "OUTPUT=app\build\outputs\apk\release\"
+  set "OUTPUT=app\build\outputs\apk\release\PacilRead-v*-release.apk"
 ) else if /I "%MODE%"=="bundle" (
   set "TASK=bundleRelease"
   set "OUTPUT=app\build\outputs\bundle\release\"
@@ -172,11 +173,11 @@ if /I "%MODE%"=="debug" (
   set "OUTPUT=installed-to-device"
 ) else if /I "%MODE%"=="install-release" (
   set "TASK=assembleRelease"
-  set "INSTALL_APK=app\build\outputs\apk\release\app-release.apk"
+  set "INSTALL_APK_PATTERN=app\build\outputs\apk\release\PacilRead-v*-release.apk"
   set "OUTPUT=installed-to-device-release"
 ) else if /I "%MODE%"=="release-install" (
   set "TASK=assembleRelease"
-  set "INSTALL_APK=app\build\outputs\apk\release\app-release.apk"
+  set "INSTALL_APK_PATTERN=app\build\outputs\apk\release\PacilRead-v*-release.apk"
   set "OUTPUT=installed-to-device-release"
 ) else if /I "%MODE%"=="clean" (
   set "TASK=clean"
@@ -199,13 +200,23 @@ call :ensure_java
 if errorlevel 1 exit /b %errorlevel%
 
 if /I "%MODE%"=="install" call :preflight_install
-if defined INSTALL_APK call :preflight_install
+if defined INSTALL_APK_PATTERN call :preflight_install
 if errorlevel 1 exit /b %errorlevel%
 
 echo.
 echo [PacilRead] Running Gradle task: %TASK%
 call .\gradlew.bat %TASK% --no-daemon --console plain
 if errorlevel 1 exit /b %errorlevel%
+
+if defined INSTALL_APK_PATTERN (
+  for /f "delims=" %%F in ('dir /b /a-d /o-d "!INSTALL_APK_PATTERN!" 2^>nul') do (
+    if not defined INSTALL_APK set "INSTALL_APK=app\build\outputs\apk\release\%%F"
+  )
+  if not defined INSTALL_APK (
+    echo [PacilRead] Release APK not found: !INSTALL_APK_PATTERN!
+    exit /b 1
+  )
+)
 
 if defined INSTALL_APK (
   if not exist "!INSTALL_APK!" (

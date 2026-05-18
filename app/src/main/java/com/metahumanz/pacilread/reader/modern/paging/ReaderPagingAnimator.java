@@ -36,8 +36,10 @@ public final class ReaderPagingAnimator {
     private static final int FINISH_SWAP_PREDRAW_PASSES = 2;
     private static final long FINISH_SWAP_PREDRAW_FALLBACK_MS = 240L;
     private static final long FINISH_SWAP_COVER_HOLD_MS = 96L;
+    private static final int SNAPSHOT_WARMUP_PREDRAW_PASSES = 2;
+    private static final long SNAPSHOT_WARMUP_PREDRAW_FALLBACK_MS = 96L;
     private static final float SIMULATION_FINISH_COVER_PROGRESS = 0.9995f;
-    private static final float OUTER_PAGE_FINISH_COVER_PROGRESS = 0.965f;
+    private static final float OUTER_PAGE_FINISH_COVER_PROGRESS = 0.95f;
 
     private final ModernReaderActivity activity;
     private final ReaderRuntime runtime;
@@ -50,6 +52,7 @@ public final class ReaderPagingAnimator {
     private ReaderNavigationController navigation;
     private ReaderContentController content;
     private ReaderChromeController chrome;
+    private int pagingSnapshotWarmupRequestId = 0;
 
     public ReaderPagingAnimator(
             ModernReaderActivity activity,
@@ -311,14 +314,73 @@ public final class ReaderPagingAnimator {
         if (views.pageStage == null) {
             return;
         }
+        int requestId = ++pagingSnapshotWarmupRequestId;
         views.pageStage.removeCallbacks(pagingSnapshotWarmupRunnable);
-        if (state.chapters.isEmpty() || state.controlsVisible || state.isAnimating || state.interactivePaging) {
+        if (shouldSkipPagingSnapshotWarmup()) {
             return;
         }
-        views.pageStage.post(pagingSnapshotWarmupRunnable);
+        views.pageStage.postOnAnimation(() ->
+                waitForPagingSnapshotWarmupPreDraw(requestId, SNAPSHOT_WARMUP_PREDRAW_PASSES)
+        );
+    }
+
+    private boolean shouldSkipPagingSnapshotWarmup() {
+        return views.pageStage == null
+                || state.chapters.isEmpty()
+                || state.controlsVisible
+                || state.isAnimating
+                || state.interactivePaging;
+    }
+
+    private void waitForPagingSnapshotWarmupPreDraw(int requestId, int remainingPasses) {
+        if (requestId != pagingSnapshotWarmupRequestId || shouldSkipPagingSnapshotWarmup()) {
+            return;
+        }
+        if (remainingPasses <= 0) {
+            views.pageStage.post(() -> {
+                if (requestId == pagingSnapshotWarmupRequestId && !shouldSkipPagingSnapshotWarmup()) {
+                    pagingSnapshotWarmupRunnable.run();
+                }
+            });
+            return;
+        }
+        View target = views.pageStage;
+        if (target == null || !target.isAttachedToWindow()) {
+            return;
+        }
+        final boolean[] completed = new boolean[]{false};
+        final ViewTreeObserver.OnPreDrawListener[] listenerRef = new ViewTreeObserver.OnPreDrawListener[1];
+        Runnable complete = () -> {
+            if (completed[0]) {
+                return;
+            }
+            completed[0] = true;
+            removePreDrawListener(target, listenerRef[0]);
+            waitForPagingSnapshotWarmupPreDraw(requestId, remainingPasses - 1);
+        };
+        listenerRef[0] = new ViewTreeObserver.OnPreDrawListener() {
+            @Override
+            public boolean onPreDraw() {
+                target.post(complete);
+                return true;
+            }
+        };
+        ViewTreeObserver observer = target.getViewTreeObserver();
+        if (observer == null || !observer.isAlive()) {
+            target.post(complete);
+            return;
+        }
+        observer.addOnPreDrawListener(listenerRef[0]);
+        if (views.pageCurrent != null) {
+            views.pageCurrent.requestLayout();
+            views.pageCurrent.invalidate();
+        }
+        target.invalidate();
+        target.postDelayed(complete, SNAPSHOT_WARMUP_PREDRAW_FALLBACK_MS);
     }
 
     public void invalidatePreparedPagingSnapshots() {
+        pagingSnapshotWarmupRequestId++;
         clearStableSimulationCover(true);
         state.simulationFinishCoverVisible = false;
         state.preparedCurrentSnapshotChapterIndex = -1;
@@ -472,6 +534,7 @@ public final class ReaderPagingAnimator {
     }
 
     public void removeWarmupCallbacks() {
+        pagingSnapshotWarmupRequestId++;
         if (views.pageStage != null) {
             views.pageStage.removeCallbacks(pagingSnapshotWarmupRunnable);
         }
@@ -907,21 +970,35 @@ public final class ReaderPagingAnimator {
         boolean finishingSimulationCover = state.simulationFinishCoverVisible
                 && views.pageSnapshotCurrent != null
                 && views.pageSnapshotCurrent.getVisibility() == View.VISIBLE;
-        if (views.simulationPageTurnView != null) {
-            views.simulationPageTurnView.clear();
-        }
-        views.pageCurrent.setVisibility(View.VISIBLE);
-        views.pageCurrent.bringToFront();
         if (finishingSimulationCover) {
-            views.pageSnapshotCurrent.bringToFront();
-            bringStableBookSpineOverlayToFront();
+            state.pagingSnapshotsVisible = true;
+            state.simulationStableCoverVisible = true;
+            resetAnimatedPage(views.pageCurrent);
+            views.pageCurrent.setVisibility(View.VISIBLE);
+            if (views.pageSnapshotIncoming != null) {
+                resetAnimatedPage(views.pageSnapshotIncoming);
+                views.pageSnapshotIncoming.setVisibility(View.GONE);
+            }
+            views.pageIncoming.setVisibility(View.GONE);
+            keepStableSimulationCoverOnTop();
+            if (views.simulationPageTurnView != null) {
+                views.simulationPageTurnView.clear();
+            }
+            keepStableSimulationCoverOnTop();
             View target = views.pageStage != null ? views.pageStage : views.pageCurrent;
             if (target != null) {
                 target.postOnAnimation(() -> completeFinishedAnimationSwapNow(token, true));
                 return;
             }
+            completeFinishedAnimationSwapNow(token, true);
+            return;
         }
-        completeFinishedAnimationSwapNow(token, finishingSimulationCover);
+        if (views.simulationPageTurnView != null) {
+            views.simulationPageTurnView.clear();
+        }
+        views.pageCurrent.setVisibility(View.VISIBLE);
+        views.pageCurrent.bringToFront();
+        completeFinishedAnimationSwapNow(token, false);
     }
 
     private void completeFinishedAnimationSwapNow(long token, boolean keepSimulationCover) {
@@ -929,7 +1006,9 @@ public final class ReaderPagingAnimator {
             return;
         }
         views.pageCurrent.setVisibility(View.VISIBLE);
-        views.pageCurrent.bringToFront();
+        if (!keepSimulationCover) {
+            views.pageCurrent.bringToFront();
+        }
         state.pagingSnapshotsVisible = keepSimulationCover;
         state.simulationStableCoverVisible = keepSimulationCover;
         if (views.pageSnapshotCurrent != null) {
@@ -945,6 +1024,9 @@ public final class ReaderPagingAnimator {
         }
         views.pageIncoming.setVisibility(View.GONE);
         state.simulationFinishCoverVisible = false;
+        if (keepSimulationCover) {
+            keepStableSimulationCoverOnTop();
+        }
         bringStableBookSpineOverlayToFront();
         resetInteractiveTouchState();
         state.pendingTapPagingDelta = 0;
@@ -1252,7 +1334,7 @@ public final class ReaderPagingAnimator {
     }
 
     private void warmPreparedPagingSnapshots() {
-        if (views.pageStage == null || state.chapters.isEmpty() || state.isAnimating || state.interactivePaging) {
+        if (shouldSkipPagingSnapshotWarmup()) {
             return;
         }
         if (!ensurePageAreaReady(this::schedulePagingSnapshotWarmup)) {
@@ -1344,10 +1426,15 @@ public final class ReaderPagingAnimator {
         }
         int previousVisibility = views.pageIncoming.getVisibility();
         float previousAlpha = views.pageIncoming.getAlpha();
+        boolean keepStableCover = state.simulationStableCoverVisible
+                && views.pageSnapshotCurrent != null
+                && views.pageSnapshotCurrent.getVisibility() == View.VISIBLE;
         navigation.bindIncomingSpread(chapterIndex, pageIndex);
         resetAnimatedPage(views.pageIncoming);
-        if (views.pageCurrent != null) {
+        if (views.pageCurrent != null && !keepStableCover) {
             views.pageCurrent.bringToFront();
+        } else if (keepStableCover) {
+            keepStableSimulationCoverOnTop();
         }
         views.pageIncoming.setVisibility(View.VISIBLE);
         if (!layoutPageLayerForSnapshot(views.pageIncoming)) {
@@ -1360,7 +1447,7 @@ public final class ReaderPagingAnimator {
         views.pageIncoming.setAlpha(previousAlpha);
         views.pageIncoming.setVisibility(previousVisibility);
         resetAnimatedPage(views.pageIncoming);
-        if (views.pageCurrent != null) {
+        if (views.pageCurrent != null && !keepStableCover) {
             views.pageCurrent.bringToFront();
         }
         keepStableSimulationCoverOnTop();
@@ -1855,7 +1942,7 @@ public final class ReaderPagingAnimator {
         state.interactiveStartX = sanitizeStageTouchX(direction > 0 ? width - cornerInset : cornerInset);
         state.interactiveStartY = sanitizeStageTouchY(
                 expandedCornerFold
-                        ? resolveSimulationAutoStartY(startY, width)
+                        ? resolveSimulationAutoStartY(direction, startY, width)
                         : resolveSimulationStartY(startY)
         );
         state.interactiveTouchX = state.interactiveStartX;
@@ -1884,14 +1971,17 @@ public final class ReaderPagingAnimator {
         return Math.max(simulationCornerInsetPx(), Math.min(pageWidth * 0.28f, height / 10f));
     }
 
-    private float resolveSimulationAutoStartY(float touchY, float stageWidth) {
+    private float resolveSimulationAutoStartY(int direction, float touchY, float stageWidth) {
         float height = Math.max(views.pageStage == null ? 0f : views.pageStage.getHeight(), ui.dp(320));
         float safeTouchY = Math.max(0f, Math.min(height, touchY));
         float inset = simulationAutoStartInsetPx(stageWidth);
+        if (safeTouchY < height / 3f) {
+            return inset;
+        }
         if (safeTouchY > height * 2f / 3f) {
             return height - inset;
         }
-        return inset;
+        return direction > 0 ? height - inset : inset;
     }
 
     private float sanitizeStageTouchX(float value) {
@@ -1925,7 +2015,7 @@ public final class ReaderPagingAnimator {
             return direction > 0 ? width - cornerInset : cornerInset;
         }
         if (commit) {
-            return direction > 0 ? -width * 1.12f : width * 2.12f;
+            return direction > 0 ? -width * 1.12f : width - 0.1f;
         }
         float cornerInset = simulationCornerInsetPx();
         return direction > 0 ? width - cornerInset : cornerInset;
