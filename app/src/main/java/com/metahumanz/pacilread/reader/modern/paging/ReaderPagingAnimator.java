@@ -328,6 +328,7 @@ public final class ReaderPagingAnimator {
         return views.pageStage == null
                 || state.chapters.isEmpty()
                 || state.controlsVisible
+                || activity.isReaderEnterTransitionActive()
                 || state.isAnimating
                 || state.interactivePaging;
     }
