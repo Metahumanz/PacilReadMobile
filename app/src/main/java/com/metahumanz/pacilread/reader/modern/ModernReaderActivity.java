@@ -90,6 +90,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private boolean readerPopupDismissingByCode;
     private boolean readerExitFinishing;
     private boolean readerExitProgressPersisted;
+    private boolean readerEnterTransitionActive;
     private boolean readerEnterAnimationStarted;
     private boolean readerExitFromBackGesture;
     private volatile boolean readerDestroyed;
@@ -132,6 +133,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
 
         boolean useFluidEnter = hasLaunchSource() && com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(runtime.settingsStore);
         if (useFluidEnter) {
+            readerEnterTransitionActive = true;
             ActivityTransitionCompat.overrideOpen(this, 0, 0);
             // 先隐藏，等 layout 就绪后再显示并启动动画，防止未就绪时闪现全屏
             views.readerRoot.setVisibility(View.INVISIBLE);
@@ -262,6 +264,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
 
     public boolean isReaderActive() {
         return !readerDestroyed && !isFinishing() && !isDestroyed();
+    }
+
+    public boolean isReaderEnterTransitionActive() {
+        return readerEnterTransitionActive;
     }
 
     public void runOnReaderUiThread(Runnable action) {
@@ -419,10 +425,15 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             return;
         }
         Log.d("PacilReadReader", "[时序] 动画结束 finishReaderEnterForegroundFade - cacheHit=" + (content != null && content.isCacheHit()));
+        readerEnterTransitionActive = false;
         cancelScheduledReaderEnterForegroundFade();
         if (content != null) {
             // 正文与背景一起缩放，动画结束时文字大概率已就绪，直接完成排版即可
-            content.performDeferredInitialReflow(() -> {});
+            content.performDeferredInitialReflow(() -> {
+                if (paging != null) {
+                    paging.schedulePagingSnapshotWarmup();
+                }
+            });
         }
     }
 
