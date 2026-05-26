@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -59,6 +60,9 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
     private static final String CHAPTER_TEXT_DIR = "chapter_text";
     private static final int VACUUM_FREE_PAGE_THRESHOLD = 256;
     private static final String EMPTY_CHAPTER_TEXT_PLACEHOLDER = "章节正文为空或外置正文文件缺失。";
+    private static final Pattern VOLUME_CHAPTER_TITLE_PATTERN = Pattern.compile(
+            "^\\s*第\\s*[0-9０-９一二三四五六七八九十百千万零〇两]+\\s*卷(?:\\s*|[：:、.．·\\-].*)$"
+    );
     // 旧版本维护标记（用于升级迁移）
     private static final String KEY_VACUUM_AFTER_BODY_HTML_CLEANUP_LEGACY = "vacuum_after_body_html_cleanup";
     private static final String KEY_RECOMPRESS_COVERS_AFTER_BODY_HTML_CLEANUP_LEGACY = "recompress_covers_after_body_html_cleanup";
@@ -337,7 +341,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
      * 解析章节正文：优先从外置 .txt.gz 文件读取，缺失则回退到数据库 body_text 列。
      * bodyTextFromDb 可以为 null（调用方未从 cursor 预读大正文），此时自动分块读取。
      */
-    private String resolveChapterText(long bookId, long chapterId, String bodyTextFromDb,
+    private String resolveChapterText(long bookId, long chapterId, String chapterTitle, String bodyTextFromDb,
                                        String bodyTextPath, String bodyTextStorage) {
         if (STORAGE_FILE_GZIP.equals(bodyTextStorage) && bodyTextPath != null && !bodyTextPath.isBlank()) {
             try {
@@ -362,7 +366,14 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         if (fallback != null && !fallback.isEmpty()) {
             return fallback;
         }
+        if (isVolumeChapterTitle(chapterTitle)) {
+            return "";
+        }
         return EMPTY_CHAPTER_TEXT_PLACEHOLDER;
+    }
+
+    private boolean isVolumeChapterTitle(String title) {
+        return title != null && VOLUME_CHAPTER_TITLE_PATTERN.matcher(title.trim()).matches();
     }
 
     private void deleteChapterTextDir(long bookId) {
@@ -588,7 +599,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                     chapter.bodyHtml = "";
                     readChapterStorageFields(cursor, chapter);
                     chapter.bodyText = resolveChapterText(chapter.bookId, chapter.id,
-                            null, chapter.bodyTextPath, chapter.bodyTextStorage);
+                            chapter.title, null, chapter.bodyTextPath, chapter.bodyTextStorage);
                 }
                 chapter.orderIndex = cursor.getInt(cursor.getColumnIndexOrThrow("order_index"));
                 chapters.add(chapter);
@@ -601,7 +612,7 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
         // 不直接从 cursor 读 body_text——超长正文会超出 CursorWindow 限制
         try (Cursor cursor = getReadableDatabase().query(
                 "chapters",
-                new String[]{"book_id", "body_text_path", "body_text_storage", "body_text_size"},
+                new String[]{"book_id", "title", "body_text_path", "body_text_storage", "body_text_size"},
                 "id=?",
                 new String[]{String.valueOf(chapterId)},
                 null,
@@ -613,10 +624,11 @@ public class ReaderDatabaseHelper extends SQLiteOpenHelper {
                 ChapterRecord chapter = new ChapterRecord();
                 chapter.id = chapterId;
                 chapter.bookId = cursor.getLong(cursor.getColumnIndexOrThrow("book_id"));
+                chapter.title = cursor.getString(cursor.getColumnIndexOrThrow("title"));
                 chapter.bodyHtml = "";
                 readChapterStorageFields(cursor, chapter);
                 chapter.bodyText = resolveChapterText(chapter.bookId, chapter.id,
-                        null, chapter.bodyTextPath, chapter.bodyTextStorage);
+                        chapter.title, null, chapter.bodyTextPath, chapter.bodyTextStorage);
                 return chapter;
             }
         }

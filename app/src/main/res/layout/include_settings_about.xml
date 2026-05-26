@@ -90,7 +90,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <!-- v1.1.4 启动动画与打包体验优化 -->
+                <!-- v1.1.5 阅读进度与章节显示修复 -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -121,6 +121,66 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
+                            android:text="v1.1.5 — 阅读进度与章节显示修复" />
+
+                        <TextView
+                            style="@style/AppChromeCaption"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="end"
+                            android:text="2026-05-26" />
+                    </LinearLayout>
+
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="阅读进度" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  修复横屏双页仿真翻页切到竖屏/小窗后重新分页时，章内进度回到章头的问题" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  布局、HUD 或分页缓存变化前保留当前章节字符位置，减少转屏、窗口变化和设置调整时的进度漂移" />
+
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="章节显示" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  第 xx 卷这类无正文卷标题不再显示“章节正文为空或外置正文文件缺失”占位提示" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  删除替换规则后立即按当前位置刷新当前章节，避免正文显示滞后" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="14dp"
+                        android:layout_marginBottom="10dp"
+                        android:background="?attr/themeColorAppBorder" />
+
+                </LinearLayout>
+
+                <!-- v1.1.4 启动动画与打包体验优化 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            style="@style/AppChromeBodyStrong"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
                             android:text="v1.1.4 — 启动动画与打包体验优化" />
 
                         <TextView

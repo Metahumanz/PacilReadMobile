@@ -713,9 +713,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             if (width <= 0 || height <= 0 || (width == oldWidth && height == oldHeight)) {
                 return;
             }
+            int anchorOffset = content.currentCharOffset();
             chrome.updateReaderHud();
             if (state.book != null && !state.chapters.isEmpty()) {
-                content.scheduleReflowAfterLayout(state.currentChapterIndex, content.currentCharOffset());
+                content.scheduleReflowAfterLayout(state.currentChapterIndex, anchorOffset);
             }
         });
 

@@ -294,6 +294,7 @@ public final class ReaderLibraryDialogs {
         });
         listView.setOnItemLongClickListener((parent, view, position, id) -> {
             ReplacementRuleRecord rule = state.replacementRules.get(position);
+            int offset = content.currentCharOffset();
             runtime.safeExecute(() -> {
                 runtime.databaseHelper.deleteReplacementRule(rule.id);
                 List<com.metahumanz.pacilread.model.ReplacementRuleRecord> rules = runtime.databaseHelper.getReplacementRules(state.bookId);
@@ -302,6 +303,7 @@ public final class ReaderLibraryDialogs {
                     state.replacementRules.addAll(rules);
                     content.clearAllReaderCaches();
                     refreshRuleLabels(adapter);
+                    navigation.openChapter(state.currentChapterIndex, offset, false, 0);
                 });
             }, "delete replacement rule");
             return true;

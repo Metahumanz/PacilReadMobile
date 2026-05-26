@@ -199,6 +199,7 @@ public final class ReaderChromeController {
         if (state.book == null || state.chapters.isEmpty()) {
             return;
         }
+        content.rememberCurrentPageAnchor();
         com.metahumanz.pacilread.model.ChapterRecord chapter = state.chapters.get(state.currentChapterIndex);
         int safePageCount = Math.max(content.getKnownPageCountForChapter(state.currentChapterIndex), 1);
         boolean pageCountComplete = content.isPageCountCompleteForChapter(state.currentChapterIndex);
@@ -257,6 +258,7 @@ public final class ReaderChromeController {
         if (state.book == null || state.chapters.isEmpty()) {
             return;
         }
+        content.rememberCurrentPageAnchor();
         boolean showCenterSlots = isLandscapeHudMode();
         applyHudSlot(views.hudTopLeft, runtime.settingsStore.getHudTopLeft());
         if (showCenterSlots) {

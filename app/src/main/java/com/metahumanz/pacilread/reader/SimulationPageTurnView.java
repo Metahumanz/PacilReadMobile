@@ -21,6 +21,9 @@ public class SimulationPageTurnView extends View {
     public static final int TURN_MODE_SINGLE = 0;
     public static final int TURN_MODE_OUTER_PAGE = 1;
     public static final int TURN_MODE_SPREAD = 2;
+    public static final int RENDER_QUALITY_FULL = 0;
+    public static final int RENDER_QUALITY_BALANCED = 1;
+    public static final int RENDER_QUALITY_LOW = 2;
 
     private static final float MIN_TOUCH = 0.1f;
 
@@ -40,9 +43,16 @@ public class SimulationPageTurnView extends View {
     private final Paint bookSpinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path desktopPagePath = new Path();
     private final PointF desktopTouchPoint = new PointF();
+    private final PointF touchPoint = new PointF();
+    private final PointF crossPoint1 = new PointF();
+    private final PointF crossPoint2 = new PointF();
     private final DesktopFlipCalculation desktopFlipCalculation = new DesktopFlipCalculation();
     private final Matrix matrix = new Matrix();
     private final float[] matrixArray = new float[]{0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 1f};
+    private final int[] shadowGradientColors = new int[4];
+    private final int[] highlightGradientColors = new int[3];
+    private final float[] shadowGradientPositions = new float[]{0f, 0.42f, 0.62f, 1f};
+    private final float[] highlightGradientPositions = new float[]{0f, 0.5f, 1f};
     private final ColorMatrixColorFilter backColorFilter = new ColorMatrixColorFilter(
             new ColorMatrix(new float[]{
                     0.9f, 0f, 0f, 0f, 12f,
@@ -70,6 +80,7 @@ public class SimulationPageTurnView extends View {
     private float middleX = 0f;
     private float middleY = 0f;
     private int pageBackgroundColor = 0xFFF7F0E1;
+    private int renderQuality = RENDER_QUALITY_FULL;
 
     public SimulationPageTurnView(Context context) {
         this(context, null);
@@ -105,22 +116,38 @@ public class SimulationPageTurnView extends View {
             clear();
             return;
         }
+        int normalizedTurnMode = normalizeTurnMode(turnMode);
+        float normalizedStartY = ensureTouch(startY);
+        boolean staticStateChanged = !active
+                || this.direction != direction
+                || this.frontBitmap != currentBitmap
+                || this.backBitmap != incomingBitmap
+                || this.turnMode != normalizedTurnMode
+                || !nearlyEqual(this.startY, normalizedStartY);
         this.direction = direction;
         this.pageBackgroundColor = pageBackgroundColor;
-        this.turnMode = normalizeTurnMode(turnMode);
         this.frontBitmap = currentBitmap;
         this.backBitmap = incomingBitmap;
-        this.startY = ensureTouch(startY);
-        configureTurnPageBounds(this.turnMode, direction, this.startY);
-        this.startX = ensureTouch(toTurnPageX(startX));
-        configureCorner();
+        this.turnMode = normalizedTurnMode;
+        if (staticStateChanged) {
+            this.startY = normalizedStartY;
+            configureTurnPageBounds(this.turnMode, direction, this.startY);
+            this.startX = ensureTouch(toTurnPageX(startX));
+            configureCorner();
+        }
         updateTouchInternal(toTurnPageX(touchX), touchY);
         active = true;
-        setVisibility(VISIBLE);
+        if (getVisibility() != VISIBLE) {
+            setVisibility(VISIBLE);
+        }
         invalidate();
     }
 
     public void clear() {
+        boolean needsInvalidate = active
+                || frontBitmap != null
+                || backBitmap != null
+                || getVisibility() != GONE;
         active = false;
         direction = 0;
         turnMode = TURN_MODE_SINGLE;
@@ -132,12 +159,27 @@ public class SimulationPageTurnView extends View {
         backBitmap = null;
         path0.reset();
         path1.reset();
-        setVisibility(GONE);
-        invalidate();
+        if (getVisibility() != GONE) {
+            setVisibility(GONE);
+        }
+        if (needsInvalidate) {
+            invalidate();
+        }
     }
 
     public boolean isActive() {
         return active;
+    }
+
+    public void setRenderQuality(int quality) {
+        int normalizedQuality = normalizeRenderQuality(quality);
+        if (renderQuality == normalizedQuality) {
+            return;
+        }
+        renderQuality = normalizedQuality;
+        if (active) {
+            invalidate();
+        }
     }
 
     @Override
@@ -285,6 +327,10 @@ public class SimulationPageTurnView extends View {
         return value;
     }
 
+    private boolean nearlyEqual(float first, float second) {
+        return Math.abs(first - second) < 0.001f;
+    }
+
     private void drawCurrentBackArea(Canvas canvas, Bitmap bitmap, float sourceLeft) {
         path1.reset();
         path1.moveTo(bezierVertex2.x, bezierVertex2.y);
@@ -362,7 +408,7 @@ public class SimulationPageTurnView extends View {
     }
 
     private void drawFoldDepth(Canvas canvas) {
-        if (outerPageTurn) {
+        if (outerPageTurn || renderQuality == RENDER_QUALITY_LOW) {
             return;
         }
         if (!isFinitePoint(bezierEnd1)
@@ -380,7 +426,11 @@ public class SimulationPageTurnView extends View {
 
         canvas.save();
         canvas.clipPath(path0);
-        drawCurlLipDepth(canvas, lipShadowWidth, lipShadowAlpha, lipHighlightAlpha);
+        if (renderQuality == RENDER_QUALITY_FULL) {
+            drawCurlLipDepth(canvas, lipShadowWidth, lipShadowAlpha, lipHighlightAlpha);
+        } else {
+            drawSimpleCurlLipDepth(canvas, lipShadowWidth * 0.58f, Math.round(lipShadowAlpha * 0.52f));
+        }
         canvas.restore();
     }
 
@@ -410,6 +460,11 @@ public class SimulationPageTurnView extends View {
                 shadowAlpha,
                 highlightAlpha
         );
+    }
+
+    private void drawSimpleCurlLipDepth(Canvas canvas, float shadowWidth, int shadowAlpha) {
+        drawSimpleCreaseDepth(canvas, bezierEnd1.x, bezierEnd1.y, touchX, touchY, shadowWidth, shadowAlpha);
+        drawSimpleCreaseDepth(canvas, touchX, touchY, bezierEnd2.x, bezierEnd2.y, shadowWidth, shadowAlpha);
     }
 
     private void calcCornerXY(float x, float y) {
@@ -474,10 +529,11 @@ public class SimulationPageTurnView extends View {
         bezierStart2.x = cornerX;
         bezierStart2.y = bezierControl2.y - (cornerY - bezierControl2.y) / 2f;
 
-        PointF cross1 = getCross(new PointF(touchX, touchY), bezierControl1, bezierStart1, bezierStart2);
-        PointF cross2 = getCross(new PointF(touchX, touchY), bezierControl2, bezierStart1, bezierStart2);
-        bezierEnd1.set(cross1);
-        bezierEnd2.set(cross2);
+        touchPoint.set(touchX, touchY);
+        getCross(crossPoint1, touchPoint, bezierControl1, bezierStart1, bezierStart2);
+        getCross(crossPoint2, touchPoint, bezierControl2, bezierStart1, bezierStart2);
+        bezierEnd1.set(crossPoint1);
+        bezierEnd2.set(crossPoint2);
         bezierVertex1.x = (bezierStart1.x + 2 * bezierControl1.x + bezierEnd1.x) / 4f;
         bezierVertex1.y = (2 * bezierControl1.y + bezierStart1.y + bezierEnd1.y) / 4f;
         bezierVertex2.x = (bezierStart2.x + 2 * bezierControl2.x + bezierEnd2.x) / 4f;
@@ -654,6 +710,9 @@ public class SimulationPageTurnView extends View {
     }
 
     private void drawOuterPageFoldDepth(Canvas canvas) {
+        if (renderQuality == RENDER_QUALITY_LOW) {
+            return;
+        }
         PointF creaseStart = desktopFlipCalculation.getTopIntersectPoint();
         PointF creaseEnd = desktopFlipCalculation.getBottomIntersectPoint();
         PointF sideIntersect = desktopFlipCalculation.getSideIntersectPoint();
@@ -689,7 +748,11 @@ public class SimulationPageTurnView extends View {
 
         canvas.save();
         canvas.clipRect(0f, 0f, getWidth(), getHeight());
-        drawCreaseDepthGradient(canvas, startX, startY, endX, endY, depthWidth, shadowAlpha, highlightAlpha);
+        if (renderQuality == RENDER_QUALITY_FULL) {
+            drawCreaseDepthGradient(canvas, startX, startY, endX, endY, depthWidth, shadowAlpha, highlightAlpha);
+        } else {
+            drawSimpleCreaseDepth(canvas, startX, startY, endX, endY, depthWidth * 0.64f, Math.round(shadowAlpha * 0.52f));
+        }
         canvas.restore();
     }
 
@@ -722,13 +785,8 @@ public class SimulationPageTurnView extends View {
                 normalX,
                 normalY,
                 safeShadowWidth,
-                new int[]{
-                        Color.argb(0, 0, 0, 0),
-                        Color.argb(shadowAlpha, 0, 0, 0),
-                        Color.argb(Math.round(shadowAlpha * 0.42f), 0, 0, 0),
-                        Color.argb(0, 0, 0, 0)
-                },
-                new float[]{0f, 0.42f, 0.62f, 1f}
+                updateShadowGradientColors(shadowAlpha),
+                shadowGradientPositions
         );
 
         float highlightWidth = Math.max(1.5f, safeShadowWidth * 0.24f);
@@ -743,13 +801,45 @@ public class SimulationPageTurnView extends View {
                 normalX,
                 normalY,
                 highlightWidth,
-                new int[]{
-                        Color.argb(0, 255, 255, 255),
-                        Color.argb(highlightAlpha, 255, 255, 255),
-                        Color.argb(0, 255, 255, 255)
-                },
-                new float[]{0f, 0.5f, 1f}
+                updateHighlightGradientColors(highlightAlpha),
+                highlightGradientPositions
         );
+    }
+
+    private int[] updateShadowGradientColors(int shadowAlpha) {
+        shadowGradientColors[0] = Color.argb(0, 0, 0, 0);
+        shadowGradientColors[1] = Color.argb(shadowAlpha, 0, 0, 0);
+        shadowGradientColors[2] = Color.argb(Math.round(shadowAlpha * 0.42f), 0, 0, 0);
+        shadowGradientColors[3] = Color.argb(0, 0, 0, 0);
+        return shadowGradientColors;
+    }
+
+    private int[] updateHighlightGradientColors(int highlightAlpha) {
+        highlightGradientColors[0] = Color.argb(0, 255, 255, 255);
+        highlightGradientColors[1] = Color.argb(highlightAlpha, 255, 255, 255);
+        highlightGradientColors[2] = Color.argb(0, 255, 255, 255);
+        return highlightGradientColors;
+    }
+
+    private void drawSimpleCreaseDepth(
+            Canvas canvas,
+            float startX,
+            float startY,
+            float endX,
+            float endY,
+            float strokeWidth,
+            int alpha
+    ) {
+        if (!Float.isFinite(startX) || !Float.isFinite(startY)
+                || !Float.isFinite(endX) || !Float.isFinite(endY)
+                || Math.hypot(endX - startX, endY - startY) < 1f) {
+            return;
+        }
+        foldShadowPaint.setShader(null);
+        foldShadowPaint.setStrokeWidth(Math.max(1f, strokeWidth));
+        foldShadowPaint.setColor(Color.argb(Math.max(0, Math.min(255, alpha)), 0, 0, 0));
+        foldShadowPaint.setAlpha(255);
+        canvas.drawLine(startX, startY, endX, endY, foldShadowPaint);
     }
 
     private void drawGradientStroke(
@@ -920,6 +1010,13 @@ public class SimulationPageTurnView extends View {
             return mode;
         }
         return TURN_MODE_SINGLE;
+    }
+
+    private int normalizeRenderQuality(int quality) {
+        if (quality == RENDER_QUALITY_BALANCED || quality == RENDER_QUALITY_LOW) {
+            return quality;
+        }
+        return RENDER_QUALITY_FULL;
     }
 
     private static final class DesktopFlipCalculation {
@@ -1233,13 +1330,13 @@ public class SimulationPageTurnView extends View {
         final PointF bottomRight = new PointF();
     }
 
-    private PointF getCross(PointF p1, PointF p2, PointF p3, PointF p4) {
+    private void getCross(PointF out, PointF p1, PointF p2, PointF p3, PointF p4) {
         float a1 = (p2.y - p1.y) / safeDivisor(p2.x - p1.x);
         float b1 = (p1.x * p2.y - p2.x * p1.y) / safeDivisor(p1.x - p2.x);
         float a2 = (p4.y - p3.y) / safeDivisor(p4.x - p3.x);
         float b2 = (p3.x * p4.y - p4.x * p3.y) / safeDivisor(p3.x - p4.x);
         float x = (b2 - b1) / safeDivisor(a1 - a2);
         float y = a1 * x + b1;
-        return new PointF(x, y);
+        out.set(x, y);
     }
 }
