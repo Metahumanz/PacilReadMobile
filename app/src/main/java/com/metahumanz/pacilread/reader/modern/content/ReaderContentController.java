@@ -323,6 +323,7 @@ public final class ReaderContentController {
             state.currentChapterIndex = targetChapterIndex;
             int initialAnchorOffset = resolveInitialAnchorOffset(state.book.progressOffset);
             state.sessionStartOffset = initialAnchorOffset;
+            rememberChapterAnchor(targetChapterIndex, initialAnchorOffset);
             prepareInitialRemoteProgressSync();
             if (!deferReflow) {
                 style.applyReaderSettings();
@@ -400,6 +401,7 @@ public final class ReaderContentController {
                     state.currentChapterIndex = targetChapterIndex;
                     int initialAnchorOffset = resolveInitialAnchorOffset(loadedBook.progressOffset);
                     state.sessionStartOffset = initialAnchorOffset;
+                    rememberChapterAnchor(targetChapterIndex, initialAnchorOffset);
                     prepareInitialRemoteProgressSync();
 
                     // 预先注入已处理好的正文到缓存，后续 prewarm/prefetch 只需分页
@@ -1031,19 +1033,57 @@ public final class ReaderContentController {
                 && partial.chapterIndex == state.currentChapterIndex
                 && state.currentPageIndex >= 0
                 && state.currentPageIndex < partial.pages.size()) {
-            return partial.pages.get(state.currentPageIndex).start;
+            int offset = Math.max(partial.pages.get(state.currentPageIndex).start, 0);
+            rememberCurrentChapterAnchor(offset);
+            return offset;
         }
         List<PageSlice> pages;
         synchronized (cachedPageSlicesMap) {
             pages = cachedPageSlicesMap.get(state.currentChapterIndex);
         }
         if (pages == null) {
-            return Math.max(state.sessionStartOffset, 0);
+            return fallbackCurrentChapterOffset();
         }
         if (pages.isEmpty()) {
+            rememberCurrentChapterAnchor(0);
             return 0;
         }
-        return pages.get(ui.clamp(state.currentPageIndex, 0, pages.size() - 1)).start;
+        int offset = Math.max(pages.get(ui.clamp(state.currentPageIndex, 0, pages.size() - 1)).start, 0);
+        rememberCurrentChapterAnchor(offset);
+        return offset;
+    }
+
+    public int rememberCurrentPageAnchor() {
+        return currentCharOffset();
+    }
+
+    private void rememberCurrentChapterAnchor(int offset) {
+        rememberChapterAnchor(state.currentChapterIndex, offset);
+    }
+
+    private void rememberChapterAnchor(int chapterIndex, int offset) {
+        if (state.chapters.isEmpty()) {
+            state.lastKnownChapterIndex = -1;
+            state.lastKnownChapterOffset = 0;
+            return;
+        }
+        int safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size() - 1);
+        state.lastKnownChapterIndex = safeChapterIndex;
+        state.lastKnownChapterOffset = Math.max(offset, 0);
+    }
+
+    private int fallbackCurrentChapterOffset() {
+        int currentChapterIndex = ui.clamp(state.currentChapterIndex, 0, state.chapters.size() - 1);
+        if (state.lastKnownChapterIndex == currentChapterIndex) {
+            return Math.max(state.lastKnownChapterOffset, 0);
+        }
+        if (state.book != null) {
+            ChapterRecord chapter = state.chapters.get(currentChapterIndex);
+            if (chapter != null && state.book.progressIndex == chapter.orderIndex) {
+                return Math.max(state.book.progressOffset, 0);
+            }
+        }
+        return Math.max(state.sessionStartOffset, 0);
     }
 
     public float bookProgressPercentFor(int chapterIndex, int chapterOffset) {
@@ -1080,11 +1120,13 @@ public final class ReaderContentController {
     }
 
     public void clearPageCache() {
+        rememberCurrentPageAnchor();
         clearAllPageSliceCaches();
         clearPartialPagination();
     }
 
     public void clearAllReaderCaches() {
+        rememberCurrentPageAnchor();
         processedChapterLruCache.evictAll();
         processedChapterLengthCache.clear();
         clearAllPageSliceCaches();
@@ -1131,6 +1173,7 @@ public final class ReaderContentController {
                 rememberActiveLayoutCacheLocked();
                 return false;
             }
+            rememberCurrentPageAnchor();
             rememberActiveLayoutCacheLocked();
             cachedPageSlicesMap.clear();
             Map<Integer, List<PageSlice>> restored = cachedPageSlicesByLayout.get(signature);
