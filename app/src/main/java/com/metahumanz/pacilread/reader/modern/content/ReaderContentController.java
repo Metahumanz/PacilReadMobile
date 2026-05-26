@@ -45,6 +45,7 @@ import java.util.Map;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Pattern;
 
 public final class ReaderContentController {
     private static final String TAG = "PacilReadReader";
@@ -54,6 +55,10 @@ public final class ReaderContentController {
     private static final long PROGRESSIVE_WAIT_LOG_MS = 800L;
     private static final long PROGRESSIVE_HARD_FALLBACK_MS = 5000L;
     private static final int MAX_LAYOUT_PAGE_CACHE_SIGNATURES = 4;
+    private static final String EMPTY_CHAPTER_TEXT_PLACEHOLDER = "章节正文为空或外置正文文件缺失。";
+    private static final Pattern VOLUME_CHAPTER_TITLE_PATTERN = Pattern.compile(
+            "^\\s*第\\s*[0-9０-９一二三四五六七八九十百千万零〇两]+\\s*卷(?:\\s*|[：:、.．·\\-].*)$"
+    );
 
     private static long lastCachedBookId = -1L;
     private static BookRecord cachedBook;
@@ -368,6 +373,9 @@ public final class ReaderContentController {
                             targetChapter.bodyText = fullChapter.bodyText;
                         }
                         String body = targetChapter.bodyText == null ? "" : targetChapter.bodyText;
+                        if (isVolumeHeadingWithoutBody(targetChapter, body)) {
+                            body = "";
+                        }
                         prewarmedText = ReplacementEngine.apply(body, loadedRules);
                         prewarmChapterIndex = targetIndex;
                     }
@@ -802,6 +810,9 @@ public final class ReaderContentController {
             }
         }
         String body = chapter.bodyText == null ? "" : chapter.bodyText;
+        if (isVolumeHeadingWithoutBody(chapter, body)) {
+            body = "";
+        }
         String processed = ReplacementEngine.apply(body, state.replacementRules);
         synchronized (processedChapterLruCache) {
             processedChapterLruCache.put(chapterIndex, processed);
@@ -810,6 +821,14 @@ public final class ReaderContentController {
             processedChapterLengthCache.put(chapterIndex, processed.length());
         }
         return processed;
+    }
+
+    private boolean isVolumeHeadingWithoutBody(ChapterRecord chapter, String body) {
+        if (chapter == null || body == null || !EMPTY_CHAPTER_TEXT_PLACEHOLDER.equals(body.trim())) {
+            return false;
+        }
+        String title = chapter.title == null ? "" : chapter.title.trim();
+        return VOLUME_CHAPTER_TITLE_PATTERN.matcher(title).matches();
     }
 
     /** 在后台预加载章节正文+替换处理，让动画结束后的排版能直接命中缓存。 */
@@ -838,6 +857,9 @@ public final class ReaderContentController {
                     }
                 }
                 body = chapter.bodyText == null ? "" : chapter.bodyText;
+                if (isVolumeHeadingWithoutBody(chapter, body)) {
+                    body = "";
+                }
                 String processed = ReplacementEngine.apply(body, state.replacementRules);
                 synchronized (processedChapterLruCache) {
                     processedChapterLruCache.put(safeIndex, processed);
@@ -879,6 +901,9 @@ public final class ReaderContentController {
                 }
             }
             String body = chapter.bodyText == null ? "" : chapter.bodyText;
+            if (isVolumeHeadingWithoutBody(chapter, body)) {
+                body = "";
+            }
             String processed = ReplacementEngine.apply(body, state.replacementRules);
             synchronized (processedChapterLruCache) {
                 processedChapterLruCache.put(nextIndex, processed);
@@ -995,6 +1020,10 @@ public final class ReaderContentController {
                 ? state.chapters.get(chapterIndex) : null;
         // 正文已加载：直接用字符串长度，不触发解压
         if (ch != null && ch.bodyText != null && !ch.bodyText.isEmpty()) {
+            if (isVolumeHeadingWithoutBody(ch, ch.bodyText)) {
+                processedChapterLengthCache.put(chapterIndex, 0);
+                return 0;
+            }
             int length = ch.bodyText.length();
             processedChapterLengthCache.put(chapterIndex, length);
             return length;
