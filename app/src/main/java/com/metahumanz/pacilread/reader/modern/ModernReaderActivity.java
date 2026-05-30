@@ -1169,13 +1169,16 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             ui.showToast("书籍尚未载入");
             return;
         }
-        runtime.safeExecute(() -> {
+        try {
             List<BookmarkRecord> bookmarks = runtime.databaseHelper.getBookmarksForBook(
                     state.book.id,
                     state.book.readingStatsKey
             );
-            runOnReaderUiThread(() -> renderBookmarkDialog(bookmarks));
-        }, "load reader bookmarks");
+            renderBookmarkDialog(bookmarks);
+        } catch (RuntimeException error) {
+            Log.w(TAG, "Failed to load reader bookmarks", error);
+            ui.showToast("打开书签失败");
+        }
     }
 
     private void renderBookmarkDialog(List<BookmarkRecord> bookmarks) {
