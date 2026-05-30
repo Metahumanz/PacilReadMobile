@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_dialog"
+    android:orientation="vertical"
+    android:padding="18dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="书签"
+            android:textColor="?attr/themeColorOnSurface"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/bookmark_button_close"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_outline_button"
+            android:minHeight="40dp"
+            android:minWidth="0dp"
+            android:paddingLeft="14dp"
+            android:paddingRight="14dp"
+            android:text="关闭"
+            android:textAllCaps="false"
+            android:textColor="?attr/themeColorOnSurface"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/bookmark_button_add"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/bg_primary_button"
+        android:minHeight="48dp"
+        android:text="添加书签"
+        android:textAllCaps="false"
+        android:textColor="@android:color/white"
+        android:textSize="15sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/bookmark_empty_text"
+        android:layout_width="match_parent"
+        android:layout_height="112dp"
+        android:gravity="center"
+        android:text="本书还没有书签"
+        android:textColor="?attr/themeColorOnSurfaceMuted"
+        android:textSize="14sp" />
+
+    <ScrollView
+        android:id="@+id/bookmark_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="320dp"
+        android:layout_marginTop="12dp"
+        android:clipToPadding="false"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/bookmark_rows"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="2dp" />
+    </ScrollView>
+</LinearLayout>
