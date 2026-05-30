@@ -131,7 +131,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         setupControls();
         installPredictiveBack();
 
-        boolean useFluidEnter = hasLaunchSource() && com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(runtime.settingsStore);
+        boolean restoringReaderInstance = savedInstanceState != null;
+        boolean useFluidEnter = !restoringReaderInstance
+                && hasLaunchSource()
+                && com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(runtime.settingsStore);
         if (useFluidEnter) {
             readerEnterTransitionActive = true;
             ActivityTransitionCompat.overrideOpen(this, 0, 0);
@@ -203,9 +206,12 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        outState.putInt("restored_chapter_index", state.currentChapterIndex);
-        outState.putInt("restored_page_index", state.currentPageIndex);
-        outState.putInt("restored_progress_offset", content == null ? -1 : content.currentCharOffset());
+        ReaderContentController.ReadingPosition position = content == null
+                ? null
+                : content.captureCurrentReadingPosition();
+        outState.putInt("restored_chapter_index", position == null ? state.currentChapterIndex : position.chapterIndex);
+        outState.putInt("restored_page_index", position == null ? state.currentPageIndex : position.pageIndex);
+        outState.putInt("restored_progress_offset", position == null ? -1 : position.chapterOffset);
     }
 
     @Override
@@ -218,7 +224,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             chrome.cancelAutoHide();
         }
         if (!readerExitProgressPersisted) {
-            persistReaderProgress(readerExitFinishing);
+            persistReaderProgress(true);
         }
         if (paging != null) {
             paging.cancelInteractiveAnimator();
@@ -235,6 +241,14 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             content.cancelPendingReflow();
         }
         state.pendingTapPagingDelta = 0;
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (!readerExitProgressPersisted) {
+            persistReaderProgress(true);
+        }
     }
 
     @Override
