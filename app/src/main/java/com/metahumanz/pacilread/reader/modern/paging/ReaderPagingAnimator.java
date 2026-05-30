@@ -572,6 +572,7 @@ public final class ReaderPagingAnimator {
         state.simulationFinishCoverVisible = false;
         state.simulationStableCoverVisible = false;
         navigation.bindCurrentSpread(safeChapterIndex, safePageIndex);
+        content.rememberCurrentPageAnchor();
         restoreLivePageLayers(false);
         resetAnimatedPage(views.pageCurrent);
         resetAnimatedPage(views.pageIncoming);
@@ -942,6 +943,7 @@ public final class ReaderPagingAnimator {
                 direction
         );
         navigation.bindCurrentSpread(targetChapterIndex, targetPageIndex);
+        content.rememberCurrentPageAnchor();
         if ("simulation".equals(runtime.settingsStore.getFlipMode())) {
             resetAnimatedPage(views.pageCurrent);
             resetAnimatedPage(views.pageIncoming);
@@ -1049,6 +1051,7 @@ public final class ReaderPagingAnimator {
         bringStableBookSpineOverlayToFront();
         resetInteractiveTouchState();
         state.pendingTapPagingDelta = 0;
+        content.rememberCurrentPageAnchor();
         activity.markReadingActivity();
         chrome.updateUiAfterPageChange();
         state.isAnimating = false;

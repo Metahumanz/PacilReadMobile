@@ -92,6 +92,7 @@ public final class ReaderNavigationController {
             bindCurrentSpread(safeChapterIndex, safePageIndex);
             state.currentChapterIndex = safeChapterIndex;
             state.currentPageIndex = safePageIndex;
+            content.rememberCurrentPageAnchor();
             activity.markReadingActivity();
             paging.restoreLivePageLayers(false);
             paging.resetAnimatedPage(views.pageCurrent);
@@ -142,6 +143,7 @@ public final class ReaderNavigationController {
         bindCurrentSpreadFromPages(safeChapterIndex, safePageIndex, pages, complete);
         state.currentChapterIndex = safeChapterIndex;
         state.currentPageIndex = safePageIndex;
+        content.rememberCurrentPageAnchor();
         activity.markReadingActivity();
         paging.restoreLivePageLayers(false);
         paging.resetAnimatedPage(views.pageCurrent);

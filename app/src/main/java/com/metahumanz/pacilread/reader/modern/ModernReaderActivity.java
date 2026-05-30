@@ -131,7 +131,10 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         setupControls();
         installPredictiveBack();
 
-        boolean useFluidEnter = hasLaunchSource() && com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(runtime.settingsStore);
+        boolean restoringReaderInstance = savedInstanceState != null;
+        boolean useFluidEnter = !restoringReaderInstance
+                && hasLaunchSource()
+                && com.metahumanz.pacilread.ui.TransitionMotionModeHelper.isFluidMode(runtime.settingsStore);
         if (useFluidEnter) {
             readerEnterTransitionActive = true;
             ActivityTransitionCompat.overrideOpen(this, 0, 0);
@@ -203,9 +206,12 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        outState.putInt("restored_chapter_index", state.currentChapterIndex);
-        outState.putInt("restored_page_index", state.currentPageIndex);
-        outState.putInt("restored_progress_offset", content == null ? -1 : content.currentCharOffset());
+        ReaderContentController.ReadingPosition position = content == null
+                ? null
+                : content.captureCurrentReadingPosition();
+        outState.putInt("restored_chapter_index", position == null ? state.currentChapterIndex : position.chapterIndex);
+        outState.putInt("restored_page_index", position == null ? state.currentPageIndex : position.pageIndex);
+        outState.putInt("restored_progress_offset", position == null ? -1 : position.chapterOffset);
     }
 
     @Override
@@ -218,7 +224,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             chrome.cancelAutoHide();
         }
         if (!readerExitProgressPersisted) {
-            persistReaderProgress(readerExitFinishing);
+            persistReaderProgress(true);
         }
         if (paging != null) {
             paging.cancelInteractiveAnimator();
@@ -235,6 +241,14 @@ public class ModernReaderActivity extends ThemedReaderActivity {
             content.cancelPendingReflow();
         }
         state.pendingTapPagingDelta = 0;
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (!readerExitProgressPersisted) {
+            persistReaderProgress(true);
+        }
     }
 
     @Override
@@ -1165,50 +1179,17 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     }
 
     private void renderBookmarkDialog(List<BookmarkRecord> bookmarks) {
-        LinearLayout contentLayout = new LinearLayout(this);
-        contentLayout.setOrientation(LinearLayout.VERTICAL);
-        int padding = ui.dp(16);
-        contentLayout.setPadding(padding, padding, padding, ui.dp(8));
-
-        Button addButton = new Button(this);
-        addButton.setText("添加书签");
-        addButton.setAllCaps(false);
-        addButton.setBackgroundResource(R.drawable.bg_app_primary_button);
-        addButton.setTextColor(ui.themeColor(R.color.app_button_primary_text));
-        contentLayout.addView(addButton, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        ));
-
+        View contentView = android.view.LayoutInflater.from(this).inflate(R.layout.dialog_bookmarks, null, false);
+        Button addButton = contentView.findViewById(R.id.bookmark_button_add);
+        Button closeButton = contentView.findViewById(R.id.bookmark_button_close);
+        TextView emptyText = contentView.findViewById(R.id.bookmark_empty_text);
+        ScrollView scrollView = contentView.findViewById(R.id.bookmark_scroll);
+        LinearLayout rows = contentView.findViewById(R.id.bookmark_rows);
         AlertDialog[] dialogRef = new AlertDialog[1];
         boolean empty = bookmarks == null || bookmarks.isEmpty();
-        if (empty) {
-            TextView emptyText = new TextView(this);
-            emptyText.setText("本书还没有书签");
-            emptyText.setGravity(Gravity.CENTER);
-            emptyText.setTextColor(ui.themeColor(R.color.app_text_secondary));
-            emptyText.setTextSize(14f);
-            LinearLayout.LayoutParams emptyParams = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-            );
-            emptyParams.setMargins(0, ui.dp(18), 0, ui.dp(8));
-            contentLayout.addView(emptyText, emptyParams);
-        } else {
-            ScrollView scrollView = new ScrollView(this);
-            LinearLayout rows = new LinearLayout(this);
-            rows.setOrientation(LinearLayout.VERTICAL);
-            scrollView.addView(rows, new ScrollView.LayoutParams(
-                    ScrollView.LayoutParams.MATCH_PARENT,
-                    ScrollView.LayoutParams.WRAP_CONTENT
-            ));
-            LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-            );
-            scrollParams.setMargins(0, ui.dp(10), 0, 0);
-            contentLayout.addView(scrollView, scrollParams);
-
+        emptyText.setVisibility(empty ? View.VISIBLE : View.GONE);
+        scrollView.setVisibility(empty ? View.GONE : View.VISIBLE);
+        if (!empty) {
             for (BookmarkRecord bookmark : bookmarks) {
                 rows.addView(createReaderBookmarkRow(bookmark, () -> {
                     if (dialogRef[0] != null) {
@@ -1220,22 +1201,21 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         }
 
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("书签")
-                .setView(contentLayout)
-                .setNegativeButton("关闭", null)
+                .setView(contentView)
                 .create();
         dialogRef[0] = dialog;
         addButton.setOnClickListener(v -> {
             dialog.dismiss();
             showAddBookmarkDialog();
         });
+        closeButton.setOnClickListener(v -> dialog.dismiss());
         dialogSupport.showStyledDialog(dialog);
     }
 
     private View createReaderBookmarkRow(BookmarkRecord bookmark, Runnable onClick) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.VERTICAL);
-        row.setBackgroundResource(R.drawable.bg_app_input);
+        row.setBackgroundResource(R.drawable.bg_input);
         row.setPadding(ui.dp(14), ui.dp(12), ui.dp(14), ui.dp(12));
         row.setClickable(true);
         row.setFocusable(true);
@@ -1250,7 +1230,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         title.setText(bookmark.chapterTitle == null || bookmark.chapterTitle.isBlank()
                 ? "未命名章节"
                 : bookmark.chapterTitle);
-        title.setTextColor(ui.themeColor(R.color.app_text_primary));
+        title.setTextColor(ui.themeColor(R.color.on_surface));
         title.setTextSize(15f);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setMaxLines(1);
@@ -1258,12 +1238,12 @@ public class ModernReaderActivity extends ThemedReaderActivity {
 
         TextView meta = new TextView(this);
         meta.setText(String.format(Locale.SIMPLIFIED_CHINESE, "%.1f%%", bookmark.progressPercent));
-        meta.setTextColor(ui.themeColor(R.color.app_text_secondary));
+        meta.setTextColor(ui.themeColor(R.color.on_surface_muted));
         meta.setTextSize(13f);
 
         TextView summary = new TextView(this);
         summary.setText(bookmark.summary == null || bookmark.summary.isBlank() ? "无摘要" : bookmark.summary);
-        summary.setTextColor(ui.themeColor(R.color.app_text_secondary));
+        summary.setTextColor(ui.themeColor(R.color.on_surface_muted));
         summary.setTextSize(13f);
         summary.setMaxLines(2);
         summary.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -1288,34 +1268,83 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         int chapterOffset = content.currentCharOffset();
         String summary = content.buildBookmarkSummary(chapterIndex, chapterOffset, 120);
 
+        LinearLayout contentLayout = new LinearLayout(this);
+        contentLayout.setOrientation(LinearLayout.VERTICAL);
+        contentLayout.setBackgroundResource(R.drawable.bg_dialog);
+        contentLayout.setPadding(ui.dp(18), ui.dp(18), ui.dp(18), ui.dp(18));
+
+        TextView title = new TextView(this);
+        title.setText("添加书签");
+        title.setTextColor(ui.themeColor(R.color.on_surface));
+        title.setTextSize(20f);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        contentLayout.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        ));
+
         EditText editText = new EditText(this);
         editText.setMinLines(3);
         editText.setMaxLines(6);
         editText.setText(summary);
         editText.setSelection(editText.getText().length());
-        editText.setTextColor(ui.themeColor(R.color.app_text_primary));
-        editText.setHintTextColor(ui.themeColor(R.color.app_text_secondary));
+        editText.setTextColor(ui.themeColor(R.color.on_surface));
+        editText.setHintTextColor(ui.themeColor(R.color.on_surface_muted));
         editText.setHint("摘要");
-        editText.setBackgroundResource(R.drawable.bg_app_input);
+        editText.setBackgroundResource(R.drawable.bg_input);
         editText.setPadding(ui.dp(12), ui.dp(10), ui.dp(12), ui.dp(10));
 
-        LinearLayout wrapper = new LinearLayout(this);
-        wrapper.setPadding(ui.dp(16), ui.dp(12), ui.dp(16), 0);
-        wrapper.addView(editText, new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        inputParams.setMargins(0, ui.dp(14), 0, 0);
+        contentLayout.addView(editText, inputParams);
+
+        LinearLayout buttonRow = new LinearLayout(this);
+        buttonRow.setOrientation(LinearLayout.HORIZONTAL);
+        buttonRow.setGravity(Gravity.END);
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        rowParams.setMargins(0, ui.dp(14), 0, 0);
+        contentLayout.addView(buttonRow, rowParams);
+
+        Button cancelButton = new Button(this);
+        cancelButton.setText("取消");
+        cancelButton.setAllCaps(false);
+        cancelButton.setBackgroundResource(R.drawable.bg_outline_button);
+        cancelButton.setTextColor(ui.themeColor(R.color.on_surface));
+        buttonRow.addView(cancelButton, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
         ));
 
+        Button saveButton = new Button(this);
+        saveButton.setText("保存");
+        saveButton.setAllCaps(false);
+        saveButton.setBackgroundResource(R.drawable.bg_primary_button);
+        saveButton.setTextColor(android.graphics.Color.WHITE);
+        LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        saveParams.setMargins(ui.dp(10), 0, 0, 0);
+        buttonRow.addView(saveButton, saveParams);
+
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("添加书签")
-                .setView(wrapper)
-                .setNegativeButton("取消", null)
-                .setPositiveButton("保存", (unusedDialog, which) -> saveBookmark(
-                        chapterIndex,
-                        chapterOffset,
-                        editText.getText() == null ? "" : editText.getText().toString()
-                ))
+                .setView(contentLayout)
                 .create();
+        cancelButton.setOnClickListener(v -> dialog.dismiss());
+        saveButton.setOnClickListener(v -> {
+            dialog.dismiss();
+            saveBookmark(
+                    chapterIndex,
+                    chapterOffset,
+                    editText.getText() == null ? "" : editText.getText().toString()
+            );
+        });
         dialogSupport.showStyledDialog(dialog);
     }
 

@@ -456,8 +456,10 @@ public final class ReaderContentController {
         if (state.book == null || state.chapters.isEmpty()) {
             return;
         }
-        int offset = currentCharOffset();
-        ChapterRecord chapter = state.chapters.get(state.currentChapterIndex);
+        ReadingPosition position = captureCurrentReadingPosition();
+        int safeChapterIndex = ui.clamp(position.chapterIndex, 0, state.chapters.size() - 1);
+        int offset = Math.max(position.chapterOffset, 0);
+        ChapterRecord chapter = state.chapters.get(safeChapterIndex);
         int chapterOrderIndex = chapter.orderIndex;
         long persistedAt = System.currentTimeMillis();
         state.book.progressIndex = chapterOrderIndex;
@@ -1054,65 +1056,89 @@ public final class ReaderContentController {
     }
 
     public int currentCharOffset() {
+        return captureCurrentReadingPosition().chapterOffset;
+    }
+
+    public ReadingPosition captureCurrentReadingPosition() {
         if (state.chapters.isEmpty()) {
-            return 0;
+            return new ReadingPosition(
+                    Math.max(state.currentChapterIndex, 0),
+                    Math.max(state.currentPageIndex, 0),
+                    0
+            );
         }
+        int safeChapterIndex = ui.clamp(state.currentChapterIndex, 0, state.chapters.size() - 1);
+        int safePageIndex = Math.max(state.currentPageIndex, 0);
+        int offset = resolvePageStartOffset(safeChapterIndex, safePageIndex);
+        rememberChapterAnchor(safeChapterIndex, safePageIndex, offset);
+        return new ReadingPosition(safeChapterIndex, safePageIndex, offset);
+    }
+
+    private int resolvePageStartOffset(int chapterIndex, int pageIndex) {
         PartialPagination partial = activePartialPagination;
         if (partial != null
-                && partial.chapterIndex == state.currentChapterIndex
-                && state.currentPageIndex >= 0
-                && state.currentPageIndex < partial.pages.size()) {
-            int offset = Math.max(partial.pages.get(state.currentPageIndex).start, 0);
-            rememberCurrentChapterAnchor(offset);
-            return offset;
+                && partial.chapterIndex == chapterIndex
+                && pageIndex >= 0
+                && pageIndex < partial.pages.size()) {
+            return Math.max(partial.pages.get(pageIndex).start, 0);
         }
         List<PageSlice> pages;
         synchronized (cachedPageSlicesMap) {
-            pages = cachedPageSlicesMap.get(state.currentChapterIndex);
+            pages = cachedPageSlicesMap.get(chapterIndex);
         }
-        if (pages == null) {
-            return fallbackCurrentChapterOffset();
+        if (pages != null && !pages.isEmpty()) {
+            return Math.max(pages.get(ui.clamp(pageIndex, 0, pages.size() - 1)).start, 0);
         }
-        if (pages.isEmpty()) {
-            rememberCurrentChapterAnchor(0);
-            return 0;
-        }
-        int offset = Math.max(pages.get(ui.clamp(state.currentPageIndex, 0, pages.size() - 1)).start, 0);
-        rememberCurrentChapterAnchor(offset);
-        return offset;
+        return fallbackChapterOffset(chapterIndex);
     }
 
     public int rememberCurrentPageAnchor() {
         return currentCharOffset();
     }
 
-    private void rememberCurrentChapterAnchor(int offset) {
-        rememberChapterAnchor(state.currentChapterIndex, offset);
+    private void rememberChapterAnchor(int chapterIndex, int offset) {
+        rememberChapterAnchor(chapterIndex, 0, offset);
     }
 
-    private void rememberChapterAnchor(int chapterIndex, int offset) {
+    private void rememberChapterAnchor(int chapterIndex, int pageIndex, int offset) {
         if (state.chapters.isEmpty()) {
             state.lastKnownChapterIndex = -1;
+            state.lastKnownPageIndex = -1;
             state.lastKnownChapterOffset = 0;
             return;
         }
         int safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size() - 1);
         state.lastKnownChapterIndex = safeChapterIndex;
+        state.lastKnownPageIndex = Math.max(pageIndex, 0);
         state.lastKnownChapterOffset = Math.max(offset, 0);
     }
 
-    private int fallbackCurrentChapterOffset() {
-        int currentChapterIndex = ui.clamp(state.currentChapterIndex, 0, state.chapters.size() - 1);
-        if (state.lastKnownChapterIndex == currentChapterIndex) {
+    private int fallbackChapterOffset(int chapterIndex) {
+        int safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size() - 1);
+        if (state.lastKnownChapterIndex == safeChapterIndex) {
             return Math.max(state.lastKnownChapterOffset, 0);
         }
         if (state.book != null) {
-            ChapterRecord chapter = state.chapters.get(currentChapterIndex);
+            ChapterRecord chapter = state.chapters.get(safeChapterIndex);
             if (chapter != null && state.book.progressIndex == chapter.orderIndex) {
                 return Math.max(state.book.progressOffset, 0);
             }
         }
-        return Math.max(state.sessionStartOffset, 0);
+        return safeChapterIndex == ui.clamp(state.currentChapterIndex, 0, state.chapters.size() - 1)
+                ? Math.max(state.sessionStartOffset, 0)
+                : 0;
+    }
+
+    public static final class ReadingPosition {
+        public final int chapterIndex;
+        public final int pageIndex;
+        public final int chapterOffset;
+
+        private ReadingPosition(int chapterIndex, int pageIndex, int chapterOffset) {
+            this.chapterIndex = chapterIndex;
+            this.pageIndex = pageIndex;
+            this.chapterOffset = chapterOffset;
+        }
     }
 
     public float bookProgressPercentFor(int chapterIndex, int chapterOffset) {

@@ -89,5 +89,6 @@ public final class ReaderSessionState {
     public long sessionStartTime = 0L;
     public int sessionStartOffset = 0;
     public int lastKnownChapterIndex = -1;
+    public int lastKnownPageIndex = -1;
     public int lastKnownChapterOffset = 0;
 }
