@@ -23,6 +23,8 @@ public class SettingsStore {
     private static final String JSON_BACKGROUND_FILE = "reader_background_file";
     private static final String DEFAULT_WEB_DAV_ROOT_DIR = "PacilRead";
     private static final String DEFAULT_ANDROID_SETTINGS_DIR = "android-settings";
+    private static final int DEFAULT_WEB_DAV_BOOKSHELF_PROGRESS_PREFETCH_LIMIT = 6;
+    private static final int MAX_WEB_DAV_BOOKSHELF_PROGRESS_PREFETCH_LIMIT = 100;
 
     private static final String KEY_AUTO_OPEN = "auto_open_last";
     private static final String KEY_WEB_DAV_ENABLED = "webdav_enabled";
@@ -33,6 +35,8 @@ public class SettingsStore {
     private static final String KEY_WEB_DAV_PASSWORD = "webdav_password";
     private static final String KEY_WEB_DAV_LAST_FULL = "webdav_last_full";
     private static final String KEY_WEB_DAV_LAST_LITE = "webdav_last_lite";
+    private static final String KEY_WEB_DAV_BOOKSHELF_PROGRESS_PREFETCH_LIMIT =
+            "webdav_bookshelf_progress_prefetch_limit";
     private static final String KEY_WEB_DAV_SYNC_BOOKSHELF = "webdav_sync_bookshelf";
     private static final String KEY_WEB_DAV_SYNC_FILES = "webdav_sync_files";
     private static final String KEY_WEB_DAV_SYNC_UI_SETTINGS = "webdav_sync_ui_settings";
@@ -107,6 +111,7 @@ public class SettingsStore {
 
     private static final Set<String> ANDROID_PRIVATE_SYNC_KEYS = new HashSet<>(Arrays.asList(
             KEY_AUTO_OPEN,
+            KEY_WEB_DAV_BOOKSHELF_PROGRESS_PREFETCH_LIMIT,
             KEY_FONT_SIZE,
             KEY_FONT_FAMILY,
             KEY_FONT_WEIGHT,
@@ -260,6 +265,24 @@ public class SettingsStore {
 
     public void setWebDavLastLiteBackupAt(long value) {
         preferences.edit().putLong(KEY_WEB_DAV_LAST_LITE, value).apply();
+    }
+
+    public int getWebDavBookshelfProgressPrefetchLimit() {
+        return clamp(
+                preferences.getInt(
+                        KEY_WEB_DAV_BOOKSHELF_PROGRESS_PREFETCH_LIMIT,
+                        DEFAULT_WEB_DAV_BOOKSHELF_PROGRESS_PREFETCH_LIMIT
+                ),
+                0,
+                MAX_WEB_DAV_BOOKSHELF_PROGRESS_PREFETCH_LIMIT
+        );
+    }
+
+    public void setWebDavBookshelfProgressPrefetchLimit(int value) {
+        preferences.edit().putInt(
+                KEY_WEB_DAV_BOOKSHELF_PROGRESS_PREFETCH_LIMIT,
+                clamp(value, 0, MAX_WEB_DAV_BOOKSHELF_PROGRESS_PREFETCH_LIMIT)
+        ).apply();
     }
 
     public boolean isWebDavSyncBookshelfEnabled() {

@@ -73,6 +73,27 @@
                 android:text="根目录用于书架、封面、阅读统计和平台私有设置；Android 设置目录只保存 android-settings.json 与背景图，不会读取电脑端设置。"
                 android:textColor="?attr/themeColorAppTextSecondary" />
 
+            <EditText
+                android:id="@+id/input_webdav_bookshelf_progress_prefetch_limit"
+                style="@style/AppChromeInputText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_app_input"
+                android:hint="打开书架时拉取进度数量（默认 6）"
+                android:inputType="number"
+                android:maxLength="3"
+                android:minHeight="48dp"
+                android:padding="12dp" />
+
+            <TextView
+                style="@style/AppChromeCaption"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="按当前书架排序依次预取，范围为 0 到 100；填写 0 可关闭打开书架时的后台进度拉取。"
+                android:textColor="?attr/themeColorAppTextSecondary" />
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

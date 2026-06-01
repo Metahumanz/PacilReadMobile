@@ -95,6 +95,7 @@ final class SettingsScreenController {
     private EditText settingsSubdirInput;
     private EditText userInput;
     private EditText passwordInput;
+    private EditText bookshelfProgressPrefetchLimitInput;
     private EditText mimoApiKeyInput;
     private Spinner appThemeSpinner;
     private Spinner readerUiThemeSpinner;
@@ -182,6 +183,9 @@ final class SettingsScreenController {
         settingsSubdirInput.setText(settingsStore.getWebDavSettingsSubdir());
         userInput.setText(settingsStore.getWebDavUser());
         passwordInput.setText(settingsStore.getWebDavPassword());
+        bookshelfProgressPrefetchLimitInput.setText(String.valueOf(
+                settingsStore.getWebDavBookshelfProgressPrefetchLimit()
+        ));
         mimoApiKeyInput.setText(settingsStore.getTtsMimoApiKey());
         appThemeSpinner.setSelection(indexOf(APP_THEME_KEYS, settingsStore.getAppThemeMode(), 0));
         readerUiThemeSpinner.setSelection(indexOf(READER_THEME_KEYS, settingsStore.getReaderUiThemeMode(), 0));
@@ -233,6 +237,7 @@ final class SettingsScreenController {
         settingsStore.setWebDavSettingsSubdir(settingsSubdirInput.getText().toString());
         settingsStore.setWebDavUser(userInput.getText().toString());
         settingsStore.setWebDavPassword(passwordInput.getText().toString());
+        settingsStore.setWebDavBookshelfProgressPrefetchLimit(readBookshelfProgressPrefetchLimit());
         if (ttsEngineSpinner != null) {
             settingsStore.setTtsEngine(TTS_ENGINE_KEYS[ttsEngineSpinner.getSelectedItemPosition()]);
         }
@@ -320,6 +325,8 @@ final class SettingsScreenController {
         settingsSubdirInput = activity.findViewById(R.id.input_webdav_settings_subdir);
         userInput = activity.findViewById(R.id.input_webdav_user);
         passwordInput = activity.findViewById(R.id.input_webdav_password);
+        bookshelfProgressPrefetchLimitInput =
+                activity.findViewById(R.id.input_webdav_bookshelf_progress_prefetch_limit);
         mimoApiKeyInput = activity.findViewById(R.id.input_mimo_api_key);
         appThemeSpinner = activity.findViewById(R.id.spinner_app_theme_mode);
         readerUiThemeSpinner = activity.findViewById(R.id.spinner_reader_ui_theme_mode);
@@ -757,6 +764,7 @@ final class SettingsScreenController {
         settingsSubdirInput.addTextChangedListener(autoSaveTextWatcher);
         userInput.addTextChangedListener(autoSaveTextWatcher);
         passwordInput.addTextChangedListener(autoSaveTextWatcher);
+        bookshelfProgressPrefetchLimitInput.addTextChangedListener(autoSaveTextWatcher);
         mimoApiKeyInput.addTextChangedListener(autoSaveTextWatcher);
         autoOpenCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsChanged());
         readerMenuAutoHideCheck.setOnCheckedChangeListener((buttonView, isChecked) -> handleSettingsChanged());
@@ -793,6 +801,7 @@ final class SettingsScreenController {
             return;
         }
         statusText.setText("已启用自动进度同步\n手动备份范围：" + buildWebDavScopeSummary()
+                + "\n书架进度预取：" + buildBookshelfProgressPrefetchSummary()
                 + "\nAndroid 设置快照：" + buildWebDavSettingsSnapshotSummary()
                 + "\n阅读时长累计：" + (settingsStore.isWebDavSyncReadingStatsEnabled() ? "已启用" : "已关闭")
                 + "\n远端清理：" + (settingsStore.isWebDavCleanRemoteOrphansEnabled() ? "备份后执行" : "已关闭"));
@@ -1025,6 +1034,19 @@ final class SettingsScreenController {
             message = error.getClass().getSimpleName();
         }
         return message.length() > 160 ? message.substring(0, 160) + "..." : message;
+    }
+
+    private int readBookshelfProgressPrefetchLimit() {
+        try {
+            return Integer.parseInt(bookshelfProgressPrefetchLimitInput.getText().toString());
+        } catch (Exception ignored) {
+            return settingsStore.getWebDavBookshelfProgressPrefetchLimit();
+        }
+    }
+
+    private String buildBookshelfProgressPrefetchSummary() {
+        int limit = settingsStore.getWebDavBookshelfProgressPrefetchLimit();
+        return limit == 0 ? "已关闭" : "前 " + limit + " 本";
     }
 
     private synchronized SystemTtsClient getTestSystemTtsClient() {
