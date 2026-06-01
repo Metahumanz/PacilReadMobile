@@ -13,8 +13,6 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 public final class WebDavProgressSyncCoordinator {
-    public static final int BOOKSHELF_PREFETCH_LIMIT = 6;
-
     private static final long FRESHNESS_TTL_MS = TimeUnit.MINUTES.toMillis(5);
     private static final long REMOTE_NEWER_GRACE_MS = 5000L;
     private static final Object LOCK = new Object();
