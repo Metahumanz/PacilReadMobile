@@ -7,6 +7,8 @@ import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -49,12 +51,14 @@ public class BookshelfActivity extends ThemedActivity {
     private static final int REQUEST_PICK_COVER = 1002;
     private static final String VIEW_MODE_CARD = "card";
     private static final String STATE_HOME_PAGE = "state_home_page";
+    private static final long PROGRESS_PREFETCH_FAILURE_HINT_MS = 3000L;
     public static final String EXTRA_AUTO_OPEN_BOOK_ID =
             "com.metahumanz.pacilread.EXTRA_AUTO_OPEN_BOOK_ID";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final ExecutorService progressPrefetchExecutor = Executors.newSingleThreadExecutor();
     private final List<BookRecord> allBooks = new ArrayList<>();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private JsonDatabase databaseHelper;
     private SettingsStore settingsStore;
@@ -90,6 +94,11 @@ public class BookshelfActivity extends ThemedActivity {
     private boolean booksLoading = false;
     private boolean autoOpenConsumed;
     private volatile boolean bookshelfDestroyed;
+    private Runnable clearProgressPrefetchStatusRunnable;
+    private boolean progressPrefetchRunning;
+    private int progressPrefetchCurrent;
+    private int progressPrefetchTotal;
+    private boolean progressPrefetchFailed;
     private PopupWindow bookActionsPopup;
 
     @Override
@@ -159,6 +168,10 @@ public class BookshelfActivity extends ThemedActivity {
     @Override
     protected void onDestroy() {
         bookshelfDestroyed = true;
+        if (clearProgressPrefetchStatusRunnable != null) {
+            mainHandler.removeCallbacks(clearProgressPrefetchStatusRunnable);
+            clearProgressPrefetchStatusRunnable = null;
+        }
         if (homeSettingsController != null) {
             homeSettingsController.onDestroy();
         }
@@ -537,29 +550,84 @@ public class BookshelfActivity extends ThemedActivity {
                 || progressSyncCoordinator == null) {
             return;
         }
-        int limit = Math.min(WebDavProgressSyncCoordinator.BOOKSHELF_PREFETCH_LIMIT, books.size());
+        int configuredLimit = settingsStore.getWebDavBookshelfProgressPrefetchLimit();
+        if (configuredLimit <= 0) {
+            return;
+        }
+        int limit = Math.min(configuredLimit, books.size());
         List<BookRecord> candidates = new ArrayList<>();
         for (int i = 0; i < limit; i++) {
             candidates.add(snapshotBookForProgressPrefetch(books.get(i)));
         }
         safeExecuteProgressPrefetch(() -> {
             boolean changed = false;
-            for (BookRecord book : candidates) {
+            boolean failed = false;
+            runOnBookshelfUiThread(() -> startBookshelfProgressPrefetch(candidates.size()));
+            for (int i = 0; i < candidates.size(); i++) {
                 if (Thread.currentThread().isInterrupted() || bookshelfDestroyed) {
                     return;
                 }
+                int current = i + 1;
+                BookRecord book = candidates.get(i);
+                runOnBookshelfUiThread(() -> updateBookshelfProgressPrefetchCurrent(current));
                 try {
                     WebDavProgressSyncCoordinator.SyncResult result =
                             progressSyncCoordinator.syncBookProgressIfNeeded(book);
                     changed = changed || result.remoteApplied;
                 } catch (Exception error) {
+                    failed = true;
                     Log.d(TAG, "WebDAV progress prefetch skipped for book " + book.id, error);
                 }
             }
-            if (changed && !Thread.currentThread().isInterrupted()) {
-                runOnBookshelfUiThread(() -> refreshBooks(false));
+            if (!Thread.currentThread().isInterrupted()) {
+                boolean refreshCards = changed;
+                boolean showFailureHint = failed;
+                runOnBookshelfUiThread(() -> {
+                    finishBookshelfProgressPrefetch(showFailureHint);
+                    if (refreshCards) {
+                        refreshBooks(false);
+                    }
+                });
             }
         }, "prefetch bookshelf WebDAV progress");
+    }
+
+    private void startBookshelfProgressPrefetch(int total) {
+        if (clearProgressPrefetchStatusRunnable != null) {
+            mainHandler.removeCallbacks(clearProgressPrefetchStatusRunnable);
+            clearProgressPrefetchStatusRunnable = null;
+        }
+        progressPrefetchRunning = true;
+        progressPrefetchCurrent = 0;
+        progressPrefetchTotal = total;
+        progressPrefetchFailed = false;
+        updateBookshelfStatsText();
+    }
+
+    private void updateBookshelfProgressPrefetchCurrent(int current) {
+        progressPrefetchCurrent = current;
+        updateBookshelfStatsText();
+    }
+
+    private void finishBookshelfProgressPrefetch(boolean failed) {
+        progressPrefetchRunning = false;
+        progressPrefetchFailed = failed;
+        updateBookshelfStatsText();
+        if (!failed) {
+            return;
+        }
+        if (clearProgressPrefetchStatusRunnable != null) {
+            mainHandler.removeCallbacks(clearProgressPrefetchStatusRunnable);
+        }
+        clearProgressPrefetchStatusRunnable = () -> {
+            clearProgressPrefetchStatusRunnable = null;
+            progressPrefetchFailed = false;
+            updateBookshelfStatsText();
+        };
+        mainHandler.postDelayed(
+                clearProgressPrefetchStatusRunnable,
+                PROGRESS_PREFETCH_FAILURE_HINT_MS
+        );
     }
 
     private BookRecord snapshotBookForProgressPrefetch(BookRecord source) {
@@ -599,7 +667,7 @@ public class BookshelfActivity extends ThemedActivity {
         listAdapter.setItems(filtered);
         gridAdapter.setItems(filtered);
         updateAddEntryVisibility();
-        updateStats(filtered);
+        updateBookshelfStatsText();
         updateEmptyState(query);
     }
 
@@ -648,12 +716,26 @@ public class BookshelfActivity extends ThemedActivity {
         return booksLoaded && listAdapter.getCount() == 0;
     }
 
-    private void updateStats(List<BookRecord> filtered) {
-        if (!booksLoaded && booksLoading) {
-            statsText.setText("正在加载书架...");
+    private void updateBookshelfStatsText() {
+        if (progressPrefetchFailed) {
+            statsText.setText("云端进度同步失败，已展示本地进度");
             return;
         }
-        statsText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "共 %d 本书籍", filtered.size()));
+        if (progressPrefetchRunning) {
+            statsText.setText(String.format(
+                    Locale.SIMPLIFIED_CHINESE,
+                    "正在同步云端阅读进度 %d/%d...",
+                    progressPrefetchCurrent,
+                    progressPrefetchTotal
+            ));
+            return;
+        }
+        if (booksLoading) {
+            statsText.setText(booksLoaded ? "正在刷新书架..." : "正在加载书架...");
+            return;
+        }
+        int visibleBookCount = listAdapter == null ? allBooks.size() : listAdapter.getCount();
+        statsText.setText(String.format(Locale.SIMPLIFIED_CHINESE, "共 %d 本书籍", visibleBookCount));
     }
 
     // ==================== Book Actions ====================
@@ -928,7 +1010,7 @@ public class BookshelfActivity extends ThemedActivity {
                     listAdapter.setItems(single);
                     gridAdapter.setItems(single);
                     updateAddEntryVisibility();
-                    updateStats(single);
+                    updateBookshelfStatsText();
                     booksLoaded = true;
                     booksLoading = false;
                     applyBookshelfMode();
@@ -1001,15 +1083,13 @@ public class BookshelfActivity extends ThemedActivity {
     // ==================== UI Helpers ====================
 
     private void showBookshelfLoadingState() {
-        if (booksLoaded) {
-            statsText.setText("正在刷新书架...");
-            return;
+        if (!booksLoaded) {
+            emptyLayout.setVisibility(View.GONE);
+            gridBooks.setVisibility(View.GONE);
+            listBooks.setVisibility(View.GONE);
+            applyBookshelfMode();
         }
-        emptyLayout.setVisibility(View.GONE);
-        gridBooks.setVisibility(View.GONE);
-        listBooks.setVisibility(View.GONE);
-        statsText.setText("正在加载书架...");
-        applyBookshelfMode();
+        updateBookshelfStatsText();
     }
 
     private void showLoading(String message) {
