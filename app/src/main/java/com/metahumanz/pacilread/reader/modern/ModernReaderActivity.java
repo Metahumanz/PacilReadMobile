@@ -1059,6 +1059,12 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         }
     }
 
+    public void ensureLivePageLayerForTextSelection() {
+        if (paging != null) {
+            paging.clearStableSimulationCoverForLiveView();
+        }
+    }
+
     private int bodyCharOffsetFromTouch(MotionEvent e) {
         if (views.pageBodyCurrent == null) return -1;
         int[] loc = new int[2];
