@@ -232,6 +232,7 @@ public final class ReaderTextSelectionController {
         if (range == null) {
             return;
         }
+        activity.ensureLivePageLayerForTextSelection();
         activeTarget = target;
         selectionActive = true;
         state.pagingGestureCandidate = false;
@@ -349,7 +350,7 @@ public final class ReaderTextSelectionController {
     }
 
     private boolean isInsideView(MotionEvent event, View view) {
-        if (event == null || view == null || view.getVisibility() != View.VISIBLE || view.getWidth() <= 0 || view.getHeight() <= 0) {
+        if (event == null || view == null || !view.isShown() || view.getWidth() <= 0 || view.getHeight() <= 0) {
             return false;
         }
         int[] location = new int[2];
