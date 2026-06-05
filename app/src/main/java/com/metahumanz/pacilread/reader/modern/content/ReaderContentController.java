@@ -520,6 +520,9 @@ public final class ReaderContentController {
                     return;
                 }
                 if (!result.remoteApplied) {
+                    if (result.skippedFresh && applyFreshLocalProgressFromDatabase(initialComparison)) {
+                        remoteApplied = true;
+                    }
                     return;
                 }
                 if (!activity.isReaderActive() || state.chapters.isEmpty()) {
@@ -546,6 +549,49 @@ public final class ReaderContentController {
                 }
             }
         }, "sync reader progress from WebDAV");
+    }
+
+    private boolean applyFreshLocalProgressFromDatabase(RemoteProgressComparison initialComparison) {
+        if (initialComparison == null || state.book == null || state.chapters.isEmpty()) {
+            return false;
+        }
+        BookRecord latestBook = runtime.databaseHelper.getBook(state.book.id);
+        if (latestBook == null || !isProgressNewerThanInitial(latestBook, initialComparison)) {
+            return false;
+        }
+        int latestIndex = ui.clamp(
+                navigation.chapterIndexFromOrder(latestBook.progressIndex),
+                0,
+                state.chapters.size() - 1
+        );
+        ChapterRecord latestChapter = state.chapters.get(latestIndex);
+        int latestChapterOrderIndex = latestChapter == null ? latestBook.progressIndex : latestChapter.orderIndex;
+        int latestOffset = Math.max(latestBook.progressOffset, 0);
+        if (state.book.progressIndex == latestChapterOrderIndex
+                && state.book.progressOffset == latestOffset) {
+            state.book.lastReadAt = Math.max(state.book.lastReadAt, latestBook.lastReadAt);
+            return false;
+        }
+        state.book.progressIndex = latestChapterOrderIndex;
+        state.book.progressOffset = latestOffset;
+        state.book.lastReadAt = latestBook.lastReadAt;
+        activity.runOnReaderUiThread(() -> scheduleReflowAfterLayout(latestIndex, latestOffset));
+        return true;
+    }
+
+    private boolean isProgressNewerThanInitial(BookRecord latestBook, RemoteProgressComparison initialComparison) {
+        if (latestBook == null || initialComparison == null) {
+            return false;
+        }
+        boolean positionChanged = latestBook.progressIndex != initialComparison.progressIndex
+                || latestBook.progressOffset != initialComparison.progressOffset;
+        if (!positionChanged) {
+            return latestBook.lastReadAt > initialComparison.lastReadAt;
+        }
+        boolean initialEmpty = initialComparison.lastReadAt <= 0L
+                && initialComparison.progressIndex == 0
+                && initialComparison.progressOffset == 0;
+        return initialEmpty || latestBook.lastReadAt > initialComparison.lastReadAt;
     }
 
     private void scheduleRemoteProgressSync() {
