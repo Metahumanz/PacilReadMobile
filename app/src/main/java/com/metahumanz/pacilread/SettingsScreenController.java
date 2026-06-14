@@ -24,7 +24,10 @@ import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.model.ReplacementRuleRecord;
 import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
+import com.metahumanz.pacilread.storage.SnapshotManager;
 import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
+import com.metahumanz.pacilread.sync.SyncDiffItem;
+import com.metahumanz.pacilread.sync.SyncDiffPreview;
 import com.metahumanz.pacilread.sync.WebDavBackupManager;
 import com.metahumanz.pacilread.sync.WebDavClient;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
@@ -32,7 +35,9 @@ import com.metahumanz.pacilread.tts.MimoTtsClient;
 import com.metahumanz.pacilread.tts.SystemTtsClient;
 import com.metahumanz.pacilread.ui.TransitionMotionModeHelper;
 
+import java.text.DateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -71,6 +76,7 @@ final class SettingsScreenController {
     private final WebDavClient webDavClient;
     private final WebDavBackupManager backupManager;
     private final ReadingStatsSyncManager readingStatsSyncManager;
+    private final SnapshotManager snapshotManager;
     private final BookImportService importService;
     private final MimoTtsClient testMimoTtsClient = new MimoTtsClient();
 
@@ -84,6 +90,8 @@ final class SettingsScreenController {
     private TextView textAppVersion;
     private androidx.core.widget.NestedScrollView scrollChangelog;
     private Button optimizeDatabaseButton;
+    private Button createSnapshotButton;
+    private Button manageSnapshotsButton;
     private TextView fullBackupText;
     private TextView liteBackupText;
     private CheckBox autoOpenCheck;
@@ -152,6 +160,7 @@ final class SettingsScreenController {
         this.webDavClient = new WebDavClient(settingsStore);
         this.backupManager = new WebDavBackupManager(activity, databaseHelper, settingsStore, webDavClient);
         this.readingStatsSyncManager = new ReadingStatsSyncManager(activity, databaseHelper, settingsStore, webDavClient);
+        this.snapshotManager = new SnapshotManager(activity, databaseHelper, settingsStore);
         this.importService = new BookImportService(activity);
 
         bindViews();
@@ -349,6 +358,8 @@ final class SettingsScreenController {
         databaseSizeText = activity.findViewById(R.id.text_database_size);
         maintenanceSummaryText = activity.findViewById(R.id.text_maintenance_summary);
         optimizeDatabaseButton = activity.findViewById(R.id.button_optimize_database);
+        createSnapshotButton = activity.findViewById(R.id.button_create_snapshot);
+        manageSnapshotsButton = activity.findViewById(R.id.button_manage_snapshots);
         fullBackupText = activity.findViewById(R.id.text_backup_full);
         liteBackupText = activity.findViewById(R.id.text_backup_lite);
         fullBackupButton = activity.findViewById(R.id.button_full_backup);
@@ -444,10 +455,16 @@ final class SettingsScreenController {
         if (optimizeDatabaseButton != null) {
             optimizeDatabaseButton.setOnClickListener(v -> startDatabaseOptimization());
         }
+        if (createSnapshotButton != null) {
+            createSnapshotButton.setOnClickListener(v -> createManualSnapshot());
+        }
+        if (manageSnapshotsButton != null) {
+            manageSnapshotsButton.setOnClickListener(v -> showSnapshotManager());
+        }
         fullBackupButton.setOnClickListener(v -> runWebDavAction("正在执行全量备份...", listener -> backupManager.fullBackup(listener)));
         liteBackupButton.setOnClickListener(v -> runWebDavAction("正在执行增量备份...", listener -> backupManager.incrementalBackup(listener)));
-        fullRestoreButton.setOnClickListener(v -> confirmRestore("确定要从云端恢复吗？这会恢复公共书架数据和 Android 私有设置；WebDAV 连接信息与阅读统计设备 ID 会保留本机，TTS API Key 会随 Android 设置恢复。", listener -> backupManager.fullRestore(listener), true));
-        liteRestoreButton.setOnClickListener(v -> confirmRestore("确定要从云端增量恢复吗？这会合并公共书架数据并恢复 Android 私有设置；WebDAV 连接信息与阅读统计设备 ID 会保留本机，TTS API Key 会随 Android 设置恢复。", listener -> backupManager.incrementalRestore(listener), true));
+        fullRestoreButton.setOnClickListener(v -> confirmRestore("将先预览云端全量备份和本地数据的差异，应用前会自动创建本地恢复点。", listener -> previewWebDavRestore(true), false));
+        liteRestoreButton.setOnClickListener(v -> confirmRestore("将先预览云端增量备份和本地数据的差异，应用前会自动创建本地恢复点。", listener -> previewWebDavRestore(false), false));
     }
 
     private void refreshBackupLabels() {
@@ -941,6 +958,143 @@ final class SettingsScreenController {
                 .show();
     }
 
+    private void createManualSnapshot() {
+        setBusy(true);
+        statusText.setText("正在创建本地恢复点...");
+        executor.execute(() -> {
+            try {
+                snapshotManager.createSnapshot("manual");
+                activity.runOnUiThread(() -> {
+                    setBusy(false);
+                    refreshDatabaseSizeLabel();
+                    statusText.setText("本地恢复点已创建");
+                    showToast("本地恢复点已创建");
+                });
+            } catch (Exception error) {
+                activity.runOnUiThread(() -> {
+                    setBusy(false);
+                    String message = readableError(error);
+                    statusText.setText("创建恢复点失败: " + message);
+                    showToast("创建失败: " + message);
+                });
+            }
+        });
+    }
+
+    private void showSnapshotManager() {
+        List<SnapshotManager.Snapshot> snapshots = snapshotManager.listSnapshots();
+        if (snapshots.isEmpty()) {
+            new AlertDialog.Builder(activity)
+                    .setTitle("本地恢复点")
+                    .setMessage("当前还没有本地恢复点")
+                    .setPositiveButton("知道了", null)
+                    .show();
+            return;
+        }
+        DateFormat format = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, Locale.SIMPLIFIED_CHINESE);
+        String[] labels = new String[snapshots.size()];
+        for (int i = 0; i < snapshots.size(); i++) {
+            SnapshotManager.Snapshot snapshot = snapshots.get(i);
+            labels[i] = format.format(new Date(snapshot.createdAt))
+                    + "\n" + snapshot.reason
+                    + " · " + JsonDatabase.formatFileSize(snapshot.bundleSize);
+        }
+        new AlertDialog.Builder(activity)
+                .setTitle("本地恢复点")
+                .setItems(labels, (dialog, which) -> showSnapshotActions(snapshots.get(which)))
+                .setNegativeButton("关闭", null)
+                .show();
+    }
+
+    private void showSnapshotActions(SnapshotManager.Snapshot snapshot) {
+        new AlertDialog.Builder(activity)
+                .setTitle("恢复点操作")
+                .setMessage(snapshot.id)
+                .setNegativeButton("删除", (dialog, which) -> deleteSnapshot(snapshot))
+                .setPositiveButton("恢复", (dialog, which) -> restoreSnapshot(snapshot))
+                .show();
+    }
+
+    private void restoreSnapshot(SnapshotManager.Snapshot snapshot) {
+        setBusy(true);
+        statusText.setText("正在恢复本地恢复点...");
+        executor.execute(() -> {
+            try {
+                snapshotManager.restoreSnapshot(snapshot.id);
+                activity.runOnUiThread(() -> {
+                    setBusy(false);
+                    bindCurrentValues();
+                    refreshDatabaseSizeLabel();
+                    statusText.setText("本地恢复点已恢复");
+                    if (host != null) host.onLibraryDataRestored();
+                    showToast("本地恢复点已恢复");
+                });
+            } catch (Exception error) {
+                activity.runOnUiThread(() -> {
+                    setBusy(false);
+                    String message = readableError(error);
+                    statusText.setText("恢复失败: " + message);
+                    showToast("恢复失败: " + message);
+                });
+            }
+        });
+    }
+
+    private void deleteSnapshot(SnapshotManager.Snapshot snapshot) {
+        executor.execute(() -> {
+            try {
+                snapshotManager.deleteSnapshot(snapshot.id);
+                activity.runOnUiThread(() -> {
+                    statusText.setText("本地恢复点已删除");
+                    showToast("已删除恢复点");
+                });
+            } catch (Exception error) {
+                activity.runOnUiThread(() -> showToast("删除失败: " + readableError(error)));
+            }
+        });
+    }
+
+    private void previewWebDavRestore(boolean full) throws Exception {
+        SyncDiffPreview preview = full
+                ? backupManager.previewFullRestore(status -> activity.runOnUiThread(() -> statusText.setText(status)))
+                : backupManager.previewIncrementalRestore(status -> activity.runOnUiThread(() -> statusText.setText(status)));
+        activity.runOnUiThread(() -> showSyncDiffDialog(preview));
+    }
+
+    private void showSyncDiffDialog(SyncDiffPreview preview) {
+        StringBuilder message = new StringBuilder();
+        message.append("本地新增 ").append(preview.localCount())
+                .append(" · 云端新增 ").append(preview.remoteCount())
+                .append(" · 冲突 ").append(preview.conflictCount())
+                .append(" · 未变化 ").append(preview.unchangedCount());
+        int shown = 0;
+        for (SyncDiffItem item : preview.items) {
+            if (!SyncDiffItem.STATUS_CONFLICT.equals(item.status)) continue;
+            if (shown == 0) message.append("\n\n冲突项：");
+            if (shown >= 8) {
+                message.append("\n还有更多冲突项...");
+                break;
+            }
+            message.append("\n").append(item.entityType)
+                    .append(" · ").append(item.title)
+                    .append("\n").append(item.summary);
+            shown++;
+        }
+        new AlertDialog.Builder(activity)
+                .setTitle("WebDAV 差异预览")
+                .setMessage(message.toString())
+                .setNegativeButton("保留本地", (dialog, which) ->
+                        runWebDavAction("正在保留本地数据...", listener ->
+                                backupManager.applySyncResolution(preview, WebDavBackupManager.RESOLUTION_LOCAL, listener), true))
+                .setNeutralButton("全部用远端", (dialog, which) ->
+                        runWebDavAction("正在应用远端数据...", listener ->
+                                backupManager.applySyncResolution(preview, WebDavBackupManager.RESOLUTION_REMOTE, listener), true))
+                .setPositiveButton("按更新时间合并", (dialog, which) ->
+                        runWebDavAction("正在合并数据...", listener ->
+                                backupManager.applySyncResolution(preview, WebDavBackupManager.RESOLUTION_MERGE, listener), true))
+                .show();
+    }
+
     private void runWebDavAction(String startMessage, BackgroundAction action) {
         runWebDavAction(startMessage, action, false);
     }
@@ -987,6 +1141,8 @@ final class SettingsScreenController {
             mimoApiKeyInput.setEnabled(!busy);
         }
         if (optimizeDatabaseButton != null) optimizeDatabaseButton.setEnabled(!busy && hasPendingMaintenanceWork());
+        if (createSnapshotButton != null) createSnapshotButton.setEnabled(!busy);
+        if (manageSnapshotsButton != null) manageSnapshotsButton.setEnabled(!busy);
         fullBackupButton.setEnabled(!busy);
         fullRestoreButton.setEnabled(!busy);
         liteBackupButton.setEnabled(!busy);

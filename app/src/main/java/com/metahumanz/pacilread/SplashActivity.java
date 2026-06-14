@@ -8,6 +8,7 @@ import android.util.Log;
 
 import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
+import com.metahumanz.pacilread.storage.SnapshotManager;
 import com.metahumanz.pacilread.theme.ThemedActivity;
 
 import java.util.concurrent.ExecutorService;
@@ -40,6 +41,12 @@ public class SplashActivity extends ThemedActivity {
             splashExecutor.execute(() -> {
                 try {
                     JsonDatabase databaseHelper = JsonDatabase.getInstance(SplashActivity.this);
+                    try {
+                        new SnapshotManager(SplashActivity.this, databaseHelper, settingsStore)
+                                .createDailyStartupSnapshotIfNeeded();
+                    } catch (Exception error) {
+                        Log.w(TAG, "Daily startup snapshot failed", error);
+                    }
                     long bookId = -1L;
                     if (databaseHelper.isDatabaseHealthyForStartup()) {
                         bookId = databaseHelper.getMostRecentBookId();
@@ -66,11 +73,20 @@ public class SplashActivity extends ThemedActivity {
                 }
             });
         } else {
-            handler.postDelayed(() -> {
-                if (finishing) return;
-                startActivity(new Intent(SplashActivity.this, BookshelfActivity.class));
-                finish();
-            }, MIN_DISPLAY_MS);
+            splashExecutor.execute(() -> {
+                try {
+                    JsonDatabase databaseHelper = JsonDatabase.getInstance(SplashActivity.this);
+                    new SnapshotManager(SplashActivity.this, databaseHelper, settingsStore)
+                            .createDailyStartupSnapshotIfNeeded();
+                } catch (Exception error) {
+                    Log.w(TAG, "Daily startup snapshot failed", error);
+                }
+                handler.postDelayed(() -> {
+                    if (finishing) return;
+                    startActivity(new Intent(SplashActivity.this, BookshelfActivity.class));
+                    finish();
+                }, MIN_DISPLAY_MS);
+            });
         }
     }
 
