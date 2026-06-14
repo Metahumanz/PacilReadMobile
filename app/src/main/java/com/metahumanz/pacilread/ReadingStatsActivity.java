@@ -1,18 +1,29 @@
 package com.metahumanz.pacilread;
 
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.LinearGradient;
 import android.graphics.Paint;
+import android.graphics.RectF;
+import android.graphics.Shader;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.Layout;
+import android.text.StaticLayout;
+import android.text.TextPaint;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.TextView;
 
 import androidx.core.content.FileProvider;
@@ -51,6 +62,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class ReadingStatsActivity extends ThemedActivity {
+    private static final int REPORT_WIDTH = 1080;
+    private static final int REPORT_HEIGHT = 1920;
+
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final DateFormat dateTimeFormat = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, Locale.SIMPLIFIED_CHINESE);
 
@@ -605,11 +619,91 @@ public class ReadingStatsActivity extends ThemedActivity {
             AppUiUtils.showToast(this, "暂无可分享的年度报告");
             return;
         }
+        showAnnualReportExportDialog();
+    }
+
+    private void showAnnualReportExportDialog() {
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        int padding = AppUiUtils.dp(this, 4);
+        content.setPadding(padding, padding, padding, 0);
+
+        TextView templateLabel = annualDialogLabel("选择视觉模板");
+        content.addView(templateLabel);
+        RadioGroup templateGroup = new RadioGroup(this);
+        templateGroup.setOrientation(RadioGroup.VERTICAL);
+        int magazineId = View.generateViewId();
+        int wrappedId = View.generateViewId();
+        templateGroup.addView(annualDialogRadio(magazineId, "阅读杂志感", "安静、留白、适合阅读回顾"));
+        templateGroup.addView(annualDialogRadio(wrappedId, "Wrapped 风格", "大数字、强对比、更适合社交分享"));
+        templateGroup.check(magazineId);
+        content.addView(templateGroup);
+
+        TextView themeLabel = annualDialogLabel("选择图片主题");
+        themeLabel.setPadding(0, AppUiUtils.dp(this, 14), 0, AppUiUtils.dp(this, 6));
+        content.addView(themeLabel);
+        RadioGroup themeGroup = new RadioGroup(this);
+        themeGroup.setOrientation(RadioGroup.VERTICAL);
+        int lightId = View.generateViewId();
+        int darkId = View.generateViewId();
+        themeGroup.addView(annualDialogRadio(lightId, "浅色", "纸张感或明亮对比背景"));
+        themeGroup.addView(annualDialogRadio(darkId, "深色", "深墨背景，适合深色主题分享"));
+        AnnualReportExportTheme defaultTheme = ThemeModeHelper.MODE_DARK.equals(ThemeModeHelper.getResolvedAppBucket(this))
+                ? AnnualReportExportTheme.DARK
+                : AnnualReportExportTheme.LIGHT;
+        themeGroup.check(defaultTheme == AnnualReportExportTheme.DARK ? darkId : lightId);
+        content.addView(themeGroup);
+
+        new AlertDialog.Builder(this)
+                .setTitle("导出年度报告图片")
+                .setView(content)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("生成并分享", (dialog, which) -> {
+                    AnnualReportTemplate template = templateGroup.getCheckedRadioButtonId() == wrappedId
+                            ? AnnualReportTemplate.WRAPPED
+                            : AnnualReportTemplate.MAGAZINE;
+                    AnnualReportExportTheme theme = themeGroup.getCheckedRadioButtonId() == darkId
+                            ? AnnualReportExportTheme.DARK
+                            : AnnualReportExportTheme.LIGHT;
+                    exportAnnualReportImage(template, theme);
+                })
+                .show();
+    }
+
+    private TextView annualDialogLabel(String text) {
+        TextView label = new TextView(this);
+        label.setText(text);
+        label.setTextColor(ThemeModeHelper.resolveColor(this, R.color.app_text_primary));
+        label.setTextSize(14f);
+        label.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        label.setPadding(0, 0, 0, AppUiUtils.dp(this, 6));
+        return label;
+    }
+
+    private RadioButton annualDialogRadio(int id, String title, String summary) {
+        RadioButton button = new RadioButton(this);
+        button.setId(id);
+        button.setText(title + "\n" + summary);
+        button.setTextColor(ThemeModeHelper.resolveColor(this, R.color.app_text_secondary));
+        button.setTextSize(13f);
+        button.setPadding(0, AppUiUtils.dp(this, 5), 0, AppUiUtils.dp(this, 5));
+        return button;
+    }
+
+    private void exportAnnualReportImage(AnnualReportTemplate template, AnnualReportExportTheme theme) {
+        if (currentAnnualReport == null || currentAnnualReport.totalSeconds <= 0) {
+            AppUiUtils.showToast(this, "暂无可分享的年度报告");
+            return;
+        }
         try {
-            Bitmap bitmap = renderAnnualReportBitmap(currentAnnualReport);
+            Bitmap bitmap = renderAnnualReportBitmap(currentAnnualReport, template, theme);
             File dir = new File(getCacheDir(), "reports");
             if (!dir.exists()) dir.mkdirs();
-            File file = new File(dir, "pacilread-annual-report-" + currentAnnualReport.year + ".png");
+            File file = new File(dir, String.format(Locale.ROOT,
+                    "pacilread-annual-report-%d-%s-%s.png",
+                    currentAnnualReport.year,
+                    template.slug,
+                    theme.slug));
             try (FileOutputStream output = new FileOutputStream(file)) {
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, output);
             }
@@ -624,54 +718,257 @@ public class ReadingStatsActivity extends ThemedActivity {
         }
     }
 
-    private Bitmap renderAnnualReportBitmap(AnnualReport report) {
-        int width = 1080;
-        int height = 1600;
-        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+    private Bitmap renderAnnualReportBitmap(AnnualReport report, AnnualReportTemplate template, AnnualReportExportTheme theme) {
+        Bitmap bitmap = Bitmap.createBitmap(REPORT_WIDTH, REPORT_HEIGHT, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
-        canvas.drawColor(Color.rgb(247, 244, 236));
-        Paint titlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        titlePaint.setColor(Color.rgb(45, 43, 38));
-        titlePaint.setTextSize(58f);
-        titlePaint.setFakeBoldText(true);
-        Paint bodyPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        bodyPaint.setColor(Color.rgb(72, 68, 58));
-        bodyPaint.setTextSize(38f);
-        Paint mutedPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mutedPaint.setColor(Color.rgb(112, 105, 92));
-        mutedPaint.setTextSize(30f);
-        int y = 120;
-        canvas.drawText("PacilRead " + report.year + " 年度报告", 72, y, titlePaint);
-        y += 105;
-        canvas.drawText("阅读 " + ReadingStatsUtils.formatDuration(report.totalSeconds)
-                + " · " + formatNumber(report.totalChars) + " 字", 72, y, bodyPaint);
-        y += 78;
-        canvas.drawText("阅读天数 " + report.readingDays + " 天 · 最长连续 " + report.longestStreak + " 天", 72, y, bodyPaint);
-        y += 78;
-        canvas.drawText("完成书籍 " + report.finishedBooks + " 本", 72, y, bodyPaint);
-        y += 96;
-        canvas.drawText("Top 书籍  " + emptyDash(report.topBook), 72, y, bodyPaint);
-        y += 68;
-        canvas.drawText("常读作者  " + emptyDash(report.topAuthor), 72, y, bodyPaint);
-        y += 68;
-        canvas.drawText("常读标签  " + emptyDash(report.topTag), 72, y, bodyPaint);
-        y += 68;
-        canvas.drawText("常读系列  " + emptyDash(report.topSeries), 72, y, bodyPaint);
-        y += 110;
-        canvas.drawText("月度趋势", 72, y, titlePaint);
-        y += 70;
-        int max = 1;
-        for (int value : report.monthlySeconds) max = Math.max(max, value);
-        Paint barPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        barPaint.setColor(Color.rgb(88, 126, 116));
-        for (int i = 0; i < 12; i++) {
-            int barWidth = Math.max(6, Math.round(760f * report.monthlySeconds[i] / max));
-            int rowY = y + i * 44;
-            canvas.drawText((i + 1) + "月", 72, rowY + 28, mutedPaint);
-            canvas.drawRect(160, rowY, 160 + barWidth, rowY + 28, barPaint);
+        AnnualReportPalette palette = AnnualReportPalette.forTemplate(template, theme);
+        drawReportBackground(canvas, palette);
+        if (template == AnnualReportTemplate.WRAPPED) {
+            renderWrappedAnnualReport(canvas, report, palette);
+        } else {
+            renderMagazineAnnualReport(canvas, report, palette);
         }
-        canvas.drawText("由 PacilRead Mobile 生成", 72, height - 78, mutedPaint);
         return bitmap;
+    }
+
+    private void renderMagazineAnnualReport(Canvas canvas, AnnualReport report, AnnualReportPalette palette) {
+        TextPaint titlePaint = reportTextPaint(palette.primaryText, 68f, true);
+        TextPaint subtitlePaint = reportTextPaint(palette.secondaryText, 34f, false);
+        TextPaint bodyPaint = reportTextPaint(palette.primaryText, 32f, true);
+        TextPaint mutedPaint = reportTextPaint(palette.mutedText, 26f, false);
+
+        drawPill(canvas, 72, 72, 388, 124, palette.accentSoft, palette.line, "PACILREAD · YEAR IN READING", palette.accent);
+        drawMultiline(canvas, report.year + " 年度阅读报告", 72, 166, 720, titlePaint, 2);
+        drawMultiline(canvas,
+                "这一年，你在书页里停留了 " + ReadingStatsUtils.formatDuration(report.totalSeconds)
+                        + "，读过约 " + formatNumber(report.totalChars) + " 字。",
+                74, 330, 820, subtitlePaint, 3);
+
+        drawRoundRect(canvas, 72, 472, 1008, 760, 36, palette.card, palette.line, 2f);
+        drawMultiline(canvas, "年度摘要", 112, 518, 300, bodyPaint, 1);
+        drawMetricCard(canvas, 112, 584, 400, 126, "阅读天数", report.readingDays + " 天", palette, palette.accent);
+        drawMetricCard(canvas, 554, 584, 414, 126, "最长连续", report.longestStreak + " 天", palette, palette.accent2);
+        drawMetricCard(canvas, 112, 728, 400, 126, "完成书籍", report.finishedBooks + " 本", palette, palette.accent3);
+        drawMetricCard(canvas, 554, 728, 414, 126, "阅读字数", formatNumber(report.totalChars), palette, palette.accent);
+
+        drawRoundRect(canvas, 72, 896, 1008, 1234, 36, palette.card, palette.line, 2f);
+        drawMultiline(canvas, "年度书页坐标", 112, 942, 420, bodyPaint, 1);
+        int y = 1012;
+        y = drawInfoRow(canvas, "Top 书籍", emptyDash(report.topBook), 112, y, 820, palette);
+        y = drawInfoRow(canvas, "常读作者", emptyDash(report.topAuthor), 112, y + 14, 820, palette);
+        y = drawInfoRow(canvas, "常读标签", emptyDash(report.topTag), 112, y + 14, 820, palette);
+        drawInfoRow(canvas, "常读系列", emptyDash(report.topSeries), 112, y + 14, 820, palette);
+
+        drawRoundRect(canvas, 72, 1374, 1008, 1716, 36, palette.card, palette.line, 2f);
+        drawMultiline(canvas, "月度趋势", 112, 1420, 320, bodyPaint, 1);
+        drawMagazineMonthlyBars(canvas, report, palette, 112, 1500, 856, 152);
+
+        drawMultiline(canvas, "由 PacilRead Mobile 生成", 72, 1810, 480, mutedPaint, 1);
+        drawMultiline(canvas, themeFooter(palette), 650, 1810, 330, mutedPaint, 1);
+    }
+
+    private void renderWrappedAnnualReport(Canvas canvas, AnnualReport report, AnnualReportPalette palette) {
+        Paint shapePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        shapePaint.setColor(palette.accentSoft);
+        canvas.save();
+        canvas.rotate(-10f, REPORT_WIDTH * 0.72f, 184f);
+        canvas.drawRoundRect(new RectF(520, 86, 1180, 342), 48, 48, shapePaint);
+        canvas.restore();
+        shapePaint.setColor(palette.accent2Soft);
+        canvas.save();
+        canvas.rotate(13f, 160, 660);
+        canvas.drawRoundRect(new RectF(-90, 556, 380, 812), 46, 46, shapePaint);
+        canvas.restore();
+
+        TextPaint bigPaint = reportTextPaint(palette.primaryText, 96f, true);
+        TextPaint titlePaint = reportTextPaint(palette.primaryText, 54f, true);
+        TextPaint bodyPaint = reportTextPaint(palette.secondaryText, 32f, false);
+        TextPaint cardValuePaint = reportTextPaint(palette.primaryText, 44f, true);
+        TextPaint mutedPaint = reportTextPaint(palette.mutedText, 26f, false);
+
+        drawPill(canvas, 72, 80, 398, 134, palette.accent, Color.TRANSPARENT, "PACILREAD WRAPPED", palette.inverseText);
+        drawMultiline(canvas, report.year + " 的阅读声纹", 72, 180, 750, titlePaint, 2);
+        drawMultiline(canvas, formatHoursCompact(report.totalSeconds), 72, 332, 550, bigPaint, 1);
+        drawMultiline(canvas, "小时阅读", 76, 444, 360, titlePaint, 1);
+        drawMultiline(canvas,
+                "你用 " + report.readingDays + " 个阅读日，积累了约 " + formatNumber(report.totalChars) + " 字。",
+                76, 516, 820, bodyPaint, 3);
+
+        drawRoundRect(canvas, 72, 684, 1008, 920, 38, palette.card, palette.line, 2f);
+        drawWrappedStat(canvas, 118, 734, "最长连续", report.longestStreak + " 天", palette, palette.accent);
+        drawWrappedStat(canvas, 392, 734, "完成书籍", report.finishedBooks + " 本", palette, palette.accent2);
+        drawWrappedStat(canvas, 666, 734, "阅读天数", report.readingDays + " 天", palette, palette.accent3);
+
+        drawRoundRect(canvas, 72, 986, 1008, 1308, 38, palette.card, palette.line, 2f);
+        drawMultiline(canvas, "你的年度 Top", 116, 1036, 420, titlePaint, 1);
+        drawMultiline(canvas, emptyDash(report.topBook), 116, 1110, 800, cardValuePaint, 2);
+        drawPill(canvas, 116, 1240, 360, 1294, palette.accentSoft, palette.line, "作者 · " + emptyDash(report.topAuthor), palette.accent);
+        drawPill(canvas, 500, 1240, 872, 1294, palette.accent2Soft, palette.line, "标签 · " + emptyDash(report.topTag), palette.accent2);
+
+        drawRoundRect(canvas, 72, 1396, 1008, 1734, 38, palette.card, palette.line, 2f);
+        drawMultiline(canvas, "12 个月的阅读节奏", 116, 1446, 560, titlePaint, 1);
+        drawWrappedMonthlyBars(canvas, report, palette, 116, 1538, 846, 118);
+        drawMultiline(canvas, "常读系列 · " + emptyDash(report.topSeries), 116, 1668, 760, mutedPaint, 1);
+
+        drawMultiline(canvas, "PacilRead Mobile", 72, 1814, 360, mutedPaint, 1);
+        drawMultiline(canvas, "年度报告图片", 760, 1814, 240, mutedPaint, 1);
+    }
+
+    private void drawReportBackground(Canvas canvas, AnnualReportPalette palette) {
+        Paint backgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        backgroundPaint.setShader(new LinearGradient(
+                0, 0, REPORT_WIDTH, REPORT_HEIGHT,
+                palette.backgroundTop,
+                palette.backgroundBottom,
+                Shader.TileMode.CLAMP
+        ));
+        canvas.drawRect(0, 0, REPORT_WIDTH, REPORT_HEIGHT, backgroundPaint);
+    }
+
+    private void drawMetricCard(Canvas canvas, float left, float top, float width, float height,
+                                String label, String value, AnnualReportPalette palette, int accentColor) {
+        drawRoundRect(canvas, left, top, left + width, top + height, 26, palette.cardAlt, palette.line, 1.5f);
+        Paint dotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        dotPaint.setColor(accentColor);
+        canvas.drawCircle(left + 28, top + 34, 8, dotPaint);
+        drawMultiline(canvas, label, left + 48, top + 18, width - 76, reportTextPaint(palette.mutedText, 24f, false), 1);
+        drawMultiline(canvas, value, left + 28, top + 58, width - 56, reportTextPaint(palette.primaryText, 36f, true), 1);
+    }
+
+    private int drawInfoRow(Canvas canvas, String label, String value, float left, int top, float width, AnnualReportPalette palette) {
+        TextPaint labelPaint = reportTextPaint(palette.mutedText, 24f, false);
+        TextPaint valuePaint = reportTextPaint(palette.primaryText, 33f, true);
+        drawMultiline(canvas, label, left, top, 160, labelPaint, 1);
+        int bottom = drawMultiline(canvas, value, left + 178, top - 4, width - 178, valuePaint, 2);
+        Paint linePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        linePaint.setColor(palette.line);
+        linePaint.setStrokeWidth(2f);
+        canvas.drawLine(left, bottom + 18, left + width, bottom + 18, linePaint);
+        return bottom + 38;
+    }
+
+    private void drawMagazineMonthlyBars(Canvas canvas, AnnualReport report, AnnualReportPalette palette,
+                                         float left, float top, float width, float height) {
+        int max = maxMonthlySeconds(report);
+        float gap = 12f;
+        float barWidth = (width - gap * 11) / 12f;
+        TextPaint monthPaint = reportTextPaint(palette.mutedText, 20f, false);
+        for (int i = 0; i < 12; i++) {
+            float ratio = Math.max(0.04f, report.monthlySeconds[i] / (float) max);
+            float barHeight = Math.max(8f, height * ratio);
+            float x = left + i * (barWidth + gap);
+            float y = top + height - barHeight;
+            int color = i % 3 == 0 ? palette.accent : (i % 3 == 1 ? palette.accent2 : palette.accent3);
+            drawRoundRect(canvas, x, y, x + barWidth, top + height, 10, color, Color.TRANSPARENT, 0);
+            drawMultiline(canvas, String.valueOf(i + 1), x, top + height + 22, barWidth, monthPaint, 1);
+        }
+    }
+
+    private void drawWrappedStat(Canvas canvas, float left, float top, String label, String value,
+                                 AnnualReportPalette palette, int color) {
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setColor(color);
+        canvas.drawCircle(left + 22, top + 22, 12, paint);
+        drawMultiline(canvas, label, left, top + 54, 230, reportTextPaint(palette.mutedText, 24f, false), 1);
+        drawMultiline(canvas, value, left, top + 92, 230, reportTextPaint(palette.primaryText, 40f, true), 1);
+    }
+
+    private void drawWrappedMonthlyBars(Canvas canvas, AnnualReport report, AnnualReportPalette palette,
+                                        float left, float top, float width, float height) {
+        int max = maxMonthlySeconds(report);
+        float gap = 10f;
+        float barWidth = (width - gap * 11) / 12f;
+        TextPaint monthPaint = reportTextPaint(palette.mutedText, 20f, true);
+        for (int i = 0; i < 12; i++) {
+            float ratio = Math.max(0.05f, report.monthlySeconds[i] / (float) max);
+            float barHeight = Math.max(10f, height * ratio);
+            float x = left + i * (barWidth + gap);
+            float y = top + height - barHeight;
+            int color = i % 4 == 0 ? palette.accent : (i % 4 == 1 ? palette.accent2 : (i % 4 == 2 ? palette.accent3 : palette.primaryText));
+            drawRoundRect(canvas, x, y, x + barWidth, top + height, 8, color, Color.TRANSPARENT, 0);
+            drawMultiline(canvas, String.valueOf(i + 1), x - 2, top + height + 22, barWidth + 4, monthPaint, 1);
+        }
+    }
+
+    private int maxMonthlySeconds(AnnualReport report) {
+        int max = 1;
+        if (report == null || report.monthlySeconds == null) return max;
+        for (int value : report.monthlySeconds) {
+            max = Math.max(max, Math.max(0, value));
+        }
+        return max;
+    }
+
+    private void drawPill(Canvas canvas, float left, float top, float right, float bottom,
+                          int fillColor, int strokeColor, String text, int textColor) {
+        drawRoundRect(canvas, left, top, right, bottom, (bottom - top) / 2f, fillColor, strokeColor, strokeColor == Color.TRANSPARENT ? 0 : 1.5f);
+        TextPaint paint = reportTextPaint(textColor, 22f, true);
+        Paint.FontMetrics metrics = paint.getFontMetrics();
+        float y = top + (bottom - top - metrics.ascent - metrics.descent) / 2f;
+        canvas.drawText(ellipsizeForWidth(text, paint, right - left - 40), left + 20, y, paint);
+    }
+
+    private void drawRoundRect(Canvas canvas, float left, float top, float right, float bottom,
+                               float radius, int fillColor, int strokeColor, float strokeWidth) {
+        RectF rect = new RectF(left, top, right, bottom);
+        Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        fillPaint.setColor(fillColor);
+        fillPaint.setStyle(Paint.Style.FILL);
+        canvas.drawRoundRect(rect, radius, radius, fillPaint);
+        if (strokeWidth > 0f && strokeColor != Color.TRANSPARENT) {
+            Paint strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            strokePaint.setColor(strokeColor);
+            strokePaint.setStyle(Paint.Style.STROKE);
+            strokePaint.setStrokeWidth(strokeWidth);
+            canvas.drawRoundRect(rect, radius, radius, strokePaint);
+        }
+    }
+
+    private int drawMultiline(Canvas canvas, String text, float x, float y, float width, TextPaint paint, int maxLines) {
+        String safeText = text == null ? "" : text;
+        StaticLayout.Builder builder = StaticLayout.Builder.obtain(safeText, 0, safeText.length(), paint, Math.max(1, Math.round(width)))
+                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                .setIncludePad(false)
+                .setLineSpacing(0f, 1.0f)
+                .setMaxLines(Math.max(1, maxLines))
+                .setEllipsize(TextUtils.TruncateAt.END);
+        StaticLayout layout = builder.build();
+        canvas.save();
+        canvas.translate(x, y);
+        layout.draw(canvas);
+        canvas.restore();
+        return Math.round(y + layout.getHeight());
+    }
+
+    private TextPaint reportTextPaint(int color, float textSize, boolean bold) {
+        TextPaint paint = new TextPaint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
+        paint.setColor(color);
+        paint.setTextSize(textSize);
+        paint.setTypeface(Typeface.create(Typeface.SANS_SERIF, bold ? Typeface.BOLD : Typeface.NORMAL));
+        return paint;
+    }
+
+    private String ellipsizeForWidth(String value, Paint paint, float width) {
+        String safe = value == null ? "" : value;
+        if (paint.measureText(safe) <= width) return safe;
+        String ellipsis = "...";
+        int end = safe.length();
+        while (end > 0 && paint.measureText(safe.substring(0, end) + ellipsis) > width) {
+            end--;
+        }
+        return end <= 0 ? ellipsis : safe.substring(0, end) + ellipsis;
+    }
+
+    private String formatHoursCompact(int seconds) {
+        double hours = Math.max(0, seconds) / 3600.0;
+        if (hours < 10) {
+            return String.format(Locale.SIMPLIFIED_CHINESE, "%.1f", hours);
+        }
+        return String.format(Locale.SIMPLIFIED_CHINESE, "%.0f", hours);
+    }
+
+    private String themeFooter(AnnualReportPalette palette) {
+        return palette.dark ? "深色版" : "浅色版";
     }
 
     private String formatNumber(int value) {
@@ -711,6 +1008,156 @@ public class ReadingStatsActivity extends ThemedActivity {
             }
         }
         return Math.max(best, current);
+    }
+
+    private enum AnnualReportTemplate {
+        MAGAZINE("magazine"),
+        WRAPPED("wrapped");
+
+        final String slug;
+
+        AnnualReportTemplate(String slug) {
+            this.slug = slug;
+        }
+    }
+
+    private enum AnnualReportExportTheme {
+        LIGHT("light"),
+        DARK("dark");
+
+        final String slug;
+
+        AnnualReportExportTheme(String slug) {
+            this.slug = slug;
+        }
+    }
+
+    private static final class AnnualReportPalette {
+        final boolean dark;
+        final int backgroundTop;
+        final int backgroundBottom;
+        final int card;
+        final int cardAlt;
+        final int primaryText;
+        final int secondaryText;
+        final int mutedText;
+        final int inverseText;
+        final int accent;
+        final int accent2;
+        final int accent3;
+        final int accentSoft;
+        final int accent2Soft;
+        final int line;
+
+        private AnnualReportPalette(
+                boolean dark,
+                int backgroundTop,
+                int backgroundBottom,
+                int card,
+                int cardAlt,
+                int primaryText,
+                int secondaryText,
+                int mutedText,
+                int inverseText,
+                int accent,
+                int accent2,
+                int accent3,
+                int accentSoft,
+                int accent2Soft,
+                int line
+        ) {
+            this.dark = dark;
+            this.backgroundTop = backgroundTop;
+            this.backgroundBottom = backgroundBottom;
+            this.card = card;
+            this.cardAlt = cardAlt;
+            this.primaryText = primaryText;
+            this.secondaryText = secondaryText;
+            this.mutedText = mutedText;
+            this.inverseText = inverseText;
+            this.accent = accent;
+            this.accent2 = accent2;
+            this.accent3 = accent3;
+            this.accentSoft = accentSoft;
+            this.accent2Soft = accent2Soft;
+            this.line = line;
+        }
+
+        static AnnualReportPalette forTemplate(AnnualReportTemplate template, AnnualReportExportTheme theme) {
+            boolean dark = theme == AnnualReportExportTheme.DARK;
+            if (template == AnnualReportTemplate.WRAPPED) {
+                return dark
+                        ? new AnnualReportPalette(
+                        true,
+                        Color.rgb(12, 13, 20),
+                        Color.rgb(28, 22, 42),
+                        Color.rgb(30, 32, 48),
+                        Color.rgb(40, 42, 62),
+                        Color.rgb(248, 248, 255),
+                        Color.rgb(216, 219, 239),
+                        Color.rgb(158, 164, 190),
+                        Color.rgb(12, 13, 20),
+                        Color.rgb(139, 116, 255),
+                        Color.rgb(65, 230, 151),
+                        Color.rgb(255, 178, 82),
+                        Color.argb(56, 139, 116, 255),
+                        Color.argb(52, 65, 230, 151),
+                        Color.argb(44, 255, 255, 255)
+                )
+                        : new AnnualReportPalette(
+                        false,
+                        Color.rgb(255, 248, 231),
+                        Color.rgb(236, 247, 255),
+                        Color.rgb(255, 255, 255),
+                        Color.rgb(247, 250, 255),
+                        Color.rgb(35, 31, 48),
+                        Color.rgb(80, 78, 95),
+                        Color.rgb(122, 118, 132),
+                        Color.rgb(255, 255, 255),
+                        Color.rgb(90, 82, 225),
+                        Color.rgb(0, 155, 112),
+                        Color.rgb(238, 132, 48),
+                        Color.argb(42, 90, 82, 225),
+                        Color.argb(38, 0, 155, 112),
+                        Color.rgb(218, 224, 237)
+                );
+            }
+            return dark
+                    ? new AnnualReportPalette(
+                    true,
+                    Color.rgb(24, 24, 22),
+                    Color.rgb(39, 35, 31),
+                    Color.rgb(45, 42, 38),
+                    Color.rgb(57, 53, 47),
+                    Color.rgb(248, 245, 237),
+                    Color.rgb(218, 211, 198),
+                    Color.rgb(158, 149, 132),
+                    Color.rgb(24, 24, 22),
+                    Color.rgb(118, 188, 156),
+                    Color.rgb(216, 174, 106),
+                    Color.rgb(126, 157, 212),
+                    Color.argb(42, 118, 188, 156),
+                    Color.argb(40, 216, 174, 106),
+                    Color.argb(42, 248, 245, 237)
+            )
+                    : new AnnualReportPalette(
+                    false,
+                    Color.rgb(250, 246, 235),
+                    Color.rgb(238, 244, 238),
+                    Color.rgb(255, 252, 245),
+                    Color.rgb(247, 243, 232),
+                    Color.rgb(47, 45, 39),
+                    Color.rgb(84, 80, 69),
+                    Color.rgb(122, 113, 94),
+                    Color.rgb(255, 252, 245),
+                    Color.rgb(75, 132, 113),
+                    Color.rgb(178, 123, 72),
+                    Color.rgb(75, 105, 158),
+                    Color.argb(34, 75, 132, 113),
+                    Color.argb(34, 178, 123, 72),
+                    Color.rgb(222, 214, 196)
+            );
+        }
     }
 
     private static final class BookEta {
