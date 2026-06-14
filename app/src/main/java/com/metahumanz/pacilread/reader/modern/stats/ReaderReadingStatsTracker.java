@@ -22,6 +22,8 @@ public final class ReaderReadingStatsTracker {
     private long lastActivityElapsedMs;
     private long lastCheckpointElapsedMs;
     private long lastCheckpointWallMs;
+    private String lastCountedPageKey = "";
+    private int pendingCharCount;
 
     public ReaderReadingStatsTracker(ReaderRuntime runtime, ReaderSessionState state) {
         this.runtime = runtime;
@@ -31,6 +33,8 @@ public final class ReaderReadingStatsTracker {
     public void bindBook(BookRecord book) {
         cancelCheckpoint();
         activeWindow = false;
+        lastCountedPageKey = "";
+        pendingCharCount = 0;
         if (book == null || !runtime.settingsStore.isReadingTimeTrackingEnabled()) {
             return;
         }
@@ -75,6 +79,10 @@ public final class ReaderReadingStatsTracker {
     }
 
     public void markActivity() {
+        markActivity("", 0);
+    }
+
+    public void markActivity(String pageKey, int visibleCharCount) {
         if (state.book == null || !runtime.settingsStore.isReadingTimeTrackingEnabled()) {
             return;
         }
@@ -85,6 +93,10 @@ public final class ReaderReadingStatsTracker {
         } else if (nowElapsed >= lastActivityElapsedMs + ReadingStatsUtils.IDLE_TIMEOUT_MS) {
             flushWindow(nowElapsed, false);
             startWindow(nowElapsed, nowWall);
+        }
+        if (pageKey != null && !pageKey.isBlank() && !pageKey.equals(lastCountedPageKey) && visibleCharCount > 0) {
+            pendingCharCount += Math.max(visibleCharCount, 0);
+            lastCountedPageKey = pageKey;
         }
         lastActivityElapsedMs = nowElapsed;
         scheduleNextCheckpoint();
@@ -120,7 +132,9 @@ public final class ReaderReadingStatsTracker {
         if (wholeSecondsMillis > 0L) {
             long rangeStartWall = lastCheckpointWallMs;
             long rangeEndWall = lastCheckpointWallMs + wholeSecondsMillis;
-            persistRange(rangeStartWall, rangeEndWall);
+            int rangeCharCount = pendingCharCount;
+            pendingCharCount = 0;
+            persistRange(rangeStartWall, rangeEndWall, rangeCharCount);
             lastCheckpointElapsedMs += wholeSecondsMillis;
             lastCheckpointWallMs += wholeSecondsMillis;
             debounceUpload();
@@ -130,7 +144,7 @@ public final class ReaderReadingStatsTracker {
         }
     }
 
-    private void persistRange(long startWallMs, long endWallMs) {
+    private void persistRange(long startWallMs, long endWallMs, int charCount) {
         if (endWallMs <= startWallMs || state.book == null) {
             return;
         }
@@ -138,6 +152,7 @@ public final class ReaderReadingStatsTracker {
         if (buckets.isEmpty()) {
             return;
         }
+        distributeCharCount(buckets, Math.max(charCount, 0));
         String sourceDeviceId = runtime.settingsStore.getReadingStatsDeviceId();
         String bookIdentity = state.book.readingStatsKey;
         String bookTitle = state.book.title;
@@ -151,7 +166,7 @@ public final class ReaderReadingStatsTracker {
                         bookTitle,
                         bookAuthor,
                         bucket.durationSeconds,
-                        0,
+                        bucket.charCount,
                         bucket.updatedAt
                 );
             }
@@ -175,6 +190,33 @@ public final class ReaderReadingStatsTracker {
             cursor = segmentEnd;
         }
         return buckets;
+    }
+
+    private void distributeCharCount(List<DayBucket> buckets, int charCount) {
+        if (buckets == null || buckets.isEmpty() || charCount <= 0) {
+            return;
+        }
+        int totalSeconds = 0;
+        for (DayBucket bucket : buckets) {
+            totalSeconds += Math.max(bucket.durationSeconds, 0);
+        }
+        if (totalSeconds <= 0) {
+            buckets.get(buckets.size() - 1).charCount = charCount;
+            return;
+        }
+        int remaining = charCount;
+        int remainingSeconds = totalSeconds;
+        for (int i = 0; i < buckets.size(); i++) {
+            DayBucket bucket = buckets.get(i);
+            if (i == buckets.size() - 1) {
+                bucket.charCount = remaining;
+            } else {
+                int value = Math.round((float) remaining * Math.max(bucket.durationSeconds, 0) / Math.max(remainingSeconds, 1));
+                bucket.charCount = Math.max(value, 0);
+                remaining -= bucket.charCount;
+                remainingSeconds -= Math.max(bucket.durationSeconds, 0);
+            }
+        }
     }
 
     private void debounceUpload() {
@@ -214,6 +256,7 @@ public final class ReaderReadingStatsTracker {
     private static final class DayBucket {
         String date;
         int durationSeconds;
+        int charCount;
         long updatedAt;
     }
 }

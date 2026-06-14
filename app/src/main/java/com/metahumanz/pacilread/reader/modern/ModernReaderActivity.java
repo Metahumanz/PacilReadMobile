@@ -30,6 +30,7 @@ import androidx.core.view.WindowCompat;
 
 import com.metahumanz.pacilread.R;
 import com.metahumanz.pacilread.ReadingStatsActivity;
+import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.model.BookmarkRecord;
 import com.metahumanz.pacilread.model.ChapterRecord;
 import com.metahumanz.pacilread.reader.PageSlice;
@@ -1026,11 +1027,19 @@ public class ModernReaderActivity extends ThemedReaderActivity {
 
     public void markReadingActivity() {
         if (readingStatsTracker != null) {
-            readingStatsTracker.markActivity();
+            String pageKey = content == null ? "" : content.currentReadingStatsPageKey();
+            int visibleChars = content == null ? 0 : content.currentVisibleBodyCharCount();
+            readingStatsTracker.markActivity(pageKey, visibleChars);
         }
     }
 
     public void onReaderBookLoaded() {
+        if (state.book != null && (state.book.readingStatus == null
+                || state.book.readingStatus.isEmpty()
+                || BookRecord.STATUS_UNREAD.equals(state.book.readingStatus))) {
+            runtime.databaseHelper.markBookReadingIfUnread(state.book.id);
+            state.book.readingStatus = BookRecord.STATUS_READING;
+        }
         if (readingStatsTracker != null) {
             readingStatsTracker.bindBook(state.book);
         }
