@@ -11,6 +11,7 @@ import com.metahumanz.pacilread.model.ReaderThemeRecord;
 import com.metahumanz.pacilread.model.ReplacementRuleRecord;
 import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
+import com.metahumanz.pacilread.storage.SnapshotManager;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -39,8 +40,14 @@ import java.util.zip.ZipOutputStream;
 
 public class WebDavBackupManager {
     private static final String TAG = "WebDavBackup";
+    public static final String RESOLUTION_LOCAL = "local";
+    public static final String RESOLUTION_REMOTE = "remote";
+    public static final String RESOLUTION_MERGE = "merge";
+    private static final String READING_STATS_CANONICAL_FILE = "readingStats.json";
+    private static final String READING_STATS_LEGACY_FILE = "reading_stats.json";
     private static final String[] SYNC_JSON_FILES = {
-            "books.json", "chapters.json", "rules.json", "themes.json", "bookmarks.json"
+            "books.json", "chapters.json", "rules.json", "themes.json", "bookmarks.json",
+            READING_STATS_CANONICAL_FILE
     };
     private static final String MANIFEST_FILE = "manifest.json";
 
@@ -54,6 +61,282 @@ public class WebDavBackupManager {
         this.databaseHelper = databaseHelper;
         this.settingsStore = settingsStore;
         this.webDavClient = webDavClient;
+    }
+
+    public SyncDiffPreview previewFullRestore(StatusListener listener) throws Exception {
+        return previewRestore(SyncDiffPreview.MODE_FULL, webDavClient.backupBaseUrl() + "database/", listener);
+    }
+
+    public SyncDiffPreview previewIncrementalRestore(StatusListener listener) throws Exception {
+        return previewRestore(SyncDiffPreview.MODE_INCREMENTAL, webDavClient.syncBaseUrl(), listener);
+    }
+
+    public void applySyncResolution(SyncDiffPreview preview, String resolution, StatusListener listener) throws Exception {
+        if (preview == null) {
+            throw new IllegalStateException("差异预览不存在");
+        }
+        String safeResolution = RESOLUTION_REMOTE.equals(resolution) || RESOLUTION_LOCAL.equals(resolution)
+                ? resolution
+                : RESOLUTION_MERGE;
+        listener.onStatus("创建差异决议前本地恢复点...");
+        new SnapshotManager(context, databaseHelper, settingsStore).createSnapshot("webdav-diff-resolution");
+        if (RESOLUTION_LOCAL.equals(safeResolution)) {
+            listener.onStatus("保留本地数据并回写 sync/...");
+            uploadResolvedSyncSnapshot(listener);
+            return;
+        }
+        if (RESOLUTION_REMOTE.equals(safeResolution) && SyncDiffPreview.MODE_FULL.equals(preview.mode)) {
+            fullRestore(listener);
+            uploadResolvedSyncSnapshot(listener);
+            return;
+        }
+        applyRemoteEntities(preview, RESOLUTION_REMOTE.equals(safeResolution), listener);
+        uploadResolvedSyncSnapshot(listener);
+    }
+
+    private SyncDiffPreview previewRestore(String mode, String baseUrl, StatusListener listener) throws Exception {
+        ensureRestoreScopeSelected();
+        listener.onStatus("下载云端清单...");
+        SyncDiffPreview preview = new SyncDiffPreview(mode);
+        preview.remoteManifest = downloadManifestIfExists(baseUrl + MANIFEST_FILE);
+        File dataDir = databaseHelper.getDataDir();
+        for (String fileName : SYNC_JSON_FILES) {
+            listener.onStatus("预览 " + fileName + "...");
+            JSONArray localArray = readLocalEntityArray(dataDir, fileName);
+            JSONArray remoteArray = downloadRemoteEntityArray(baseUrl, fileName);
+            preview.remoteEntities.put(fileName, remoteArray);
+            appendDiffItems(preview, entityTypeForFile(fileName), localArray, remoteArray);
+        }
+        listener.onStatus("差异预览完成");
+        return preview;
+    }
+
+    private void applyRemoteEntities(SyncDiffPreview preview, boolean forceRemote, StatusListener listener) throws Exception {
+        databaseHelper.flush();
+        boolean mergedBooks = false;
+        boolean mergedChapters = false;
+        Map<Long, Long> restoredBookIdMap = new HashMap<>();
+        for (String fileName : SYNC_JSON_FILES) {
+            JSONArray array = preview.remoteEntities.get(fileName);
+            if (array == null) continue;
+            listener.onStatus("应用 " + fileName + "...");
+            switch (fileName) {
+                case "books.json":
+                    restoredBookIdMap.putAll(mergeBooks(array, forceRemote));
+                    mergedBooks = true;
+                    break;
+                case "chapters.json":
+                    mergeChapters(array, restoredBookIdMap);
+                    mergedChapters = true;
+                    break;
+                case "rules.json":
+                    mergeRules(array, restoredBookIdMap, forceRemote);
+                    break;
+                case "themes.json":
+                    mergeThemes(array, forceRemote);
+                    break;
+                case "bookmarks.json":
+                    mergeBookmarks(array, forceRemote);
+                    break;
+                case READING_STATS_CANONICAL_FILE:
+                    mergeReadingStats(array);
+                    break;
+            }
+        }
+        if (mergedBooks || mergedChapters) {
+            clampProgressIndex();
+        }
+        databaseHelper.flush();
+        databaseHelper.rebaseLocalAssetPaths();
+        if (SyncDiffPreview.MODE_FULL.equals(preview.mode)) {
+            restoreBookAssetFiles(listener, settingsStore.isWebDavSyncFilesEnabled());
+            restoreChapterTextFiles(listener);
+        } else {
+            JSONObject localManifest = loadLocalManifest();
+            restoreChangedAssets(listener,
+                    preview.remoteManifest == null ? null : preview.remoteManifest.optJSONObject("assets"),
+                    localManifest == null ? null : localManifest.optJSONObject("assets"));
+        }
+        if (preview.remoteManifest != null) {
+            saveLocalManifest(preview.remoteManifest);
+        }
+        restoreSettingsJsonIfPresent(listener);
+        listener.onStatus("差异决议已应用");
+    }
+
+    private void uploadResolvedSyncSnapshot(StatusListener listener) throws Exception {
+        databaseHelper.flush();
+        File dataDir = databaseHelper.getDataDir();
+        JSONObject manifest = downloadManifestIfExists(webDavClient.syncBaseUrl() + MANIFEST_FILE);
+        if (manifest == null) {
+            manifest = new JSONObject();
+            manifest.put("schemaVersion", 1);
+        }
+        manifest.put("generatedAt", System.currentTimeMillis());
+        JSONObject filesEntry = new JSONObject();
+        for (String fileName : SYNC_JSON_FILES) {
+            File jsonFile = localJsonFile(dataDir, fileName);
+            if (!jsonFile.exists()) continue;
+            String sha256 = computeFileSha256(jsonFile);
+            manifestAppendFile(filesEntry, fileName, sha256, jsonFile.length());
+            listener.onStatus("回写 " + fileName + "...");
+            webDavClient.uploadFile(jsonFile, webDavClient.syncBaseUrl() + fileName);
+            uploadReadingStatsLegacyCopyIfNeeded(jsonFile, webDavClient.syncBaseUrl(), fileName);
+        }
+        manifest.put("files", filesEntry);
+        uploadManifest(webDavClient.syncBaseUrl() + MANIFEST_FILE, manifest);
+        saveLocalManifest(manifest);
+        listener.onStatus("决议结果已回写 sync/");
+    }
+
+    private JSONArray readLocalEntityArray(File dataDir, String fileName) {
+        File file = localJsonFile(dataDir, fileName);
+        if (!file.exists()) return new JSONArray();
+        try {
+            String content = readFileString(file);
+            if (content == null || content.trim().isEmpty()) return new JSONArray();
+            return readEntityArray(fileName, content);
+        } catch (Exception ignored) {
+            return new JSONArray();
+        }
+    }
+
+    private JSONArray downloadRemoteEntityArray(String baseUrl, String fileName) {
+        File tempFile = new File(context.getCacheDir(), "preview_" + fileName);
+        try {
+            downloadJsonWithAliases(baseUrl, fileName, tempFile);
+            String content = readFileString(tempFile);
+            if (content == null || content.trim().isEmpty()) return new JSONArray();
+            return readEntityArray(fileName, content);
+        } catch (Exception ignored) {
+            return new JSONArray();
+        } finally {
+            tempFile.delete();
+        }
+    }
+
+    private void appendDiffItems(SyncDiffPreview preview, String entityType, JSONArray localArray, JSONArray remoteArray) {
+        Map<String, JSONObject> localByKey = indexEntityArray(entityType, localArray);
+        Map<String, JSONObject> remoteByKey = indexEntityArray(entityType, remoteArray);
+        Set<String> keys = new HashSet<>();
+        keys.addAll(localByKey.keySet());
+        keys.addAll(remoteByKey.keySet());
+        for (String key : keys) {
+            JSONObject local = localByKey.get(key);
+            JSONObject remote = remoteByKey.get(key);
+            SyncDiffItem item = new SyncDiffItem();
+            item.entityType = entityType;
+            item.key = key;
+            item.localUpdatedAt = updatedAtOf(local);
+            item.remoteUpdatedAt = updatedAtOf(remote);
+            JSONObject display = remote != null ? remote : local;
+            item.title = entityTitle(entityType, display);
+            if (local == null) {
+                item.status = SyncDiffItem.STATUS_REMOTE;
+                item.summary = "云端新增";
+            } else if (remote == null) {
+                item.status = SyncDiffItem.STATUS_LOCAL;
+                item.summary = "仅本地存在";
+            } else if (local.toString().equals(remote.toString())) {
+                item.status = SyncDiffItem.STATUS_UNCHANGED;
+                item.summary = "未变化";
+            } else {
+                item.status = SyncDiffItem.STATUS_CONFLICT;
+                item.summary = conflictSummary(entityType, local, remote);
+            }
+            preview.items.add(item);
+        }
+    }
+
+    private Map<String, JSONObject> indexEntityArray(String entityType, JSONArray array) {
+        Map<String, JSONObject> map = new LinkedHashMap<>();
+        for (int i = 0; i < array.length(); i++) {
+            JSONObject json = array.optJSONObject(i);
+            if (json == null) continue;
+            String key = entityKey(entityType, json);
+            if (key.isBlank()) key = entityType + "#" + i;
+            map.put(key, json);
+        }
+        return map;
+    }
+
+    private String entityTypeForFile(String fileName) {
+        if (READING_STATS_CANONICAL_FILE.equals(fileName)) return "readingStats";
+        int index = fileName.indexOf('.');
+        return index > 0 ? fileName.substring(0, index) : fileName;
+    }
+
+    private String entityKey(String entityType, JSONObject json) {
+        if ("books".equals(entityType)) {
+            String key = json.optString("readingStatsKey", "");
+            if (!key.isBlank()) return key;
+            return normalizeTitleAuthor(json.optString("title", ""), json.optString("author", ""));
+        }
+        if ("chapters".equals(entityType)) {
+            return json.optLong("bookId", 0L) + ":" + json.optInt("orderIndex", 0);
+        }
+        if ("rules".equals(entityType)) {
+            return json.optString("pattern", "") + "|" + json.optString("scope", "global") + "|" + json.optLong("bookId", 0L);
+        }
+        if ("themes".equals(entityType)) {
+            return json.optString("name", "");
+        }
+        if ("bookmarks".equals(entityType)) {
+            return json.optString("uuid", "");
+        }
+        if ("readingStats".equals(entityType)) {
+            return json.optString("sourceDeviceId", "") + "|" + json.optString("date", "") + "|" + json.optString("bookIdentity", "");
+        }
+        return json.optString("id", "");
+    }
+
+    private String entityTitle(String entityType, JSONObject json) {
+        if (json == null) return entityType;
+        if ("books".equals(entityType)) return json.optString("title", "未命名书籍");
+        if ("chapters".equals(entityType)) return json.optString("title", "章节");
+        if ("rules".equals(entityType)) return json.optString("pattern", "替换规则");
+        if ("themes".equals(entityType)) return json.optString("name", "主题");
+        if ("bookmarks".equals(entityType)) return json.optString("summary", "书签");
+        if ("readingStats".equals(entityType)) {
+            return json.optString("bookTitle", "阅读统计") + " · " + json.optString("date", "");
+        }
+        return entityType;
+    }
+
+    private String conflictSummary(String entityType, JSONObject local, JSONObject remote) {
+        List<String> changes = new ArrayList<>();
+        appendFieldChange(changes, "title", "书名", local, remote);
+        appendFieldChange(changes, "author", "作者", local, remote);
+        appendFieldChange(changes, "tags", "标签", local, remote);
+        appendFieldChange(changes, "series", "系列", local, remote);
+        appendFieldChange(changes, "readingStatus", "阅读状态", local, remote);
+        appendFieldChange(changes, "progressIndex", "章节进度", local, remote);
+        appendFieldChange(changes, "progressOffset", "章内位置", local, remote);
+        appendFieldChange(changes, "durationSeconds", "时长", local, remote);
+        appendFieldChange(changes, "charCount", "字数", local, remote);
+        if (changes.isEmpty()) {
+            changes.add("内容不同");
+        }
+        return String.join("，", changes);
+    }
+
+    private void appendFieldChange(List<String> changes, String field, String label, JSONObject local, JSONObject remote) {
+        Object left = local.opt(field);
+        Object right = remote.opt(field);
+        String leftText = left == null ? "" : left.toString();
+        String rightText = right == null ? "" : right.toString();
+        if (!leftText.equals(rightText)) {
+            changes.add(label + ": " + trimPreview(leftText) + " -> " + trimPreview(rightText));
+        }
+    }
+
+    private String trimPreview(String value) {
+        String safe = value == null ? "" : value;
+        return safe.length() > 28 ? safe.substring(0, 28) + "..." : safe;
+    }
+
+    private long updatedAtOf(JSONObject json) {
+        return json == null ? 0L : json.optLong("updatedAt", 0L);
     }
 
     // ==================== 全量备份 ====================
@@ -89,21 +372,13 @@ public class WebDavBackupManager {
             JSONObject filesEntry = new JSONObject();
 
             for (String fileName : SYNC_JSON_FILES) {
-                File jsonFile = new File(dataDir, fileName);
+                File jsonFile = localJsonFile(dataDir, fileName);
                 if (!jsonFile.exists()) continue;
                 String sha256 = computeFileSha256(jsonFile);
                 manifestAppendFile(filesEntry, fileName, sha256, jsonFile.length());
                 listener.onStatus("上传 " + fileName + "...");
                 webDavClient.uploadFile(jsonFile, webDavClient.backupBaseUrl() + "database/" + fileName);
-            }
-
-            // 也上传 reading_stats.json（如果在数据库目录中）
-            File statsFile = new File(dataDir, "reading_stats.json");
-            if (statsFile.exists()) {
-                String sha256 = computeFileSha256(statsFile);
-                manifestAppendFile(filesEntry, "reading_stats.json", sha256, statsFile.length());
-                listener.onStatus("上传 reading_stats.json...");
-                webDavClient.uploadFile(statsFile, webDavClient.backupBaseUrl() + "database/reading_stats.json");
+                uploadReadingStatsLegacyCopyIfNeeded(jsonFile, webDavClient.backupBaseUrl() + "database/", fileName);
             }
 
             manifest.put("files", filesEntry);
@@ -157,7 +432,7 @@ public class WebDavBackupManager {
             localManifest.put("generatedAt", System.currentTimeMillis());
             JSONObject localFiles = new JSONObject();
             for (String fileName : SYNC_JSON_FILES) {
-                File jsonFile = new File(dataDir, fileName);
+                File jsonFile = localJsonFile(dataDir, fileName);
                 if (!jsonFile.exists()) continue;
                 String sha256 = computeFileSha256(jsonFile);
                 manifestAppendFile(localFiles, fileName, sha256, jsonFile.length());
@@ -170,7 +445,7 @@ public class WebDavBackupManager {
 
             // 只上传变化的 JSON 文件
             for (String fileName : SYNC_JSON_FILES) {
-                File jsonFile = new File(dataDir, fileName);
+                File jsonFile = localJsonFile(dataDir, fileName);
                 if (!jsonFile.exists()) continue;
                 String localHash = getManifestFileHash(localFiles, fileName);
                 String remoteHash = getManifestFileHash(
@@ -180,6 +455,7 @@ public class WebDavBackupManager {
                 }
                 listener.onStatus("上传 " + fileName + "...");
                 webDavClient.uploadFile(jsonFile, webDavClient.syncBaseUrl() + fileName);
+                uploadReadingStatsLegacyCopyIfNeeded(jsonFile, webDavClient.syncBaseUrl(), fileName);
                 uploadedFiles++;
             }
 
@@ -217,6 +493,8 @@ public class WebDavBackupManager {
     public void fullRestore(StatusListener listener) throws Exception {
         cleanupLocalTempCache();
         ensureRestoreScopeSelected();
+        listener.onStatus("创建恢复前本地恢复点...");
+        new SnapshotManager(context, databaseHelper, settingsStore).createSnapshot("webdav-full-restore");
 
         if (shouldSyncDatabaseSnapshot()) {
             String databaseUrl = webDavClient.backupBaseUrl() + "database/";
@@ -236,13 +514,13 @@ public class WebDavBackupManager {
 
                 JSONObject manifest = downloadManifestIfExists(manifestUrl);
                 for (String fileName : SYNC_JSON_FILES) {
-                    File target = new File(dataDir, fileName);
+                    File target = localJsonFile(dataDir, fileName);
                     listener.onStatus("下载 " + fileName + "...");
                     try {
-                        webDavClient.downloadBinaryFile(databaseUrl + fileName, target);
+                        String remoteFileName = downloadJsonWithAliases(databaseUrl, fileName, target);
                         // 校验
                         if (manifest != null) {
-                            String expectedHash = getManifestFileHash(manifest.optJSONObject("files"), fileName);
+                            String expectedHash = getManifestFileHash(manifest.optJSONObject("files"), remoteFileName);
                             if (expectedHash != null) {
                                 String actualHash = computeFileSha256(target);
                                 if (!expectedHash.equals(actualHash)) {
@@ -279,6 +557,8 @@ public class WebDavBackupManager {
     public void incrementalRestore(StatusListener listener) throws Exception {
         cleanupLocalTempCache();
         ensureRestoreScopeSelected();
+        listener.onStatus("创建恢复前本地恢复点...");
+        new SnapshotManager(context, databaseHelper, settingsStore).createSnapshot("webdav-incremental-restore");
 
         if (shouldSyncDatabaseSnapshot()) {
             String manifestUrl = webDavClient.syncBaseUrl() + MANIFEST_FILE;
@@ -320,10 +600,10 @@ public class WebDavBackupManager {
                     if (!changedFiles.contains(fileName)) continue;
                     File tempFile = new File(context.getCacheDir(), "restore_" + fileName);
                     listener.onStatus("下载 " + fileName + "...");
-                    webDavClient.downloadBinaryFile(webDavClient.syncBaseUrl() + fileName, tempFile);
+                    String remoteFileName = downloadJsonWithAliases(webDavClient.syncBaseUrl(), fileName, tempFile);
 
                     // 校验
-                    String expectedHash = getManifestFileHash(remoteManifest.optJSONObject("files"), fileName);
+                    String expectedHash = getManifestFileHash(remoteManifest.optJSONObject("files"), remoteFileName);
                     if (expectedHash != null) {
                         String actualHash = computeFileSha256(tempFile);
                         if (!expectedHash.equals(actualHash)) {
@@ -334,7 +614,7 @@ public class WebDavBackupManager {
                     // 逐实体合并
                     String content = readFileString(tempFile);
                     if (content == null || content.trim().isEmpty()) continue;
-                    JSONArray array = new JSONArray(content);
+                    JSONArray array = readEntityArray(fileName, content);
 
                     switch (fileName) {
                         case "books.json":
@@ -353,6 +633,9 @@ public class WebDavBackupManager {
                             break;
                         case "bookmarks.json":
                             mergeBookmarks(array);
+                            break;
+                        case READING_STATS_CANONICAL_FILE:
+                            mergeReadingStats(array);
                             break;
                     }
                     tempFile.delete();
@@ -813,6 +1096,10 @@ public class WebDavBackupManager {
     // ==================== 实体合并逻辑 ====================
 
     private Map<Long, Long> mergeBooks(JSONArray remoteBooks) {
+        return mergeBooks(remoteBooks, false);
+    }
+
+    private Map<Long, Long> mergeBooks(JSONArray remoteBooks, boolean forceRemote) {
         List<BookRecord> localBooks = databaseHelper.getBooksMutable();
         Map<Long, Long> remoteToLocalBookIds = new HashMap<>();
         Map<String, BookRecord> localByKey = new HashMap<>();
@@ -836,6 +1123,7 @@ public class WebDavBackupManager {
             String remoteTitle = remoteJson.optString("title", "");
             String remoteAuthor = remoteJson.optString("author", "");
             long remoteUpdatedAt = remoteJson.optLong("updatedAt", 0);
+            BookRecord remoteBook = BookRecord.fromJson(remoteJson);
 
             // 先按 readingStatsKey 匹配
             BookRecord localMatch = null;
@@ -850,7 +1138,7 @@ public class WebDavBackupManager {
 
             if (localMatch == null) {
                 // 新书：插入
-                BookRecord newBook = BookRecord.fromJson(remoteJson);
+                BookRecord newBook = remoteBook;
                 newBook.id = nextRecordId(localBooks, remoteId);
                 localBooks.add(newBook);
                 localMatch = newBook;
@@ -861,7 +1149,7 @@ public class WebDavBackupManager {
                 if (!taKey.isEmpty()) {
                     localByTitleAuthor.put(taKey, newBook);
                 }
-            } else if (remoteUpdatedAt > localMatch.updatedAt) {
+            } else if (forceRemote || remoteUpdatedAt > localMatch.updatedAt) {
                 // 远程较新：更新本地
                 matchedIds.add(localMatch.id);
                 localMatch.title = remoteTitle;
@@ -875,6 +1163,7 @@ public class WebDavBackupManager {
                 localMatch.chapterCount = remoteJson.optInt("chapterCount", 0);
                 localMatch.currentChapterTitle = remoteJson.optString("currentChapterTitle", "");
                 localMatch.updatedAt = remoteUpdatedAt;
+                localMatch.copyExtendedFieldsFrom(remoteBook);
                 // 保留本地路径（不覆盖 coverPath/localPath）
             }
             if (remoteId > 0 && localMatch != null) {
@@ -925,6 +1214,10 @@ public class WebDavBackupManager {
     }
 
     private void mergeRules(JSONArray remoteRules, Map<Long, Long> restoredBookIdMap) {
+        mergeRules(remoteRules, restoredBookIdMap, false);
+    }
+
+    private void mergeRules(JSONArray remoteRules, Map<Long, Long> restoredBookIdMap, boolean forceRemote) {
         List<ReplacementRuleRecord> localRules = databaseHelper.getRulesMutable();
         normalizeReplacementRules(localRules);
         Map<String, ReplacementRuleRecord> localByKey = new HashMap<>();
@@ -948,7 +1241,7 @@ public class WebDavBackupManager {
                 remoteRule.id = nextRecordId(localRules, remoteRule.id);
                 localRules.add(remoteRule);
                 localByKey.put(key, remoteRule);
-            } else if (remoteRule.updatedAt > localMatch.updatedAt) {
+            } else if (forceRemote || remoteRule.updatedAt > localMatch.updatedAt) {
                 copyReplacementRuleFields(localMatch, remoteRule);
             }
         }
@@ -956,6 +1249,10 @@ public class WebDavBackupManager {
     }
 
     private void mergeThemes(JSONArray remoteThemes) {
+        mergeThemes(remoteThemes, false);
+    }
+
+    private void mergeThemes(JSONArray remoteThemes, boolean forceRemote) {
         List<ReaderThemeRecord> localThemes = databaseHelper.getThemesMutable();
         Map<String, ReaderThemeRecord> localByName = new HashMap<>();
         for (ReaderThemeRecord theme : localThemes) {
@@ -971,7 +1268,7 @@ public class WebDavBackupManager {
             if (localMatch == null) {
                 remoteTheme.id = 0;
                 localThemes.add(remoteTheme);
-            } else if (remoteTheme.updatedAt > localMatch.updatedAt) {
+            } else if (forceRemote || remoteTheme.updatedAt > localMatch.updatedAt) {
                 localMatch.configJson = remoteTheme.configJson;
                 localMatch.updatedAt = remoteTheme.updatedAt;
             }
@@ -979,6 +1276,10 @@ public class WebDavBackupManager {
     }
 
     private void mergeBookmarks(JSONArray remoteBookmarks) {
+        mergeBookmarks(remoteBookmarks, false);
+    }
+
+    private void mergeBookmarks(JSONArray remoteBookmarks, boolean forceRemote) {
         List<BookmarkRecord> localBookmarks = databaseHelper.getBookmarksMutable();
         Map<String, BookmarkRecord> localByUuid = new HashMap<>();
         for (BookmarkRecord bm : localBookmarks) {
@@ -994,7 +1295,7 @@ public class WebDavBackupManager {
             if (localMatch == null) {
                 remoteBm.id = 0;
                 localBookmarks.add(remoteBm);
-            } else if (remoteBm.updatedAt > localMatch.updatedAt) {
+            } else if (forceRemote || remoteBm.updatedAt > localMatch.updatedAt) {
                 localMatch.bookId = remoteBm.bookId;
                 localMatch.bookIdentity = remoteBm.bookIdentity;
                 localMatch.bookTitle = remoteBm.bookTitle;
@@ -1007,6 +1308,18 @@ public class WebDavBackupManager {
                 localMatch.updatedAt = remoteBm.updatedAt;
             }
         }
+    }
+
+    private void mergeReadingStats(JSONArray remoteRows) {
+        List<ReadingTimeEntryRecord> rows = new ArrayList<>();
+        for (int i = 0; i < remoteRows.length(); i++) {
+            JSONObject remoteJson = remoteRows.optJSONObject(i);
+            if (remoteJson == null) continue;
+            ReadingTimeEntryRecord row = ReadingTimeEntryRecord.fromJson(remoteJson);
+            if (row.date == null || row.date.isBlank()) continue;
+            rows.add(row);
+        }
+        databaseHelper.mergeReadingStatsRows(rows);
     }
 
     private void clampProgressIndex() {
@@ -1026,6 +1339,45 @@ public class WebDavBackupManager {
                 book.currentChapterTitle = "";
             }
         }
+    }
+
+    private File localJsonFile(File dataDir, String fileName) {
+        return new File(dataDir, READING_STATS_CANONICAL_FILE.equals(fileName)
+                ? READING_STATS_LEGACY_FILE
+                : fileName);
+    }
+
+    private String canonicalJsonFileName(String fileName) {
+        return READING_STATS_LEGACY_FILE.equals(fileName) ? READING_STATS_CANONICAL_FILE : fileName;
+    }
+
+    private String downloadJsonWithAliases(String baseUrl, String fileName, File target) throws Exception {
+        if (!READING_STATS_CANONICAL_FILE.equals(fileName)) {
+            webDavClient.downloadBinaryFile(baseUrl + fileName, target);
+            return fileName;
+        }
+        if (webDavClient.head(baseUrl + READING_STATS_CANONICAL_FILE).code == 200) {
+            webDavClient.downloadBinaryFile(baseUrl + READING_STATS_CANONICAL_FILE, target);
+            return READING_STATS_CANONICAL_FILE;
+        }
+        webDavClient.downloadBinaryFile(baseUrl + READING_STATS_LEGACY_FILE, target);
+        return READING_STATS_LEGACY_FILE;
+    }
+
+    private void uploadReadingStatsLegacyCopyIfNeeded(File jsonFile, String baseUrl, String fileName) throws Exception {
+        if (READING_STATS_CANONICAL_FILE.equals(fileName)) {
+            webDavClient.uploadFile(jsonFile, baseUrl + READING_STATS_LEGACY_FILE);
+        }
+    }
+
+    private JSONArray readEntityArray(String fileName, String content) throws Exception {
+        String trimmed = content == null ? "" : content.trim();
+        if (trimmed.startsWith("{")) {
+            JSONObject object = new JSONObject(trimmed);
+            JSONArray rows = object.optJSONArray("rows");
+            if (rows != null) return rows;
+        }
+        return new JSONArray(trimmed);
     }
 
     // ==================== Manifest 工具方法 ====================
@@ -1057,13 +1409,17 @@ public class WebDavBackupManager {
             JSONObject entry = new JSONObject();
             entry.put("sha256", sha256);
             entry.put("size", size);
-            container.put(fileName, entry);
+            container.put(canonicalJsonFileName(fileName), entry);
         } catch (Exception ignore) {}
     }
 
     private String getManifestFileHash(JSONObject filesEntry, String fileName) {
         if (filesEntry == null) return null;
-        JSONObject entry = filesEntry.optJSONObject(fileName);
+        String canonical = canonicalJsonFileName(fileName);
+        JSONObject entry = filesEntry.optJSONObject(canonical);
+        if (entry == null && READING_STATS_CANONICAL_FILE.equals(canonical)) {
+            entry = filesEntry.optJSONObject(READING_STATS_LEGACY_FILE);
+        }
         if (entry == null) return null;
         return entry.optString("sha256", null);
     }
@@ -1073,11 +1429,15 @@ public class WebDavBackupManager {
         if (remoteFiles == null) return changed;
         Iterator<String> keys = remoteFiles.keys();
         while (keys.hasNext()) {
-            String fileName = keys.next();
-            String remoteHash = remoteFiles.optJSONObject(fileName).optString("sha256", "");
-            String localHash = localFiles != null && localFiles.has(fileName)
-                    ? localFiles.optJSONObject(fileName).optString("sha256", "")
-                    : "";
+            String fileName = canonicalJsonFileName(keys.next());
+            JSONObject remoteEntry = remoteFiles.optJSONObject(fileName);
+            if (remoteEntry == null && READING_STATS_CANONICAL_FILE.equals(fileName)) {
+                remoteEntry = remoteFiles.optJSONObject(READING_STATS_LEGACY_FILE);
+            }
+            if (remoteEntry == null) continue;
+            String remoteHash = remoteEntry.optString("sha256", "");
+            String localHash = getManifestFileHash(localFiles, fileName);
+            if (localHash == null) localHash = "";
             if (!remoteHash.equals(localHash)) {
                 changed.add(fileName);
             }

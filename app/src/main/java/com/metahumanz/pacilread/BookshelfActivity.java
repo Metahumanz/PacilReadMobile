@@ -29,6 +29,7 @@ import com.metahumanz.pacilread.importer.BookImportService;
 import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
+import com.metahumanz.pacilread.storage.SnapshotManager;
 import com.metahumanz.pacilread.sync.WebDavClient;
 import com.metahumanz.pacilread.sync.WebDavProgressSyncCoordinator;
 import com.metahumanz.pacilread.theme.ThemedActivity;
@@ -654,6 +655,7 @@ public class BookshelfActivity extends ThemedActivity {
         snapshot.chapterCount = source.chapterCount;
         snapshot.createdAt = source.createdAt;
         snapshot.updatedAt = source.updatedAt;
+        snapshot.copyExtendedFieldsFrom(source);
         return snapshot;
     }
 
@@ -1050,6 +1052,12 @@ public class BookshelfActivity extends ThemedActivity {
                 .setMessage("确定要删除《" + book.title + "》吗？")
                 .setNegativeButton("取消", null)
                 .setPositiveButton("删除", (ignoredDialog, which) -> safeExecute(() -> {
+                    try {
+                        new SnapshotManager(this, databaseHelper, settingsStore)
+                                .createSnapshot("delete-book");
+                    } catch (Exception error) {
+                        Log.w(TAG, "Create snapshot before delete failed", error);
+                    }
                     databaseHelper.deleteBook(book.id);
                     runOnBookshelfUiThread(() -> {
                         refreshBooks();

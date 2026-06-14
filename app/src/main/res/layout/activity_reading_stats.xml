@@ -126,6 +126,14 @@
                         android:text="0 秒"
                         android:textSize="30sp"
                         android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_scope_chars"
+                        style="@style/AppChromeBodyMuted"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="阅读字数 0" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -206,8 +214,86 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="6dp"
                                 android:textSize="13sp" />
+
+                            <TextView
+                                android:id="@+id/text_book_speed"
+                                style="@style/AppChromeCaption"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:textSize="13sp" />
+
+                            <TextView
+                                android:id="@+id/text_book_eta"
+                                style="@style/AppChromeCaption"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:textSize="13sp" />
                         </LinearLayout>
                     </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/layout_calendar_card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:background="@drawable/bg_app_card"
+                    android:elevation="2dp"
+                    android:orientation="vertical"
+                    android:padding="18dp">
+
+                    <TextView
+                        style="@style/AppChromeCardTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="连续阅读日历"
+                        android:textSize="16sp" />
+
+                    <LinearLayout
+                        android:id="@+id/layout_reading_calendar"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:orientation="vertical" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/layout_annual_report_card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:background="@drawable/bg_app_card"
+                    android:elevation="2dp"
+                    android:orientation="vertical"
+                    android:padding="18dp">
+
+                    <TextView
+                        style="@style/AppChromeCardTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="年度报告"
+                        android:textSize="16sp" />
+
+                    <LinearLayout
+                        android:id="@+id/layout_annual_report"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:orientation="vertical" />
+
+                    <Button
+                        android:id="@+id/button_share_annual_report"
+                        style="@style/AppChromeCompactToggleButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:minHeight="46dp"
+                        android:background="@drawable/bg_app_primary_button"
+                        android:text="分享年度报告长图"
+                        android:textAllCaps="false"
+                        android:textColor="?attr/themeColorAppButtonPrimaryText" />
                 </LinearLayout>
 
                 <LinearLayout

@@ -321,6 +321,10 @@ public class JsonDatabase {
             book.progressIndex = 0;
             book.progressOffset = 0;
             book.lastReadAt = now;
+            book.tags = new ArrayList<>();
+            book.series = "";
+            book.seriesIndex = null;
+            book.readingStatus = BookRecord.STATUS_UNREAD;
             book.pinned = false;
             book.chapterCount = importedBook.chapters.size();
             book.currentChapterTitle = importedBook.chapters.isEmpty() ? "" :
@@ -470,6 +474,9 @@ public class JsonDatabase {
                     book.progressOffset = charOffset;
                     book.lastReadAt = System.currentTimeMillis();
                     book.updatedAt = book.lastReadAt;
+                    if (!BookRecord.STATUS_FINISHED.equals(book.readingStatus)) {
+                        book.readingStatus = BookRecord.STATUS_READING;
+                    }
                     book.currentChapterTitle = chapterTitleForProgressLocked(bookId, chapterIndex);
                     saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
                     return;
@@ -492,6 +499,47 @@ public class JsonDatabase {
                     book.updatedAt = safeRemoteLastReadAt;
                     book.currentChapterTitle = chapterTitleForProgressLocked(bookId, chapterIndex);
                     saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
+                    return;
+                }
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    public void updateBookReadingStatus(long bookId, String status) {
+        ensureLoaded();
+        String safeStatus = BookRecord.normalizeReadingStatus(status, false);
+        lock.writeLock().lock();
+        try {
+            for (BookRecord book : bookCache) {
+                if (book.id == bookId) {
+                    if (safeStatus.equals(book.readingStatus)) {
+                        return;
+                    }
+                    book.readingStatus = safeStatus;
+                    book.updatedAt = System.currentTimeMillis();
+                    saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
+                    return;
+                }
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    public void markBookReadingIfUnread(long bookId) {
+        ensureLoaded();
+        lock.writeLock().lock();
+        try {
+            for (BookRecord book : bookCache) {
+                if (book.id == bookId) {
+                    if (book.readingStatus == null || book.readingStatus.isEmpty()
+                            || BookRecord.STATUS_UNREAD.equals(book.readingStatus)) {
+                        book.readingStatus = BookRecord.STATUS_READING;
+                        book.updatedAt = System.currentTimeMillis();
+                        saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
+                    }
                     return;
                 }
             }
@@ -584,6 +632,7 @@ public class JsonDatabase {
         book.chapterCount = src.chapterCount;
         book.createdAt = src.createdAt;
         book.updatedAt = src.updatedAt;
+        book.copyExtendedFieldsFrom(src);
         return book;
     }
 
@@ -962,6 +1011,23 @@ public class JsonDatabase {
         }
     }
 
+    public int getReadingCharCount(String startDate, String endDate, String bookIdentity) {
+        ensureLoaded();
+        lock.readLock().lock();
+        try {
+            int total = 0;
+            for (ReadingTimeEntryRecord entry : readingStatsCache) {
+                if ((bookIdentity == null || bookIdentity.isEmpty() || bookIdentity.equals(entry.bookIdentity)) &&
+                        entry.date.compareTo(startDate) >= 0 && entry.date.compareTo(endDate) <= 0) {
+                    total += Math.max(entry.charCount, 0);
+                }
+            }
+            return total;
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     public int getReadingDurationSecondsForBook(String startDate, String endDate, String bookIdentity, String bookTitle, String bookAuthor) {
         ensureLoaded();
         lock.readLock().lock();
@@ -971,6 +1037,23 @@ public class JsonDatabase {
                 if (entry.date.compareTo(startDate) >= 0 && entry.date.compareTo(endDate) <= 0 &&
                         sameReadingStatsBook(entry.bookIdentity, entry.bookTitle, entry.bookAuthor, bookIdentity, bookTitle, bookAuthor)) {
                     total += entry.durationSeconds;
+                }
+            }
+            return total;
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    public int getReadingCharCountForBook(String startDate, String endDate, String bookIdentity, String bookTitle, String bookAuthor) {
+        ensureLoaded();
+        lock.readLock().lock();
+        try {
+            int total = 0;
+            for (ReadingTimeEntryRecord entry : readingStatsCache) {
+                if (entry.date.compareTo(startDate) >= 0 && entry.date.compareTo(endDate) <= 0 &&
+                        sameReadingStatsBook(entry.bookIdentity, entry.bookTitle, entry.bookAuthor, bookIdentity, bookTitle, bookAuthor)) {
+                    total += Math.max(entry.charCount, 0);
                 }
             }
             return total;
@@ -994,10 +1077,12 @@ public class JsonDatabase {
                         stat.bookTitle = entry.bookTitle;
                         stat.bookAuthor = entry.bookAuthor;
                         stat.totalDurationSeconds = 0;
+                        stat.totalCharCount = 0;
                         stat.updatedAt = 0;
                         map.put(key, stat);
                     }
                     stat.totalDurationSeconds += entry.durationSeconds;
+                    stat.totalCharCount += Math.max(entry.charCount, 0);
                     if (entry.updatedAt > stat.updatedAt) {
                         stat.updatedAt = entry.updatedAt;
                         stat.bookIdentity = canonicalReadingStatsIdentity(entry.bookIdentity, entry.bookTitle, entry.bookAuthor);
@@ -1020,6 +1105,22 @@ public class JsonDatabase {
         } finally {
             lock.readLock().unlock();
         }
+    }
+
+    public List<ReadingTimeEntryRecord> getReadingStatsRows(String startDate, String endDate) {
+        ensureLoaded();
+        List<ReadingTimeEntryRecord> rows = new ArrayList<>();
+        lock.readLock().lock();
+        try {
+            for (ReadingTimeEntryRecord entry : readingStatsCache) {
+                if (entry.date.compareTo(startDate) >= 0 && entry.date.compareTo(endDate) <= 0) {
+                    rows.add(cloneReadingTimeEntry(entry));
+                }
+            }
+        } finally {
+            lock.readLock().unlock();
+        }
+        return rows;
     }
 
     public List<ReadingTimeEntryRecord> getReadingStatsRowsForSync(String sourceDeviceId) {
@@ -1105,6 +1206,22 @@ public class JsonDatabase {
         for (BookRecord book : bookCache) {
             if (book.readingStatsKey == null || book.readingStatsKey.isBlank()) {
                 book.readingStatsKey = ReadingStatsUtils.buildBookIdentity(book.title, book.author);
+                changed = true;
+            }
+            if (book.tags == null) {
+                book.tags = new ArrayList<>();
+                changed = true;
+            }
+            if (book.series == null) {
+                book.series = "";
+                changed = true;
+            }
+            String normalizedStatus = BookRecord.normalizeReadingStatus(
+                    book.readingStatus,
+                    BookRecord.hasReadingProgress(book.progressIndex, book.progressOffset, book.lastReadAt)
+            );
+            if (!normalizedStatus.equals(book.readingStatus)) {
+                book.readingStatus = normalizedStatus;
                 changed = true;
             }
         }
@@ -1777,7 +1894,7 @@ public class JsonDatabase {
         }
     }
 
-    static String formatFileSize(long size) {
+    public static String formatFileSize(long size) {
         if (size < 1024) return size + " B";
         if (size < 1048576) return String.format(Locale.ROOT, "%.1f KB", size / 1024.0);
         if (size < 1073741824) return String.format(Locale.ROOT, "%.2f MB", size / 1048576.0);
@@ -1813,6 +1930,7 @@ public class JsonDatabase {
             case "themes": return FILE_THEMES;
             case "bookmarks": return FILE_BOOKMARKS;
             case "reading_stats": return FILE_READING_STATS;
+            case "readingStats": return FILE_READING_STATS;
             default: return null;
         }
     }

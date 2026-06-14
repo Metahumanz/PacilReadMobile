@@ -467,6 +467,12 @@ public final class ReaderContentController {
         state.book.lastReadAt = persistedAt;
         // 数据库更新必须在主线程同步完成，防止 onDestroy 中 executor.shutdownNow() 中断写入
         runtime.databaseHelper.updateProgress(state.book.id, chapterOrderIndex, offset);
+        if (isAtBookEnd(safeChapterIndex, position.pageIndex)) {
+            state.book.readingStatus = BookRecord.STATUS_FINISHED;
+            runtime.databaseHelper.updateBookReadingStatus(state.book.id, BookRecord.STATUS_FINISHED);
+        } else if (!BookRecord.STATUS_FINISHED.equals(state.book.readingStatus)) {
+            state.book.readingStatus = BookRecord.STATUS_READING;
+        }
         if (runtime.settingsStore.isWebDavEnabled()) {
             BookRecord bookSnapshot = snapshotBookForProgressUpload(state.book);
             ChapterRecord chapterSnapshot = snapshotChapterForProgressUpload(chapter);
@@ -702,6 +708,7 @@ public final class ReaderContentController {
         snapshot.progressIndex = source.progressIndex;
         snapshot.progressOffset = source.progressOffset;
         snapshot.lastReadAt = source.lastReadAt;
+        snapshot.copyExtendedFieldsFrom(source);
         return snapshot;
     }
 
@@ -1105,6 +1112,36 @@ public final class ReaderContentController {
         return captureCurrentReadingPosition().chapterOffset;
     }
 
+    public String currentReadingStatsPageKey() {
+        if (state.book == null || state.chapters.isEmpty()) {
+            return "";
+        }
+        int chapterIndex = ui.clamp(state.currentChapterIndex, 0, state.chapters.size() - 1);
+        return state.book.id + ":" + chapterIndex + ":" + Math.max(state.currentPageIndex, 0)
+                + ":" + pagesPerScreen();
+    }
+
+    public int currentVisibleBodyCharCount() {
+        if (state.chapters.isEmpty()) {
+            return 0;
+        }
+        int chapterIndex = ui.clamp(state.currentChapterIndex, 0, state.chapters.size() - 1);
+        List<PageSlice> pages = getPagesForChapter(chapterIndex);
+        if (pages == null || pages.isEmpty()) {
+            return 0;
+        }
+        int startPage = ui.clamp(state.currentPageIndex, 0, pages.size() - 1);
+        int endPage = Math.min(pages.size() - 1, startPage + pagesPerScreen() - 1);
+        int count = 0;
+        for (int i = startPage; i <= endPage; i++) {
+            PageSlice slice = pages.get(i);
+            if (slice != null && slice.hasBodyText()) {
+                count += Math.max(0, slice.bodyEndInSlice - slice.bodyStartInSlice);
+            }
+        }
+        return count;
+    }
+
     public ReadingPosition captureCurrentReadingPosition() {
         if (state.chapters.isEmpty()) {
             return new ReadingPosition(
@@ -1136,6 +1173,17 @@ public final class ReaderContentController {
             return Math.max(pages.get(ui.clamp(pageIndex, 0, pages.size() - 1)).start, 0);
         }
         return fallbackChapterOffset(chapterIndex);
+    }
+
+    private boolean isAtBookEnd(int chapterIndex, int pageIndex) {
+        if (state.chapters.isEmpty() || chapterIndex < state.chapters.size() - 1) {
+            return false;
+        }
+        List<PageSlice> pages = getPagesForChapter(chapterIndex);
+        if (pages == null || pages.isEmpty()) {
+            return false;
+        }
+        return Math.max(pageIndex, 0) >= navigation.lastSpreadStart(pages);
     }
 
     public int rememberCurrentPageAnchor() {
