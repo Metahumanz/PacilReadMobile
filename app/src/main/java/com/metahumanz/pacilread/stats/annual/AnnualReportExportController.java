@@ -21,8 +21,11 @@ import androidx.core.content.FileProvider;
 
 import com.metahumanz.pacilread.AppUiUtils;
 import com.metahumanz.pacilread.R;
+import com.metahumanz.pacilread.stats.ReadingStatsUtils;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
+import com.metahumanz.pacilread.ui.PredictiveDialogDismissController;
+import com.metahumanz.pacilread.ui.TransitionMotionModeHelper;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -60,7 +63,7 @@ public final class AnnualReportExportController {
 
     public void showPreview(AnnualReportData report) {
         if (report == null || !report.hasReadingData()) {
-            AppUiUtils.showToast(activity, "暂无可生成的年度报告");
+            AppUiUtils.showToast(activity, "暂无可生成的阅读报告");
             return;
         }
         pendingReport = report;
@@ -91,7 +94,7 @@ public final class AnnualReportExportController {
                 ScrollView.LayoutParams.WRAP_CONTENT
         ));
 
-        TextView title = title("年度报告预览");
+        TextView title = title(previewTitle());
         content.addView(title);
 
         LinearLayout styleRow = new LinearLayout(activity);
@@ -121,7 +124,7 @@ public final class AnnualReportExportController {
         content.addView(themeRow, themeRowParams);
         syncOptionButtons();
 
-        TextView metricTitle = sectionTitle("年度摘要");
+        TextView metricTitle = sectionTitle(summaryTitle());
         LinearLayout.LayoutParams metricTitleParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -190,10 +193,30 @@ public final class AnnualReportExportController {
         saveButton.setOnClickListener(v -> saveCurrent());
         shareButton.setOnClickListener(v -> shareCurrent());
         closeButton.setOnClickListener(v -> dialog.dismiss());
+        applyDialogMotion(dialog);
         dialog.show();
+        applyDialogMotion(dialog);
         Window window = dialog.getWindow();
         if (window != null) {
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        }
+        PredictiveDialogDismissController.Registration backRegistration =
+                PredictiveDialogDismissController.install(
+                        dialog,
+                        window,
+                        TransitionMotionModeHelper.isFluidMode(settingsStore),
+                        null
+                );
+        dialog.setOnDismissListener(unused -> backRegistration.unregister());
+    }
+
+    private void applyDialogMotion(AlertDialog dialog) {
+        if (dialog == null) {
+            return;
+        }
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setWindowAnimations(R.style.AppPopDialogAnimation);
         }
     }
 
@@ -204,7 +227,7 @@ public final class AnnualReportExportController {
         if (resultCode == Activity.RESULT_OK && data != null && data.getData() != null) {
             try {
                 writeBitmap(data.getData());
-                AppUiUtils.showToast(activity, "年度报告已保存");
+                AppUiUtils.showToast(activity, reportKind() + "已保存");
             } catch (Exception error) {
                 AppUiUtils.showToast(activity, "保存失败: " + error.getMessage());
             }
@@ -426,7 +449,7 @@ public final class AnnualReportExportController {
             intent.setType("image/png");
             intent.putExtra(Intent.EXTRA_STREAM, uri);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            activity.startActivity(Intent.createChooser(intent, "分享年度报告"));
+            activity.startActivity(Intent.createChooser(intent, "分享" + reportKind()));
         } catch (Exception error) {
             AppUiUtils.showToast(activity, "分享失败: " + error.getMessage());
         }
@@ -434,7 +457,7 @@ public final class AnnualReportExportController {
 
     private boolean ensureBitmap() {
         if (pendingReport == null || !pendingReport.hasReadingData()) {
-            AppUiUtils.showToast(activity, "暂无可生成的年度报告");
+            AppUiUtils.showToast(activity, "暂无可生成的阅读报告");
             return false;
         }
         if (pendingBitmap == null) {
@@ -458,7 +481,42 @@ public final class AnnualReportExportController {
     private String fileName() {
         int year = pendingReport == null ? 0 : pendingReport.year;
         String scope = pendingReport != null && pendingReport.isBookScope() ? "book" : "global";
-        return String.format(Locale.ROOT, "pacilread-annual-report-%d-%s-%s-%s.png",
-                year, scope, selectedStyle.slug, selectedTheme.slug);
+        String period = pendingReport == null ? "report" : periodSlug(pendingReport);
+        return String.format(Locale.ROOT, "pacilread-%s-report-%d-%s-%s-%s.png",
+                period, year, scope, selectedStyle.slug, selectedTheme.slug);
+    }
+
+    private String previewTitle() {
+        if (pendingReport != null && pendingReport.reportTitle != null && !pendingReport.reportTitle.trim().isEmpty()) {
+            return pendingReport.reportTitle.trim() + "预览";
+        }
+        return reportKind() + "预览";
+    }
+
+    private String summaryTitle() {
+        if (pendingReport == null) {
+            return "阅读摘要";
+        }
+        if (pendingReport.isDayReport()) {
+            return "每日摘要";
+        }
+        if (pendingReport.isWeekReport()) {
+            return "周报摘要";
+        }
+        return "年度摘要";
+    }
+
+    private String reportKind() {
+        return pendingReport == null ? "阅读报告" : pendingReport.reportKindLabel();
+    }
+
+    private String periodSlug(AnnualReportData report) {
+        if (report.isDayReport()) {
+            return "daily";
+        }
+        if (report.isWeekReport()) {
+            return ReadingStatsUtils.WEEK_MODE_ROLLING.equals(report.weekMode) ? "weekly-rolling" : "weekly-natural";
+        }
+        return "annual";
     }
 }

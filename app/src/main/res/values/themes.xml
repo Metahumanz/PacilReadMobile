@@ -618,6 +618,11 @@
         <item name="android:windowExitAnimation">@anim/dialog_reader_pop_exit</item>
     </style>
 
+    <style name="AppPopDialogAnimation">
+        <item name="android:windowEnterAnimation">@anim/dialog_reader_pop_enter</item>
+        <item name="android:windowExitAnimation">@anim/dialog_reader_pop_exit</item>
+    </style>
+
     <style name="AppChromeSurfaceTheme">
         <item name="android:textColorPrimary">?attr/themeColorAppTextPrimary</item>
         <item name="android:textColorSecondary">?attr/themeColorAppTextSecondary</item>
