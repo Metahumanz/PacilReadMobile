@@ -260,6 +260,10 @@ public class BookshelfActivity extends ThemedActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (homeStatsPanelController != null
+                && homeStatsPanelController.onActivityResult(requestCode, resultCode, data)) {
+            return;
+        }
         if (resultCode != RESULT_OK || data == null) {
             return;
         }

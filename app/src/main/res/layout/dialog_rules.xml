@@ -80,14 +80,64 @@
         android:textColor="?attr/themeColorOnSurfaceMuted"
         android:textSize="12sp" />
 
-    <ListView
-        android:id="@+id/rules_list"
+    <FrameLayout
+        android:id="@+id/rules_body"
         android:layout_width="match_parent"
         android:layout_height="320dp"
-        android:layout_marginTop="10dp"
-        android:divider="?attr/themeColorDivider"
-        android:dividerHeight="1dp"
-        android:fastScrollEnabled="true"
-        android:scrollbarStyle="outsideInset"
-        android:scrollbars="vertical" />
+        android:layout_marginTop="10dp">
+
+        <ListView
+            android:id="@+id/rules_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="72dp"
+            android:divider="?attr/themeColorDivider"
+            android:dividerHeight="1dp"
+            android:fastScrollEnabled="false"
+            android:overScrollMode="never"
+            android:scrollbars="none" />
+
+        <TextView
+            android:id="@+id/rules_scrubber_preview"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end|top"
+            android:layout_marginEnd="64dp"
+            android:background="@drawable/bg_toc_scrubber_preview"
+            android:elevation="8dp"
+            android:maxWidth="220dp"
+            android:maxLines="2"
+            android:paddingLeft="14dp"
+            android:paddingTop="10dp"
+            android:paddingRight="14dp"
+            android:paddingBottom="10dp"
+            android:textColor="?attr/themeColorOnSurface"
+            android:textSize="13sp"
+            android:visibility="invisible" />
+
+        <FrameLayout
+            android:id="@+id/rules_scrubber_host"
+            android:layout_width="64dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="end">
+
+            <View
+                android:id="@+id/rules_scrubber_track"
+                android:layout_width="9dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_toc_scrubber_track" />
+
+            <View
+                android:id="@+id/rules_scrubber_thumb"
+                android:layout_width="26dp"
+                android:layout_height="54dp"
+                android:layout_gravity="center_horizontal|top"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/bg_toc_scrubber_thumb"
+                android:elevation="6dp" />
+        </FrameLayout>
+    </FrameLayout>
 </LinearLayout>

@@ -20,6 +20,7 @@ import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.ScrollView;
@@ -653,6 +654,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
 
             ScrollView scrollView = new ScrollView(this);
             scrollView.setClipToPadding(false);
+            scrollView.setVerticalScrollBarEnabled(false);
 
             LinearLayout popupContent = new LinearLayout(this);
             popupContent.setOrientation(LinearLayout.VERTICAL);
@@ -1201,12 +1203,17 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         Button addButton = contentView.findViewById(R.id.bookmark_button_add);
         Button closeButton = contentView.findViewById(R.id.bookmark_button_close);
         TextView emptyText = contentView.findViewById(R.id.bookmark_empty_text);
+        FrameLayout bookmarkBody = contentView.findViewById(R.id.bookmark_body);
         ScrollView scrollView = contentView.findViewById(R.id.bookmark_scroll);
+        View scrubberHost = contentView.findViewById(R.id.bookmark_scrubber_host);
+        View scrubberTrack = contentView.findViewById(R.id.bookmark_scrubber_track);
+        View scrubberThumb = contentView.findViewById(R.id.bookmark_scrubber_thumb);
         LinearLayout rows = contentView.findViewById(R.id.bookmark_rows);
         AlertDialog[] dialogRef = new AlertDialog[1];
         boolean empty = bookmarks == null || bookmarks.isEmpty();
         emptyText.setVisibility(empty ? View.VISIBLE : View.GONE);
-        scrollView.setVisibility(empty ? View.GONE : View.VISIBLE);
+        bookmarkBody.setVisibility(empty ? View.GONE : View.VISIBLE);
+        scrollView.setVerticalScrollBarEnabled(false);
         if (!empty) {
             for (BookmarkRecord bookmark : bookmarks) {
                 rows.addView(createReaderBookmarkRow(bookmark, () -> {
@@ -1216,6 +1223,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
                     jumpToBookmark(bookmark);
                 }));
             }
+            attachReaderBookmarkScrubber(scrollView, scrubberHost, scrubberTrack, scrubberThumb);
         }
 
         AlertDialog dialog = new AlertDialog.Builder(this)
@@ -1228,6 +1236,68 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         });
         closeButton.setOnClickListener(v -> dialog.dismiss());
         dialogSupport.showStyledDialog(dialog);
+    }
+
+    private void attachReaderBookmarkScrubber(ScrollView scrollView, View scrubberHost,
+                                              View scrubberTrack, View scrubberThumb) {
+        if (scrollView == null || scrubberHost == null || scrubberTrack == null || scrubberThumb == null) {
+            return;
+        }
+        scrollView.setOnScrollChangeListener((view, scrollX, scrollY, oldScrollX, oldScrollY) ->
+                refreshReaderBookmarkScrubber(scrollView, scrubberHost, scrubberTrack, scrubberThumb)
+        );
+        scrubberHost.setOnTouchListener((view, event) -> {
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_CANCEL || action == MotionEvent.ACTION_UP) {
+                view.getParent().requestDisallowInterceptTouchEvent(false);
+                return true;
+            }
+            if (action != MotionEvent.ACTION_DOWN && action != MotionEvent.ACTION_MOVE) {
+                return false;
+            }
+            int maxScroll = bookmarkMaxScroll(scrollView);
+            if (maxScroll <= 0) {
+                return false;
+            }
+            view.getParent().requestDisallowInterceptTouchEvent(true);
+            float fraction = clamp01((event.getY() - scrubberTrack.getY()) / Math.max(scrubberTrack.getHeight(), 1));
+            scrollView.scrollTo(0, Math.round(maxScroll * fraction));
+            positionReaderBookmarkThumb(scrubberTrack, scrubberThumb, fraction);
+            return true;
+        });
+        scrollView.post(() -> refreshReaderBookmarkScrubber(scrollView, scrubberHost, scrubberTrack, scrubberThumb));
+    }
+
+    private void refreshReaderBookmarkScrubber(ScrollView scrollView, View scrubberHost,
+                                               View scrubberTrack, View scrubberThumb) {
+        int maxScroll = bookmarkMaxScroll(scrollView);
+        if (maxScroll <= 0) {
+            scrubberHost.setVisibility(View.INVISIBLE);
+            positionReaderBookmarkThumb(scrubberTrack, scrubberThumb, 0f);
+            return;
+        }
+        scrubberHost.setVisibility(View.VISIBLE);
+        positionReaderBookmarkThumb(scrubberTrack, scrubberThumb, scrollView.getScrollY() / (float) maxScroll);
+    }
+
+    private int bookmarkMaxScroll(ScrollView scrollView) {
+        if (scrollView == null || scrollView.getChildCount() == 0) {
+            return 0;
+        }
+        View child = scrollView.getChildAt(0);
+        return Math.max(0, child.getHeight() - scrollView.getHeight());
+    }
+
+    private void positionReaderBookmarkThumb(View scrubberTrack, View scrubberThumb, float fraction) {
+        scrubberTrack.post(() -> {
+            float trackTop = scrubberTrack.getY();
+            float travel = Math.max(0f, scrubberTrack.getHeight() - scrubberThumb.getHeight());
+            scrubberThumb.setY(trackTop + travel * clamp01(fraction));
+        });
+    }
+
+    private float clamp01(float value) {
+        return Math.max(0f, Math.min(1f, value));
     }
 
     private View createReaderBookmarkRow(BookmarkRecord bookmark, Runnable onClick) {

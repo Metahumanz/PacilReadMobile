@@ -45,7 +45,8 @@
             android:layout_height="match_parent"
             android:clipToPadding="false"
             android:overScrollMode="never"
-            android:padding="18dp">
+            android:padding="18dp"
+            android:scrollbars="none">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -291,7 +292,7 @@
                         android:layout_marginTop="14dp"
                         android:minHeight="46dp"
                         android:background="@drawable/bg_app_primary_button"
-                        android:text="分享年度报告长图"
+                        android:text="生成年度报告"
                         android:textAllCaps="false"
                         android:textColor="?attr/themeColorAppButtonPrimaryText" />
                 </LinearLayout>

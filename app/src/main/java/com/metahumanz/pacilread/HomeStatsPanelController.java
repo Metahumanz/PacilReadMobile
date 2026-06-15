@@ -10,6 +10,9 @@ import android.widget.TextView;
 
 import com.metahumanz.pacilread.model.ReadingBookStatRecord;
 import com.metahumanz.pacilread.stats.ReadingStatsUtils;
+import com.metahumanz.pacilread.stats.annual.AnnualReportBuilder;
+import com.metahumanz.pacilread.stats.annual.AnnualReportData;
+import com.metahumanz.pacilread.stats.annual.AnnualReportExportController;
 import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
@@ -17,8 +20,10 @@ import com.metahumanz.pacilread.sync.WebDavClient;
 import com.metahumanz.pacilread.ui.LaunchSourceTransition;
 import com.metahumanz.pacilread.ui.TransitionMotionModeHelper;
 
+import java.time.ZoneId;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public final class HomeStatsPanelController {
     private final Activity activity;
@@ -31,11 +36,16 @@ public final class HomeStatsPanelController {
     private final TextView statusText;
     private final TextView totalText;
     private final TextView emptyText;
+    private final TextView annualReportSummaryText;
     private final Button todayButton;
     private final Button weekButton;
     private final Button yearButton;
+    private final Button annualReportButton;
+    private final AnnualReportExportController annualReportExportController;
 
     private String selectedPeriod = ReadingStatsUtils.PERIOD_TODAY;
+    private AnnualReportData currentAnnualReport;
+    private final AtomicInteger loadGeneration = new AtomicInteger();
 
     public HomeStatsPanelController(
             Activity activity,
@@ -57,9 +67,12 @@ public final class HomeStatsPanelController {
         this.statusText = activity.findViewById(R.id.text_home_stats_status);
         this.totalText = activity.findViewById(R.id.text_home_stats_total);
         this.emptyText = activity.findViewById(R.id.text_home_stats_empty);
+        this.annualReportSummaryText = activity.findViewById(R.id.text_home_annual_report_summary);
         this.todayButton = activity.findViewById(R.id.button_home_stats_today);
         this.weekButton = activity.findViewById(R.id.button_home_stats_week);
         this.yearButton = activity.findViewById(R.id.button_home_stats_year);
+        this.annualReportButton = activity.findViewById(R.id.button_home_generate_annual_report);
+        this.annualReportExportController = new AnnualReportExportController(activity);
         setupControls();
     }
 
@@ -68,33 +81,66 @@ public final class HomeStatsPanelController {
             return;
         }
         updatePeriodButtons();
+        int requestId = loadGeneration.incrementAndGet();
+        String period = selectedPeriod;
+        boolean shouldSync = syncFirst && readingStatsSyncManager.canAutoSync();
         if (statusText != null) {
-            statusText.setText(syncFirst && readingStatsSyncManager.canAutoSync()
-                    ? "正在同步云端阅读统计..."
+            statusText.setText(shouldSync
+                    ? "正在同步云端阅读统计，本地数据已先显示"
                     : "正在刷新阅读统计...");
         }
-        if (totalText != null) {
-            totalText.setText("...");
-        }
         executor.execute(() -> {
-            String syncMessage = "当前展示的是本地阅读统计";
-            if (syncFirst && readingStatsSyncManager.canAutoSync()) {
-                try {
-                    readingStatsSyncManager.downloadAndMergeReadingStats();
-                    syncMessage = "已同步本地与云端阅读统计";
-                } catch (Exception error) {
-                    syncMessage = "云端同步失败，当前展示本地统计：" + readableError(error);
-                }
-            }
-            ReadingStatsUtils.Range range = ReadingStatsUtils.rangeForPeriod(
-                    selectedPeriod,
-                    java.time.ZoneId.systemDefault()
+            HomeStatsSnapshot localSnapshot = buildSnapshot(
+                    period,
+                    shouldSync ? "正在同步云端阅读统计，本地数据已先显示" : "当前展示的是本地阅读统计"
             );
-            int totalSeconds = databaseHelper.getReadingDurationSeconds(range.startDateString(), range.endDateString(), null);
-            List<ReadingBookStatRecord> records = databaseHelper.getReadingBookStats(range.startDateString(), range.endDateString());
-            String finalSyncMessage = syncMessage;
-            activity.runOnUiThread(() -> render(totalSeconds, records, finalSyncMessage));
+            postSnapshot(requestId, localSnapshot);
+            if (!shouldSync) {
+                return;
+            }
+            String syncMessage;
+            try {
+                readingStatsSyncManager.downloadAndMergeReadingStats();
+                syncMessage = "已同步云端阅读统计";
+            } catch (Exception error) {
+                syncMessage = "云端同步失败，当前展示本地统计：" + readableError(error);
+            }
+            HomeStatsSnapshot syncedSnapshot = buildSnapshot(period, syncMessage);
+            postSnapshot(requestId, syncedSnapshot);
         });
+    }
+
+    private HomeStatsSnapshot buildSnapshot(String period, String syncMessage) {
+        ReadingStatsUtils.Range range = ReadingStatsUtils.rangeForPeriod(
+                period,
+                java.time.ZoneId.systemDefault()
+        );
+        HomeStatsSnapshot snapshot = new HomeStatsSnapshot();
+        snapshot.syncMessage = syncMessage;
+        snapshot.totalSeconds = databaseHelper.getReadingDurationSeconds(
+                range.startDateString(),
+                range.endDateString(),
+                null
+        );
+        snapshot.records = databaseHelper.getReadingBookStats(range.startDateString(), range.endDateString());
+        snapshot.annualReport = AnnualReportBuilder.buildGlobal(databaseHelper, ZoneId.systemDefault());
+        return snapshot;
+    }
+
+    private void postSnapshot(int requestId, HomeStatsSnapshot snapshot) {
+        activity.runOnUiThread(() -> {
+            if (requestId != loadGeneration.get()) {
+                return;
+            }
+            render(snapshot.totalSeconds, snapshot.records, snapshot.annualReport, snapshot.syncMessage);
+        });
+    }
+
+    private static final class HomeStatsSnapshot {
+        int totalSeconds;
+        List<ReadingBookStatRecord> records;
+        AnnualReportData annualReport;
+        String syncMessage;
     }
 
     private void setupControls() {
@@ -106,6 +152,15 @@ public final class HomeStatsPanelController {
         }
         if (yearButton != null) {
             yearButton.setOnClickListener(v -> selectPeriod(ReadingStatsUtils.PERIOD_YEAR));
+        }
+        if (annualReportButton != null) {
+            annualReportButton.setOnClickListener(v -> {
+                if (currentAnnualReport == null || !currentAnnualReport.hasReadingData()) {
+                    AppUiUtils.showToast(activity, "暂无可生成的年度报告");
+                    return;
+                }
+                annualReportExportController.showPreview(currentAnnualReport);
+            });
         }
         updatePeriodButtons();
     }
@@ -122,13 +177,19 @@ public final class HomeStatsPanelController {
         AppUiUtils.styleToggleButton(activity, yearButton, ReadingStatsUtils.PERIOD_YEAR.equals(selectedPeriod));
     }
 
-    private void render(int totalSeconds, List<ReadingBookStatRecord> records, String syncMessage) {
+    public boolean onActivityResult(int requestCode, int resultCode, Intent data) {
+        return annualReportExportController.onActivityResult(requestCode, resultCode, data);
+    }
+
+    private void render(int totalSeconds, List<ReadingBookStatRecord> records,
+                        AnnualReportData annualReport, String syncMessage) {
         if (statusText != null) {
             statusText.setText(syncMessage);
         }
         if (totalText != null) {
             totalText.setText(ReadingStatsUtils.formatDuration(totalSeconds));
         }
+        renderAnnualReport(annualReport);
         if (listLayout == null || emptyText == null) {
             return;
         }
@@ -164,6 +225,25 @@ public final class HomeStatsPanelController {
             }
             listLayout.addView(row);
         }
+    }
+
+    private void renderAnnualReport(AnnualReportData annualReport) {
+        currentAnnualReport = annualReport;
+        boolean hasData = annualReport != null && annualReport.hasReadingData();
+        if (annualReportButton != null) {
+            annualReportButton.setEnabled(hasData);
+            annualReportButton.setAlpha(hasData ? 1f : 0.55f);
+        }
+        if (annualReportSummaryText == null) {
+            return;
+        }
+        if (!hasData) {
+            annualReportSummaryText.setText("今年还没有足够的阅读统计");
+            return;
+        }
+        annualReportSummaryText.setText(annualReport.year + " 年 · "
+                + ReadingStatsUtils.formatDuration(annualReport.totalSeconds)
+                + " · " + annualReport.readingDays + " 个阅读日");
     }
 
     private String readableError(Throwable error) {
