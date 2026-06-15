@@ -90,7 +90,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <!-- v1.2.2 年度报告摘要与统计体验优化 -->
+                <!-- v1.2.3 年度报告洞察数据化 -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -121,6 +121,56 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
+                            android:text="v1.2.3 — 年度报告洞察数据化" />
+
+                        <TextView
+                            style="@style/AppChromeCaption"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="end"
+                            android:text="2026-06-15" />
+                    </LinearLayout>
+
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="年度报告洞察" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  年度报告顶部分析句会根据连续阅读、月度高峰和偏好数据自动生成" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  单书报告会围绕当前书的阅读状态、投入时长、阅读速度和月份节奏生成洞察" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  静读留白和高光节奏两种风格共用真实数据洞察，不再显示固定轨迹文案" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="14dp"
+                        android:layout_marginBottom="10dp"
+                        android:background="?attr/themeColorAppBorder" />
+
+                </LinearLayout>
+
+                <!-- v1.2.2 年度报告摘要与统计体验优化 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            style="@style/AppChromeBodyStrong"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
                             android:text="v1.2.2 — 年度报告摘要与统计体验优化" />
 
                         <TextView

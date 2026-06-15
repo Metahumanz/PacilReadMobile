@@ -59,7 +59,7 @@ public final class AnnualReportRenderer {
 
         drawMultiline(canvas, "PacilRead Mobile", 72, 76, 500, brandPaint, 1);
         drawMultiline(canvas, titleFor(report), 72, 150, 860, titlePaint, 2);
-        drawMultiline(canvas, quietSubtitle(report), 74, 302, 820, subtitlePaint, 2);
+        drawMultiline(canvas, AnnualReportInsight.sentence(report), 74, 302, 820, subtitlePaint, 2);
 
         drawMultiline(canvas, ReadingStatsUtils.formatDuration(report.totalSeconds), 72, 408, 660, giantPaint, 2);
         drawMultiline(canvas, "阅读总时长", 76, 520, 420, bodyPaint, 1);
@@ -119,9 +119,7 @@ public final class AnnualReportRenderer {
         drawMultiline(canvas, titleFor(report), 72, 188, 820, titlePaint, 2);
         drawMultiline(canvas, formatHoursCompact(report.totalSeconds), 72, 356, 520, giantPaint, 1);
         drawMultiline(canvas, "小时阅读", 78, 474, 420, titlePaint, 1);
-        drawMultiline(canvas,
-                report.readingDays + " 个阅读日 · " + formatNumber(report.totalChars) + " 字",
-                78, 548, 820, bodyPaint, 2);
+        drawMultiline(canvas, AnnualReportInsight.sentence(report), 78, 548, 820, bodyPaint, 2);
 
         RectF summary = new RectF(72, 694, 1008, 936);
         drawRoundRect(canvas, summary, 34, palette.card, palette.line, 2f);
@@ -298,13 +296,6 @@ public final class AnnualReportRenderer {
 
     private String titleFor(AnnualReportData report) {
         return report.year + (report.isBookScope() ? " 单书阅读报告" : " 年度阅读报告");
-    }
-
-    private String quietSubtitle(AnnualReportData report) {
-        if (report.isBookScope()) {
-            return "这一年，你和这本书留下了清晰的阅读轨迹。";
-        }
-        return "这一年，你在书页里留下了清晰的阅读轨迹。";
     }
 
     private String formatHoursCompact(int seconds) {
