@@ -90,7 +90,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <!-- v1.2.1 年度报告图片导出增强 -->
+                <!-- v1.2.2 年度报告摘要与统计体验优化 -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -121,7 +121,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
-                            android:text="v1.2.1 — 年度报告图片导出增强" />
+                            android:text="v1.2.2 — 年度报告摘要与统计体验优化" />
 
                         <TextView
                             style="@style/AppChromeCaption"
@@ -129,7 +129,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:gravity="end"
-                            android:text="2026-06-14" />
+                            android:text="2026-06-15" />
                     </LinearLayout>
 
                     <TextView
@@ -138,12 +138,13 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
                         android:layout_marginBottom="4dp"
-                        android:text="年度报告导出" />
+                        android:text="年度报告与统计体验" />
 
-                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  年度报告导出前可预览，并可选择“静读留白”和“高光节奏”两种风格" />
-                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  报告支持保存到本地，也可继续通过系统分享面板发送" />
-                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  年报长图升级为 1080×1920，优化大数字、指标卡片、月度趋势和长文本省略" />
-                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  导出文件名包含年份、范围和风格，便于整理" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  年度摘要支持从多项数据中手动选择 3 项，全局与单书报告分别记住选择" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  年度报告预览支持保存到本地和分享，并保留静读留白、高光节奏与明暗主题" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  优化报告卡片动态排版，修复书页坐标与阅读节奏之间的异常空隙" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  阅读统计先展示本地数据，云端同步后台完成后自动刷新" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  优化阅读统计、书签、规则列表和阅读菜单的滚动条表现" />
 
                     <View
                         android:layout_width="match_parent"
