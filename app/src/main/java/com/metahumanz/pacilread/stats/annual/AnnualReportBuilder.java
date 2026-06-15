@@ -9,6 +9,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -64,7 +65,7 @@ public final class AnnualReportBuilder {
             report.finishedBooks = BookRecord.STATUS_FINISHED.equals(scopedBook.readingStatus) ? 1 : 0;
         }
 
-        Map<String, Integer> durationByBook = new HashMap<>();
+        Map<String, BookAggregate> booksByKey = new HashMap<>();
         Map<String, Integer> durationByAuthor = new HashMap<>();
         Map<String, Integer> durationByTag = new HashMap<>();
         Map<String, Integer> durationBySeries = new HashMap<>();
@@ -86,15 +87,17 @@ public final class AnnualReportBuilder {
             if (date != null) {
                 readingDays.add(date);
                 addRhythmSeconds(report, rhythmDayIndex, date, seconds);
+                addRhythmChars(report, rhythmDayIndex, date, chars);
             }
 
             BookRecord localBook = scopedBook == null ? findBookForStats(books, row) : scopedBook;
+            String statsKey = bookKey(row, localBook);
             if (seconds > 0 || chars > 0) {
-                readingBookKeys.add(bookKey(row, localBook));
+                readingBookKeys.add(statsKey);
             }
             String bookTitle = localBook == null ? safeBookTitle(row.bookTitle) : safeBookTitle(localBook.title);
             String author = localBook == null ? safeAuthorForAggregation(row.bookAuthor) : safeAuthorForAggregation(localBook.author);
-            addDuration(durationByBook, bookTitle, seconds);
+            addBookAggregate(booksByKey, statsKey, bookTitle, author, seconds, chars);
             addDuration(durationByAuthor, author, seconds);
 
             if (localBook != null) {
@@ -107,6 +110,17 @@ public final class AnnualReportBuilder {
             }
         }
 
+        if (scopedBook != null && !booksByKey.containsKey(bookKey(null, scopedBook))) {
+            addBookAggregate(
+                    booksByKey,
+                    bookKey(null, scopedBook),
+                    safeBookTitle(scopedBook.title),
+                    safeAuthorForDisplay(scopedBook.author),
+                    0,
+                    0
+            );
+        }
+
         report.readingDays = readingDays.size();
         report.readingBooks = readingBookKeys.size();
         report.longestStreak = longestStreak(readingDays);
@@ -114,6 +128,10 @@ public final class AnnualReportBuilder {
                 ? 0
                 : Math.round(report.totalChars * 60f / report.totalSeconds);
         calculateRhythmHighlights(report);
+        report.topBooks.addAll(topBooksFromMap(booksByKey, scopedBook == null ? 8 : 1));
+        report.topAuthors.addAll(topNamedStats(durationByAuthor, 5));
+        report.topTags.addAll(topNamedStats(durationByTag, 5));
+        report.topSeriesStats.addAll(topNamedStats(durationBySeries, 5));
 
         if (scopedBook == null) {
             if (report.isYearReport()) {
@@ -123,19 +141,19 @@ public final class AnnualReportBuilder {
                     }
                 }
             }
-            report.topBook = topKey(durationByBook);
-            report.topAuthor = topKey(durationByAuthor);
-            report.topTag = topKey(durationByTag);
-            report.topSeries = topKey(durationBySeries);
+            report.topBook = firstBookTitle(report);
+            report.topAuthor = firstStatName(report.topAuthors);
+            report.topTag = firstStatName(report.topTags);
+            report.topSeries = firstStatName(report.topSeriesStats);
         } else {
             if (report.topAuthor.isEmpty()) {
-                report.topAuthor = topKey(durationByAuthor);
+                report.topAuthor = firstStatName(report.topAuthors);
             }
             if (report.topTag.isEmpty()) {
-                report.topTag = topKey(durationByTag);
+                report.topTag = firstStatName(report.topTags);
             }
             if (report.topSeries.isEmpty()) {
-                report.topSeries = topKey(durationBySeries);
+                report.topSeries = firstStatName(report.topSeriesStats);
             }
         }
 
@@ -166,13 +184,16 @@ public final class AnnualReportBuilder {
     private static void configureRhythmSlots(AnnualReportData report, ReadingStatsUtils.Range range) {
         if (report.isYearReport()) {
             report.monthlySeconds = new int[12];
+            report.monthlyChars = new int[12];
             report.rhythmSeconds = report.monthlySeconds;
+            report.rhythmChars = report.monthlyChars;
             report.rhythmLabels = new String[]{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"};
             report.activeRhythmUnit = "个月";
             return;
         }
         int days = (int) Math.max(1, ChronoUnit.DAYS.between(range.startDate, range.endDate) + 1);
         report.rhythmSeconds = new int[days];
+        report.rhythmChars = new int[days];
         report.rhythmLabels = new String[days];
         for (int i = 0; i < days; i++) {
             LocalDate date = range.startDate.plusDays(i);
@@ -211,6 +232,28 @@ public final class AnnualReportBuilder {
         Integer index = rhythmDayIndex.get(date);
         if (index != null && index >= 0 && index < report.rhythmSeconds.length) {
             report.rhythmSeconds[index] += seconds;
+        }
+    }
+
+    private static void addRhythmChars(
+            AnnualReportData report,
+            Map<LocalDate, Integer> rhythmDayIndex,
+            LocalDate date,
+            int chars
+    ) {
+        if (report == null || date == null || chars <= 0) {
+            return;
+        }
+        if (report.isYearReport()) {
+            int month = date.getMonthValue();
+            if (month >= 1 && month <= 12) {
+                report.monthlyChars[month - 1] += chars;
+            }
+            return;
+        }
+        Integer index = rhythmDayIndex.get(date);
+        if (index != null && index >= 0 && index < report.rhythmChars.length) {
+            report.rhythmChars[index] += chars;
         }
     }
 
@@ -280,6 +323,102 @@ public final class AnnualReportBuilder {
         values.put(safeKey, values.getOrDefault(safeKey, 0) + seconds);
     }
 
+    private static void addBookAggregate(
+            Map<String, BookAggregate> values,
+            String key,
+            String title,
+            String author,
+            int seconds,
+            int chars
+    ) {
+        if (values == null) {
+            return;
+        }
+        String safeKey = key == null || key.trim().isEmpty()
+                ? ReadingStatsUtils.buildTitleAuthorKey(title, author)
+                : key.trim();
+        BookAggregate aggregate = values.get(safeKey);
+        if (aggregate == null) {
+            aggregate = new BookAggregate(safeBookTitle(title), safeAuthorForDisplay(author));
+            values.put(safeKey, aggregate);
+        }
+        aggregate.totalSeconds += Math.max(seconds, 0);
+        aggregate.totalChars += Math.max(chars, 0);
+    }
+
+    private static List<AnnualReportData.BookStat> topBooksFromMap(Map<String, BookAggregate> values, int limit) {
+        List<AnnualReportData.BookStat> result = new ArrayList<>();
+        if (values == null || values.isEmpty()) {
+            return result;
+        }
+        List<BookAggregate> aggregates = new ArrayList<>(values.values());
+        Collections.sort(aggregates, (left, right) -> {
+            int secondsCompare = Integer.compare(right.totalSeconds, left.totalSeconds);
+            if (secondsCompare != 0) {
+                return secondsCompare;
+            }
+            int charsCompare = Integer.compare(right.totalChars, left.totalChars);
+            if (charsCompare != 0) {
+                return charsCompare;
+            }
+            return left.title.compareTo(right.title);
+        });
+        int safeLimit = Math.max(0, limit);
+        for (BookAggregate aggregate : aggregates) {
+            if (result.size() >= safeLimit) {
+                break;
+            }
+            result.add(new AnnualReportData.BookStat(
+                    aggregate.title,
+                    aggregate.author,
+                    aggregate.totalSeconds,
+                    aggregate.totalChars
+            ));
+        }
+        return result;
+    }
+
+    private static List<AnnualReportData.NamedStat> topNamedStats(Map<String, Integer> values, int limit) {
+        List<AnnualReportData.NamedStat> result = new ArrayList<>();
+        if (values == null || values.isEmpty()) {
+            return result;
+        }
+        List<AnnualReportData.NamedStat> stats = new ArrayList<>();
+        for (Map.Entry<String, Integer> entry : values.entrySet()) {
+            String name = entry.getKey() == null ? "" : entry.getKey().trim();
+            if (!name.isEmpty()) {
+                stats.add(new AnnualReportData.NamedStat(name, entry.getValue()));
+            }
+        }
+        Collections.sort(stats, (left, right) -> {
+            int secondsCompare = Integer.compare(right.totalSeconds, left.totalSeconds);
+            if (secondsCompare != 0) {
+                return secondsCompare;
+            }
+            return left.name.compareTo(right.name);
+        });
+        int safeLimit = Math.max(0, limit);
+        for (AnnualReportData.NamedStat stat : stats) {
+            if (result.size() >= safeLimit) {
+                break;
+            }
+            result.add(stat);
+        }
+        return result;
+    }
+
+    private static String firstBookTitle(AnnualReportData report) {
+        AnnualReportData.BookStat stat = report == null ? null : report.primaryBookStat();
+        return stat == null ? "" : stat.title;
+    }
+
+    private static String firstStatName(List<AnnualReportData.NamedStat> stats) {
+        if (stats == null || stats.isEmpty()) {
+            return "";
+        }
+        return stats.get(0).name;
+    }
+
     private static String bookKey(ReadingTimeEntryRecord row, BookRecord book) {
         if (book != null) {
             String statsKey = book.readingStatsKey == null ? "" : book.readingStatsKey.trim();
@@ -318,18 +457,6 @@ public final class AnnualReportBuilder {
         }
         return ReadingStatsUtils.buildTitleAuthorKey(book.title, book.author)
                 .equals(ReadingStatsUtils.buildTitleAuthorKey(row.bookTitle, row.bookAuthor));
-    }
-
-    private static String topKey(Map<String, Integer> values) {
-        String best = "";
-        int bestValue = 0;
-        for (Map.Entry<String, Integer> entry : values.entrySet()) {
-            if (entry.getValue() > bestValue) {
-                best = entry.getKey();
-                bestValue = entry.getValue();
-            }
-        }
-        return best;
     }
 
     private static int longestStreak(Set<LocalDate> days) {
@@ -373,5 +500,17 @@ public final class AnnualReportBuilder {
             }
         }
         return "";
+    }
+
+    private static final class BookAggregate {
+        final String title;
+        final String author;
+        int totalSeconds;
+        int totalChars;
+
+        BookAggregate(String title, String author) {
+            this.title = title == null ? "" : title.trim();
+            this.author = author == null ? "" : author.trim();
+        }
     }
 }
