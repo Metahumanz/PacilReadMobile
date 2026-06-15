@@ -229,9 +229,16 @@ public final class ReaderLibraryDialogs {
         CheckBox regexCheck = contentView.findViewById(R.id.rules_check_regex);
         Button addButton = contentView.findViewById(R.id.rules_button_add);
         TextView hintText = contentView.findViewById(R.id.rules_text_hint);
+        FrameLayout rulesBody = contentView.findViewById(R.id.rules_body);
         ListView listView = contentView.findViewById(R.id.rules_list);
+        View scrubberHost = contentView.findViewById(R.id.rules_scrubber_host);
+        View scrubberTrack = contentView.findViewById(R.id.rules_scrubber_track);
+        View scrubberThumb = contentView.findViewById(R.id.rules_scrubber_thumb);
+        TextView scrubberPreview = contentView.findViewById(R.id.rules_scrubber_preview);
         ArrayAdapter<String> adapter = dialogSupport.buildDialogListAdapter(new ArrayList<>());
         listView.setAdapter(adapter);
+        listView.setVerticalScrollBarEnabled(false);
+        listView.setFastScrollEnabled(false);
         hintText.setText("点击列表切换启用状态，长按删除。");
         String safeInitialPattern = initialPattern == null ? "" : initialPattern;
         if (!safeInitialPattern.isEmpty()) {
@@ -241,6 +248,37 @@ public final class ReaderLibraryDialogs {
         }
         refreshRuleLabels(adapter);
         AlertDialog dialog = new AlertDialog.Builder(activity).setView(contentView).create();
+        Runnable refreshRulesScrubber = () -> refreshListScrubber(
+                listView,
+                scrubberHost,
+                scrubberTrack,
+                scrubberThumb,
+                scrubberPreview,
+                adapter.getCount()
+        );
+        attachListScrubber(
+                listView,
+                rulesBody,
+                scrubberHost,
+                scrubberTrack,
+                scrubberThumb,
+                scrubberPreview,
+                new ScrubberItems() {
+                    @Override
+                    public int size() {
+                        return adapter.getCount();
+                    }
+
+                    @Override
+                    public CharSequence previewText(int index) {
+                        if (index < 0 || index >= adapter.getCount()) {
+                            return "";
+                        }
+                        String item = adapter.getItem(index);
+                        return item == null ? "" : item;
+                    }
+                }
+        );
         addButton.setOnClickListener(v -> {
             String pattern = patternInput.getText().toString();
             if (pattern.trim().isEmpty()) {
@@ -270,6 +308,7 @@ public final class ReaderLibraryDialogs {
                     state.replacementRules.addAll(rules);
                     content.clearAllReaderCaches();
                     refreshRuleLabels(adapter);
+                    listView.post(refreshRulesScrubber);
                     patternInput.setText("");
                     replacementInput.setText("");
                     regexCheck.setChecked(false);
@@ -288,6 +327,7 @@ public final class ReaderLibraryDialogs {
                     state.replacementRules.addAll(rules);
                     content.clearAllReaderCaches();
                     refreshRuleLabels(adapter);
+                    listView.post(refreshRulesScrubber);
                     navigation.openChapter(state.currentChapterIndex, offset, false, 0);
                 });
             }, "toggle replacement rule");
@@ -303,6 +343,7 @@ public final class ReaderLibraryDialogs {
                     state.replacementRules.addAll(rules);
                     content.clearAllReaderCaches();
                     refreshRuleLabels(adapter);
+                    listView.post(refreshRulesScrubber);
                     navigation.openChapter(state.currentChapterIndex, offset, false, 0);
                 });
             }, "delete replacement rule");

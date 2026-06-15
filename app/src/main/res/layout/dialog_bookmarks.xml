@@ -58,19 +58,53 @@
         android:textColor="?attr/themeColorOnSurfaceMuted"
         android:textSize="14sp" />
 
-    <ScrollView
-        android:id="@+id/bookmark_scroll"
+    <FrameLayout
+        android:id="@+id/bookmark_body"
         android:layout_width="match_parent"
         android:layout_height="320dp"
         android:layout_marginTop="12dp"
-        android:clipToPadding="false"
         android:visibility="gone">
 
-        <LinearLayout
-            android:id="@+id/bookmark_rows"
+        <ScrollView
+            android:id="@+id/bookmark_scroll"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingBottom="2dp" />
-    </ScrollView>
+            android:layout_height="match_parent"
+            android:layout_marginEnd="42dp"
+            android:clipToPadding="false"
+            android:overScrollMode="never"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/bookmark_rows"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="2dp" />
+        </ScrollView>
+
+        <FrameLayout
+            android:id="@+id/bookmark_scrubber_host"
+            android:layout_width="38dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="end">
+
+            <View
+                android:id="@+id/bookmark_scrubber_track"
+                android:layout_width="8dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_toc_scrubber_track" />
+
+            <View
+                android:id="@+id/bookmark_scrubber_thumb"
+                android:layout_width="24dp"
+                android:layout_height="52dp"
+                android:layout_gravity="center_horizontal|top"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/bg_toc_scrubber_thumb"
+                android:elevation="6dp" />
+        </FrameLayout>
+    </FrameLayout>
 </LinearLayout>
