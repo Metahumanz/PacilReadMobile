@@ -142,6 +142,7 @@
 
                     <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  每日、周度、年度统计会生成各自对应的阅读报告，不再固定生成年度报告" />
                     <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  周统计新增“自然周”和“过去七天”切换，总时长、书籍列表、日历和周报会同步切换范围" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  报告摘要补齐 Top 书籍、作者、标签、系列和周期节奏分析，年度报告与桌面端数据口径保持一致" />
                     <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  报告预览、导出文件名、摘要指标和阅读节奏图会随日/周/年周期自动调整" />
                     <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  年度报告导出弹窗补齐预测返回手势，和阅读器弹窗保持一致的缩小返回动效" />
 

@@ -17,6 +17,7 @@ import com.metahumanz.pacilread.model.ReadingTimeEntryRecord;
 import com.metahumanz.pacilread.stats.annual.AnnualReportBuilder;
 import com.metahumanz.pacilread.stats.annual.AnnualReportData;
 import com.metahumanz.pacilread.stats.annual.AnnualReportExportController;
+import com.metahumanz.pacilread.stats.annual.AnnualReportInsight;
 import com.metahumanz.pacilread.stats.ReadingStatsUtils;
 import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
@@ -516,6 +517,7 @@ public class ReadingStatsActivity extends ThemedActivity {
         if (shareAnnualReportButton != null) shareAnnualReportButton.setEnabled(true);
         addReportLine(report.periodTitle + " · " + ReadingStatsUtils.formatDuration(report.totalSeconds)
                 + " · " + formatNumber(report.totalChars) + " 字");
+        addReportLine(AnnualReportInsight.sentence(report));
         addReportLine("阅读天数 " + report.readingDays + " 天 · 最长连续 " + report.longestStreak + " 天");
         if (report.isBookScope()) {
             addReportLine("书籍：" + report.bookTitle);
@@ -526,10 +528,10 @@ public class ReadingStatsActivity extends ThemedActivity {
             addReportLine(report.isYearReport()
                     ? "完成书籍 " + report.finishedBooks + " 本"
                     : "阅读书籍 " + report.readingBooks + " 本");
-            addOptionalReportLine("Top 书籍：", report.topBook);
-            addOptionalReportLine("常读作者：", report.topAuthor);
-            addOptionalReportLine("常读标签：", report.topTag);
-            addOptionalReportLine("常读系列：", report.topSeries);
+            addTopBookReportLines(report);
+            addNamedStatReportLine("常读作者：", report.topAuthors);
+            addNamedStatReportLine("常读标签：", report.topTags);
+            addNamedStatReportLine("常读系列：", report.topSeriesStats);
         }
     }
 
@@ -548,6 +550,53 @@ public class ReadingStatsActivity extends ThemedActivity {
             return;
         }
         addReportLine(prefix + value.trim());
+    }
+
+    private void addTopBookReportLines(AnnualReportData report) {
+        if (report == null || report.topBooks.isEmpty()) {
+            addOptionalReportLine("Top 书籍：", report == null ? "" : report.topBook);
+            return;
+        }
+        int count = Math.min(3, report.topBooks.size());
+        for (int i = 0; i < count; i++) {
+            AnnualReportData.BookStat stat = report.topBooks.get(i);
+            StringBuilder builder = new StringBuilder();
+            builder.append("Top ").append(i + 1).append("：").append(stat.title);
+            if (stat.author != null && !stat.author.trim().isEmpty()) {
+                builder.append(" · ").append(stat.author.trim());
+            }
+            if (stat.totalSeconds > 0) {
+                builder.append(" · ").append(ReadingStatsUtils.formatDuration(stat.totalSeconds));
+            }
+            if (stat.totalChars > 0) {
+                builder.append(" · ").append(formatNumber(stat.totalChars)).append(" 字");
+            }
+            addReportLine(builder.toString());
+        }
+    }
+
+    private void addNamedStatReportLine(String prefix, List<AnnualReportData.NamedStat> stats) {
+        if (stats == null || stats.isEmpty()) {
+            return;
+        }
+        StringBuilder builder = new StringBuilder();
+        int count = 0;
+        for (AnnualReportData.NamedStat stat : stats) {
+            if (stat == null || stat.name == null || stat.name.trim().isEmpty()) {
+                continue;
+            }
+            if (builder.length() > 0) {
+                builder.append(" / ");
+            }
+            builder.append(stat.name.trim());
+            count++;
+            if (count >= 3) {
+                break;
+            }
+        }
+        if (builder.length() > 0) {
+            addReportLine(prefix + builder);
+        }
     }
 
     private void addReportLine(String text) {

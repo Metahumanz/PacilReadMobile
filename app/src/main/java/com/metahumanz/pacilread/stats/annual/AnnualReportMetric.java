@@ -296,11 +296,11 @@ public enum AnnualReportMetric {
             };
         }
         return new AnnualReportMetric[]{
-                TOTAL_DURATION,
-                TOTAL_CHARS,
-                report != null && report.isYearReport() ? FINISHED_BOOKS : READING_BOOKS,
                 READING_DAYS,
-                LONGEST_STREAK
+                LONGEST_STREAK,
+                report != null && report.isYearReport() ? FINISHED_BOOKS : READING_BOOKS,
+                TOTAL_DURATION,
+                TOTAL_CHARS
         };
     }
 

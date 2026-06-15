@@ -13,6 +13,7 @@ import com.metahumanz.pacilread.stats.ReadingStatsUtils;
 import com.metahumanz.pacilread.stats.annual.AnnualReportBuilder;
 import com.metahumanz.pacilread.stats.annual.AnnualReportData;
 import com.metahumanz.pacilread.stats.annual.AnnualReportExportController;
+import com.metahumanz.pacilread.stats.annual.AnnualReportInsight;
 import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
 import com.metahumanz.pacilread.sync.ReadingStatsSyncManager;
@@ -278,7 +279,8 @@ public final class HomeStatsPanelController {
         }
         annualReportSummaryText.setText(annualReport.periodTitle + " · "
                 + ReadingStatsUtils.formatDuration(annualReport.totalSeconds)
-                + " · " + annualReport.readingDays + " 个阅读日");
+                + " · " + annualReport.readingDays + " 个阅读日\n"
+                + AnnualReportInsight.sentence(annualReport));
     }
 
     private String reportCardTitleFor(String period) {

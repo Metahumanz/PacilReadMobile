@@ -155,16 +155,29 @@ public final class AnnualReportRenderer {
             addRow(rows, "作者", report.bookAuthor);
             addRow(rows, "标签", report.topTag);
             addRow(rows, "系列", report.topSeries);
+            addRow(rows, "状态", report.statusText);
         } else {
-            addRow(rows, "Top 书籍", report.topBook);
-            addRow(rows, "常读作者", report.topAuthor);
-            addRow(rows, "常读标签", report.topTag);
-            addRow(rows, "常读系列", report.topSeries);
+            addTopBookRows(rows, report);
+            addRow(rows, "阅读地图", readingMapText(report));
         }
         if (rows.isEmpty()) {
             addRow(rows, "范围", report.rangeTitle);
         }
+        while (rows.size() > 4) {
+            rows.remove(rows.size() - 1);
+        }
         return rows;
+    }
+
+    private void addTopBookRows(List<String[]> rows, AnnualReportData report) {
+        if (report == null || report.topBooks.isEmpty()) {
+            addRow(rows, "Top 书籍", report == null ? "" : report.topBook);
+            return;
+        }
+        int count = Math.min(3, report.topBooks.size());
+        for (int i = 0; i < count; i++) {
+            addRow(rows, "Top " + (i + 1), bookStatText(report.topBooks.get(i)));
+        }
     }
 
     private void addRow(List<String[]> rows, String label, String value) {
@@ -172,6 +185,65 @@ public final class AnnualReportRenderer {
             return;
         }
         rows.add(new String[]{label, value.trim()});
+    }
+
+    private String bookStatText(AnnualReportData.BookStat stat) {
+        if (stat == null) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder();
+        builder.append(stat.title == null || stat.title.trim().isEmpty() ? "未命名书籍" : stat.title.trim());
+        if (stat.author != null && !stat.author.trim().isEmpty()) {
+            builder.append(" · ").append(stat.author.trim());
+        }
+        if (stat.totalSeconds > 0) {
+            builder.append(" · ").append(ReadingStatsUtils.formatDuration(stat.totalSeconds));
+        }
+        if (stat.totalChars > 0) {
+            builder.append(" · ").append(formatNumber(stat.totalChars)).append(" 字");
+        }
+        return builder.toString();
+    }
+
+    private String readingMapText(AnnualReportData report) {
+        if (report == null) {
+            return "";
+        }
+        String tags = joinNamedStats(report.topTags, 2);
+        if (!tags.isEmpty()) {
+            return "标签：" + tags;
+        }
+        String authors = joinNamedStats(report.topAuthors, 2);
+        if (!authors.isEmpty()) {
+            return "作者：" + authors;
+        }
+        String series = joinNamedStats(report.topSeriesStats, 2);
+        if (!series.isEmpty()) {
+            return "系列：" + series;
+        }
+        return report.readingBooks > 0 ? "覆盖 " + report.readingBooks + " 本书" : "";
+    }
+
+    private String joinNamedStats(List<AnnualReportData.NamedStat> stats, int limit) {
+        if (stats == null || stats.isEmpty() || limit <= 0) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder();
+        int count = 0;
+        for (AnnualReportData.NamedStat stat : stats) {
+            if (stat == null || stat.name == null || stat.name.trim().isEmpty()) {
+                continue;
+            }
+            if (builder.length() > 0) {
+                builder.append(" / ");
+            }
+            builder.append(stat.name.trim());
+            count++;
+            if (count >= limit) {
+                break;
+            }
+        }
+        return builder.toString();
     }
 
     private void drawInfoRows(Canvas canvas, List<String[]> rows, float left, float top, float width,
@@ -325,12 +397,12 @@ public final class AnnualReportRenderer {
             return highlight ? "本书高光" : "本书坐标";
         }
         if (report != null && report.isDayReport()) {
-            return highlight ? "今日高光" : "今日书页坐标";
+            return highlight ? "今日书单" : "今日阅读地图";
         }
         if (report != null && report.isWeekReport()) {
-            return highlight ? "周报高光" : "本周书页坐标";
+            return highlight ? "周报书单" : "本周阅读地图";
         }
-        return highlight ? "年度高光" : "年度书页坐标";
+        return highlight ? "年度书单" : "年度阅读地图";
     }
 
     private String rhythmTitleFor(AnnualReportData report, boolean highlight) {

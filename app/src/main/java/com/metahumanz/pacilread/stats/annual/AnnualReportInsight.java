@@ -12,6 +12,11 @@ public final class AnnualReportInsight {
         if (report == null) {
             return "";
         }
+        if (!report.hasReadingData()) {
+            return report.isBookScope()
+                    ? "这本书在当前周期还没有形成可分析的阅读轨迹。"
+                    : "当前周期还没有形成可分析的阅读轨迹。";
+        }
         if (report.isBookScope()) {
             return bookSentence(report);
         }
@@ -19,72 +24,52 @@ public final class AnnualReportInsight {
     }
 
     private static String globalSentence(AnnualReportData report) {
-        if (isStrongStreak(report)) {
-            return "最长连续 " + report.longestStreak + " 天，是你 " + report.readingDays
-                    + " 个阅读日里最稳定的一段。";
+        String durationText = ReadingStatsUtils.formatDuration(report.totalSeconds);
+        String charsText = formatCompactNumber(report.totalChars) + " 字";
+        String focusText = topBookFocus(report);
+        String tasteText = tasteText(report);
+        String streakText = streakText(report);
+
+        if (report.isDayReport()) {
+            return "这一天你累计阅读 " + durationText + "、" + charsText + "；"
+                    + focusText + "，" + tasteText + "。";
         }
-        if (isStrongPeakPeriod(report)) {
-            if (!report.isYearReport() && hasText(report.peakRhythmLabel)) {
-                return report.periodTitle + "里 " + report.peakRhythmLabel + " 最活跃，读了 "
-                        + ReadingStatsUtils.formatDuration(report.peakRhythmSeconds) + "。";
-            }
-            return report.peakMonth + " 月是阅读高峰，单月读了 "
-                    + ReadingStatsUtils.formatDuration(report.peakMonthSeconds) + "。";
+        if (report.isWeekReport()) {
+            return periodSubject(report) + "你读了 " + report.readingDays + " 天，累计 "
+                    + durationText + "、" + charsText + "；" + focusText
+                    + (hasText(streakText) ? "，" + streakText : "，" + tasteText) + "。";
         }
-        if (hasText(report.topTag) && hasText(report.topBook)) {
-            return periodSubject(report) + "最常读“" + trimForInsight(report.topTag, 10) + "”，代表书是《"
-                    + trimForInsight(report.topBook, 14) + "》。";
-        }
-        if (hasText(report.topAuthor)) {
-            return periodSubject(report) + "的阅读偏好很清楚，常读作者是 "
-                    + trimForInsight(report.topAuthor, 14) + "。";
-        }
-        if (hasText(report.topBook)) {
-            return "《" + trimForInsight(report.topBook, 16) + "》占据了" + periodSubject(report) + "最多阅读时间。";
-        }
-        if (report.isYearReport() && report.activeMonths >= 8 && report.readingDays >= 30) {
-            return "全年有 " + report.activeMonths + " 个月留下阅读记录，累计 "
-                    + report.readingDays + " 个阅读日。";
-        }
-        if (report.totalSeconds > 0 && report.readingDays > 0) {
-            return "你" + periodSubject(report) + "读了 " + ReadingStatsUtils.formatDuration(report.totalSeconds)
-                    + "，分布在 " + report.readingDays + " 个阅读日。";
-        }
-        if (report.totalChars > 0) {
-            return "你" + periodSubject(report) + "读过 " + formatNumber(report.totalChars) + " 字，留下了可见的阅读记录。";
-        }
-        return "你" + periodSubject(report) + "留下 " + report.readingDays + " 个阅读日。";
+
+        String rhythmText = rhythmText(report);
+        String finishedText = report.finishedBooks > 0
+                ? "，读完 " + report.finishedBooks + " 本"
+                : "";
+        return "这一年你" + rhythmText + "；" + focusText + "，" + tasteText + finishedText + "。";
     }
 
     private static String bookSentence(AnnualReportData report) {
+        String bookTitle = quoteBook(hasText(report.bookTitle) ? report.bookTitle : report.topBook);
+        String durationText = ReadingStatsUtils.formatDuration(report.totalSeconds);
+        String charsText = formatCompactNumber(report.totalChars) + " 字";
+        String speedText = report.readingSpeedCharsPerMinute > 0
+                ? "，平均约 " + report.readingSpeedCharsPerMinute + " 字/分"
+                : "";
+        String rhythmText = rhythmText(report);
+
+        if ("已读完".equals(report.statusText)) {
+            return "你读完了" + bookTitle + "，" + rhythmText + "；累计 "
+                    + durationText + "、" + report.readingDays + " 个阅读日" + speedText + "。";
+        }
         if (isStrongStreak(report)) {
-            return "这本书最长连续读了 " + report.longestStreak + " 天，占 "
-                    + report.readingDays + " 个本书阅读日的核心节奏。";
+            return bookTitle + periodSubject(report) + "累计 " + durationText + "、" + charsText
+                    + "；最长连续 " + report.longestStreak + " 天，" + rhythmText + speedText + "。";
         }
         if (isStrongPeakPeriod(report)) {
-            if (!report.isYearReport() && hasText(report.peakRhythmLabel)) {
-                return report.periodTitle + "里 " + report.peakRhythmLabel + " 是这本书的阅读高峰，读了 "
-                        + ReadingStatsUtils.formatDuration(report.peakRhythmSeconds) + "。";
-            }
-            return report.peakMonth + " 月是这本书的阅读高峰，读了 "
-                    + ReadingStatsUtils.formatDuration(report.peakMonthSeconds) + "。";
+            return bookTitle + periodSubject(report) + "累计 " + durationText + "、" + charsText
+                    + "；" + rhythmText + speedText + "。";
         }
-        if (report.readingSpeedCharsPerMinute > 0 && report.totalChars > 0) {
-            return "你按约 " + report.readingSpeedCharsPerMinute + " 字/分读这本书，累计 "
-                    + formatNumber(report.totalChars) + " 字。";
-        }
-        if (hasText(report.statusText) && report.totalSeconds > 0) {
-            return "这本书状态是“" + report.statusText + "”，" + periodSubject(report) + "投入 "
-                    + ReadingStatsUtils.formatDuration(report.totalSeconds) + "。";
-        }
-        if (report.totalSeconds > 0 && report.readingDays > 0) {
-            return "这本书" + periodSubject(report) + "读了 " + ReadingStatsUtils.formatDuration(report.totalSeconds)
-                    + "，覆盖 " + report.readingDays + " 个阅读日。";
-        }
-        if (report.totalChars > 0) {
-            return "这本书" + periodSubject(report) + "读过 " + formatNumber(report.totalChars) + " 字。";
-        }
-        return "这本书" + periodSubject(report) + "留下 " + report.readingDays + " 个阅读日。";
+        return bookTitle + periodSubject(report) + "累计 " + durationText + "、" + charsText
+                + "；记录了 " + report.readingDays + " 个阅读日，" + rhythmText + speedText + "。";
     }
 
     private static boolean isStrongStreak(AnnualReportData report) {
@@ -134,6 +119,57 @@ public final class AnnualReportInsight {
         return "今年";
     }
 
+    private static String rhythmText(AnnualReportData report) {
+        if (report == null) {
+            return "留下阅读记录";
+        }
+        if (report.isYearReport()) {
+            String peak = report.peakMonth > 0 ? report.peakMonth + " 月" : "全年";
+            if (report.activeMonths > 1) {
+                return "在 " + report.activeMonths + " 个月留下阅读记录，" + peak + "最集中";
+            }
+            return "阅读集中在 " + peak;
+        }
+        if (hasText(report.peakRhythmLabel) && report.peakRhythmSeconds > 0 && !report.isDayReport()) {
+            return report.peakRhythmLabel + " 最活跃，读了 "
+                    + ReadingStatsUtils.formatDuration(report.peakRhythmSeconds);
+        }
+        return "覆盖 " + report.readingDays + " 个阅读日";
+    }
+
+    private static String topBookFocus(AnnualReportData report) {
+        AnnualReportData.BookStat topBook = report == null ? null : report.primaryBookStat();
+        if (topBook == null || !hasText(topBook.title)) {
+            return "累计 " + ReadingStatsUtils.formatDuration(report == null ? 0 : report.totalSeconds);
+        }
+        return quoteBook(topBook.title) + "投入最多（" + ReadingStatsUtils.formatDuration(topBook.totalSeconds) + "）";
+    }
+
+    private static String tasteText(AnnualReportData report) {
+        if (report == null) {
+            return "留下阅读记录";
+        }
+        AnnualReportData.NamedStat tag = report.primaryTagStat();
+        if (tag != null && hasText(tag.name)) {
+            return "常读标签是“" + trimForInsight(tag.name, 10) + "”";
+        }
+        AnnualReportData.NamedStat author = report.primaryAuthorStat();
+        if (author != null && hasText(author.name)) {
+            return "常读作者是 " + trimForInsight(author.name, 10);
+        }
+        if (report.readingBooks > 0) {
+            return "覆盖 " + report.readingBooks + " 本书";
+        }
+        return "累计 " + formatCompactNumber(report.totalChars) + " 字";
+    }
+
+    private static String streakText(AnnualReportData report) {
+        if (!isStrongStreak(report)) {
+            return "";
+        }
+        return "最长连续 " + report.longestStreak + " 天";
+    }
+
     private static boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
     }
@@ -144,6 +180,22 @@ public final class AnnualReportInsight {
             return safe;
         }
         return safe.substring(0, Math.max(1, maxChars)) + "...";
+    }
+
+    private static String quoteBook(String title) {
+        return "《" + trimForInsight(hasText(title) ? title : "未命名书籍", 14) + "》";
+    }
+
+    private static String formatCompactNumber(int value) {
+        int safeValue = Math.max(0, value);
+        if (safeValue >= 10000) {
+            float tenThousands = safeValue / 10000f;
+            if (tenThousands >= 100f) {
+                return String.valueOf(Math.round(tenThousands)) + "万";
+            }
+            return String.format(Locale.SIMPLIFIED_CHINESE, "%.1f万", tenThousands);
+        }
+        return formatNumber(safeValue);
     }
 
     private static String formatNumber(int value) {
