@@ -12,6 +12,8 @@ public final class ReadingStatsUtils {
     public static final String PERIOD_TODAY = "today";
     public static final String PERIOD_WEEK = "week";
     public static final String PERIOD_YEAR = "year";
+    public static final String WEEK_MODE_NATURAL = "natural";
+    public static final String WEEK_MODE_ROLLING = "rolling";
     public static final String LEGACY_BOOK_IDENTITY = "__legacy_total__";
     public static final String LEGACY_DEVICE_ID = "__legacy_device__";
     public static final String LEGACY_BOOK_TITLE = "历史阅读总时长";
@@ -24,9 +26,15 @@ public final class ReadingStatsUtils {
     }
 
     public static Range rangeForPeriod(String periodKey, ZoneId zoneId) {
+        return rangeForPeriod(periodKey, zoneId, WEEK_MODE_NATURAL);
+    }
+
+    public static Range rangeForPeriod(String periodKey, ZoneId zoneId, String weekMode) {
         LocalDate today = LocalDate.now(zoneId);
         if (PERIOD_WEEK.equals(periodKey)) {
-            LocalDate start = today.minusDays(today.getDayOfWeek().getValue() - 1L);
+            LocalDate start = WEEK_MODE_ROLLING.equals(normalizeWeekMode(weekMode))
+                    ? today.minusDays(6)
+                    : today.minusDays(today.getDayOfWeek().getValue() - 1L);
             return new Range(PERIOD_WEEK, start, today);
         }
         if (PERIOD_YEAR.equals(periodKey)) {
@@ -82,6 +90,10 @@ public final class ReadingStatsUtils {
             return value;
         }
         return PERIOD_TODAY;
+    }
+
+    public static String normalizeWeekMode(String value) {
+        return WEEK_MODE_ROLLING.equals(value) ? WEEK_MODE_ROLLING : WEEK_MODE_NATURAL;
     }
 
     public static String formatDuration(int totalSeconds) {

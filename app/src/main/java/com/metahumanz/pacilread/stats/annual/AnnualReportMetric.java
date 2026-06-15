@@ -9,6 +9,7 @@ import java.util.Locale;
 public enum AnnualReportMetric {
     TOTAL_DURATION("total_duration"),
     TOTAL_CHARS("total_chars"),
+    READING_BOOKS("reading_books"),
     READING_DAYS("reading_days"),
     LONGEST_STREAK("longest_streak"),
     FINISHED_BOOKS("finished_books"),
@@ -35,6 +36,8 @@ public enum AnnualReportMetric {
                 return bookScope ? "本书时长" : "阅读总时长";
             case TOTAL_CHARS:
                 return bookScope ? "本书字数" : "阅读字数";
+            case READING_BOOKS:
+                return "阅读书籍";
             case READING_DAYS:
                 return "阅读天数";
             case LONGEST_STREAK:
@@ -50,9 +53,9 @@ public enum AnnualReportMetric {
             case TOP_SERIES:
                 return bookScope ? "系列" : "常读系列";
             case PEAK_MONTH:
-                return "最活跃月份";
+                return report != null && report.isYearReport() ? "最活跃月份" : "最活跃日";
             case ACTIVE_MONTHS:
-                return "活跃月份";
+                return report != null && report.isYearReport() ? "活跃月份" : "活跃天数";
             case DAILY_AVERAGE:
                 return "日均阅读";
             case BOOK_STATUS:
@@ -73,6 +76,8 @@ public enum AnnualReportMetric {
                 return ReadingStatsUtils.formatDuration(report.totalSeconds);
             case TOTAL_CHARS:
                 return formatNumber(report.totalChars) + " 字";
+            case READING_BOOKS:
+                return report.readingBooks + " 本";
             case READING_DAYS:
                 return report.readingDays + " 天";
             case LONGEST_STREAK:
@@ -88,9 +93,13 @@ public enum AnnualReportMetric {
             case TOP_SERIES:
                 return clean(report.topSeries);
             case PEAK_MONTH:
-                return report.peakMonth > 0 ? report.peakMonth + " 月" : "";
+                return report.isYearReport()
+                        ? (report.peakMonth > 0 ? report.peakMonth + " 月" : "")
+                        : clean(report.peakRhythmLabel);
             case ACTIVE_MONTHS:
-                return report.activeMonths + " 个月";
+                int active = report.isYearReport() ? report.activeMonths : report.activeRhythmSlots;
+                String unit = report.isYearReport() ? "个月" : "天";
+                return active + " " + unit;
             case DAILY_AVERAGE:
                 return ReadingStatsUtils.formatDuration(report.averageSecondsPerReadingDay());
             case BOOK_STATUS:
@@ -111,6 +120,8 @@ public enum AnnualReportMetric {
         boolean bookScope = report.isBookScope();
         switch (this) {
             case FINISHED_BOOKS:
+                return !bookScope && report.isYearReport();
+            case READING_BOOKS:
             case TOP_BOOK:
             case DAILY_AVERAGE:
                 return !bookScope;
@@ -131,6 +142,8 @@ public enum AnnualReportMetric {
                 return report.totalSeconds > 0;
             case TOTAL_CHARS:
                 return report.totalChars > 0;
+            case READING_BOOKS:
+                return report.readingBooks > 0;
             case READING_DAYS:
                 return report.readingDays > 0;
             case LONGEST_STREAK:
@@ -146,9 +159,9 @@ public enum AnnualReportMetric {
             case TOP_SERIES:
                 return hasText(report.topSeries);
             case PEAK_MONTH:
-                return report.peakMonth > 0;
+                return report.isYearReport() ? report.peakMonth > 0 : hasText(report.peakRhythmLabel);
             case ACTIVE_MONTHS:
-                return report.activeMonths > 0;
+                return (report.isYearReport() ? report.activeMonths : report.activeRhythmSlots) > 0;
             case DAILY_AVERAGE:
                 return report.averageSecondsPerReadingDay() > 0;
             case BOOK_STATUS:
@@ -283,11 +296,11 @@ public enum AnnualReportMetric {
             };
         }
         return new AnnualReportMetric[]{
-                READING_DAYS,
-                LONGEST_STREAK,
-                FINISHED_BOOKS,
                 TOTAL_DURATION,
-                TOTAL_CHARS
+                TOTAL_CHARS,
+                report != null && report.isYearReport() ? FINISHED_BOOKS : READING_BOOKS,
+                READING_DAYS,
+                LONGEST_STREAK
         };
     }
 
@@ -295,6 +308,7 @@ public enum AnnualReportMetric {
         return new AnnualReportMetric[]{
                 TOTAL_DURATION,
                 TOTAL_CHARS,
+                READING_BOOKS,
                 READING_DAYS,
                 LONGEST_STREAK,
                 FINISHED_BOOKS,

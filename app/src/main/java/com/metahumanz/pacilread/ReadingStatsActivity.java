@@ -70,12 +70,17 @@ public class ReadingStatsActivity extends ThemedActivity {
     private LinearLayout bookStatsListLayout;
     private LinearLayout readingCalendarLayout;
     private LinearLayout annualReportLayout;
+    private LinearLayout weekRangeModeLayout;
+    private TextView reportCardTitleText;
     private Button periodTodayButton;
     private Button periodWeekButton;
     private Button periodYearButton;
+    private Button weekNaturalButton;
+    private Button weekRollingButton;
     private Button shareAnnualReportButton;
 
     private String selectedPeriod = ReadingStatsUtils.PERIOD_TODAY;
+    private String selectedWeekMode = ReadingStatsUtils.WEEK_MODE_NATURAL;
     private long bookId = -1L;
     private LaunchSourceTransition.Source launchSource;
     private boolean finishingWithSource;
@@ -143,9 +148,13 @@ public class ReadingStatsActivity extends ThemedActivity {
         bookStatsListLayout = findViewById(R.id.layout_book_stats_list);
         readingCalendarLayout = findViewById(R.id.layout_reading_calendar);
         annualReportLayout = findViewById(R.id.layout_annual_report);
+        weekRangeModeLayout = findViewById(R.id.layout_week_range_mode);
+        reportCardTitleText = findViewById(R.id.text_report_card_title);
         periodTodayButton = findViewById(R.id.button_period_today);
         periodWeekButton = findViewById(R.id.button_period_week);
         periodYearButton = findViewById(R.id.button_period_year);
+        weekNaturalButton = findViewById(R.id.button_week_natural);
+        weekRollingButton = findViewById(R.id.button_week_rolling);
         shareAnnualReportButton = findViewById(R.id.button_share_annual_report);
     }
 
@@ -155,6 +164,12 @@ public class ReadingStatsActivity extends ThemedActivity {
         periodTodayButton.setOnClickListener(v -> selectPeriod(ReadingStatsUtils.PERIOD_TODAY));
         periodWeekButton.setOnClickListener(v -> selectPeriod(ReadingStatsUtils.PERIOD_WEEK));
         periodYearButton.setOnClickListener(v -> selectPeriod(ReadingStatsUtils.PERIOD_YEAR));
+        if (weekNaturalButton != null) {
+            weekNaturalButton.setOnClickListener(v -> selectWeekMode(ReadingStatsUtils.WEEK_MODE_NATURAL));
+        }
+        if (weekRollingButton != null) {
+            weekRollingButton.setOnClickListener(v -> selectWeekMode(ReadingStatsUtils.WEEK_MODE_ROLLING));
+        }
         if (shareAnnualReportButton != null) {
             shareAnnualReportButton.setOnClickListener(v -> shareAnnualReport());
         }
@@ -250,10 +265,28 @@ public class ReadingStatsActivity extends ThemedActivity {
         loadStats(false);
     }
 
+    private void selectWeekMode(String weekMode) {
+        selectedWeekMode = ReadingStatsUtils.normalizeWeekMode(weekMode);
+        updatePeriodButtons();
+        if (ReadingStatsUtils.PERIOD_WEEK.equals(selectedPeriod)) {
+            loadStats(false);
+        }
+    }
+
     private void updatePeriodButtons() {
         stylePeriodButton(periodTodayButton, ReadingStatsUtils.PERIOD_TODAY.equals(selectedPeriod));
         stylePeriodButton(periodWeekButton, ReadingStatsUtils.PERIOD_WEEK.equals(selectedPeriod));
         stylePeriodButton(periodYearButton, ReadingStatsUtils.PERIOD_YEAR.equals(selectedPeriod));
+        updateWeekModeControls();
+    }
+
+    private void updateWeekModeControls() {
+        boolean weekSelected = ReadingStatsUtils.PERIOD_WEEK.equals(selectedPeriod);
+        if (weekRangeModeLayout != null) {
+            weekRangeModeLayout.setVisibility(weekSelected ? View.VISIBLE : View.GONE);
+        }
+        stylePeriodButton(weekNaturalButton, ReadingStatsUtils.WEEK_MODE_NATURAL.equals(selectedWeekMode));
+        stylePeriodButton(weekRollingButton, ReadingStatsUtils.WEEK_MODE_ROLLING.equals(selectedWeekMode));
     }
 
     private void stylePeriodButton(Button button, boolean selected) {
@@ -270,6 +303,7 @@ public class ReadingStatsActivity extends ThemedActivity {
     private void loadStats(boolean syncFirst) {
         int requestId = loadGeneration.incrementAndGet();
         String period = selectedPeriod;
+        String weekMode = selectedWeekMode;
         long scopedBookId = bookId;
         boolean shouldSync = syncFirst && settingsStore.isWebDavEnabled() && settingsStore.isWebDavSyncReadingStatsEnabled();
         syncStatusText.setText(shouldSync
@@ -279,6 +313,7 @@ public class ReadingStatsActivity extends ThemedActivity {
             StatsSnapshot localSnapshot = buildStatsSnapshot(
                     period,
                     scopedBookId,
+                    weekMode,
                     shouldSync ? "正在同步云端阅读统计，本地数据已先显示" : "当前展示的是本地阅读统计"
             );
             postStatsSnapshot(requestId, localSnapshot);
@@ -292,15 +327,16 @@ public class ReadingStatsActivity extends ThemedActivity {
             } catch (Exception error) {
                 syncMessage = "云端同步失败，当前展示本地统计：" + readableError(error);
             }
-            StatsSnapshot syncedSnapshot = buildStatsSnapshot(period, scopedBookId, syncMessage);
+            StatsSnapshot syncedSnapshot = buildStatsSnapshot(period, scopedBookId, weekMode, syncMessage);
             postStatsSnapshot(requestId, syncedSnapshot);
         });
     }
 
-    private StatsSnapshot buildStatsSnapshot(String period, long scopedBookId, String syncMessage) {
-        ReadingStatsUtils.Range range = ReadingStatsUtils.rangeForPeriod(period, ZoneId.systemDefault());
+    private StatsSnapshot buildStatsSnapshot(String period, long scopedBookId, String weekMode, String syncMessage) {
+        ReadingStatsUtils.Range range = ReadingStatsUtils.rangeForPeriod(period, ZoneId.systemDefault(), weekMode);
         StatsSnapshot snapshot = new StatsSnapshot();
         snapshot.period = period;
+        snapshot.weekMode = weekMode;
         snapshot.bookId = scopedBookId;
         snapshot.syncMessage = syncMessage;
         snapshot.rangeRows = databaseHelper.getReadingStatsRows(range.startDateString(), range.endDateString());
@@ -323,13 +359,13 @@ public class ReadingStatsActivity extends ThemedActivity {
                         snapshot.book.author
                 );
                 snapshot.bookEta = buildBookEta(snapshot.book, snapshot.chapters);
-                snapshot.annualReport = AnnualReportBuilder.buildBook(databaseHelper, snapshot.book, ZoneId.systemDefault());
+                snapshot.annualReport = AnnualReportBuilder.buildBook(databaseHelper, snapshot.book, ZoneId.systemDefault(), period, weekMode);
             }
         } else {
             snapshot.totalSeconds = databaseHelper.getReadingDurationSeconds(range.startDateString(), range.endDateString(), null);
             snapshot.totalChars = databaseHelper.getReadingCharCount(range.startDateString(), range.endDateString(), null);
             snapshot.bookStats = databaseHelper.getReadingBookStats(range.startDateString(), range.endDateString());
-            snapshot.annualReport = AnnualReportBuilder.buildGlobal(databaseHelper, ZoneId.systemDefault());
+            snapshot.annualReport = AnnualReportBuilder.buildGlobal(databaseHelper, ZoneId.systemDefault(), period, weekMode);
         }
         return snapshot;
     }
@@ -340,10 +376,10 @@ public class ReadingStatsActivity extends ThemedActivity {
                 return;
             }
             syncStatusText.setText(snapshot.syncMessage);
-            scopeLabelText.setText(periodLabelPrefix(snapshot.period) + "阅读总时长");
+            scopeLabelText.setText(periodLabelPrefix(snapshot.period, snapshot.weekMode) + "阅读总时长");
             scopeTotalText.setText(ReadingStatsUtils.formatDuration(snapshot.totalSeconds));
             scopeCharsText.setText("阅读字数 " + formatNumber(snapshot.totalChars));
-            renderCalendar(snapshot.rangeRows, snapshot.period);
+            renderCalendar(snapshot.rangeRows, snapshot.period, snapshot.weekMode);
             currentAnnualReport = snapshot.annualReport;
             renderAnnualReport(snapshot.annualReport);
             if (snapshot.bookId > 0L) {
@@ -356,6 +392,7 @@ public class ReadingStatsActivity extends ThemedActivity {
 
     private static final class StatsSnapshot {
         String period;
+        String weekMode;
         long bookId;
         int totalSeconds;
         int totalChars;
@@ -433,7 +470,7 @@ public class ReadingStatsActivity extends ThemedActivity {
         }
     }
 
-    private void renderCalendar(List<ReadingTimeEntryRecord> rows, String period) {
+    private void renderCalendar(List<ReadingTimeEntryRecord> rows, String period, String weekMode) {
         if (readingCalendarLayout == null) return;
         readingCalendarLayout.removeAllViews();
         Map<String, int[]> byDate = new HashMap<>();
@@ -444,7 +481,7 @@ public class ReadingStatsActivity extends ThemedActivity {
                 values[1] += Math.max(row.charCount, 0);
             }
         }
-        ReadingStatsUtils.Range range = ReadingStatsUtils.rangeForPeriod(period, ZoneId.systemDefault());
+        ReadingStatsUtils.Range range = ReadingStatsUtils.rangeForPeriod(period, ZoneId.systemDefault(), weekMode);
         LocalDate start = range.startDate;
         LocalDate end = range.endDate;
         if (ReadingStatsUtils.PERIOD_YEAR.equals(period)) {
@@ -470,12 +507,14 @@ public class ReadingStatsActivity extends ThemedActivity {
         if (annualReportLayout == null) return;
         annualReportLayout.removeAllViews();
         if (report == null || !report.hasReadingData()) {
-            addReportLine("今年还没有足够的阅读统计");
+            updateReportActions(null);
+            addReportLine("当前范围还没有足够的阅读统计");
             if (shareAnnualReportButton != null) shareAnnualReportButton.setEnabled(false);
             return;
         }
+        updateReportActions(report);
         if (shareAnnualReportButton != null) shareAnnualReportButton.setEnabled(true);
-        addReportLine(report.year + " 年 " + ReadingStatsUtils.formatDuration(report.totalSeconds)
+        addReportLine(report.periodTitle + " · " + ReadingStatsUtils.formatDuration(report.totalSeconds)
                 + " · " + formatNumber(report.totalChars) + " 字");
         addReportLine("阅读天数 " + report.readingDays + " 天 · 最长连续 " + report.longestStreak + " 天");
         if (report.isBookScope()) {
@@ -484,11 +523,23 @@ public class ReadingStatsActivity extends ThemedActivity {
             addOptionalReportLine("标签：", report.topTag);
             addOptionalReportLine("系列：", report.topSeries);
         } else {
-            addReportLine("完成书籍 " + report.finishedBooks + " 本");
-            addOptionalReportLine("年度 Top 书籍：", report.topBook);
+            addReportLine(report.isYearReport()
+                    ? "完成书籍 " + report.finishedBooks + " 本"
+                    : "阅读书籍 " + report.readingBooks + " 本");
+            addOptionalReportLine("Top 书籍：", report.topBook);
             addOptionalReportLine("常读作者：", report.topAuthor);
             addOptionalReportLine("常读标签：", report.topTag);
             addOptionalReportLine("常读系列：", report.topSeries);
+        }
+    }
+
+    private void updateReportActions(AnnualReportData report) {
+        String title = report == null ? reportCardTitleFor(selectedPeriod) : report.reportKindLabel();
+        if (reportCardTitleText != null) {
+            reportCardTitleText.setText(title);
+        }
+        if (shareAnnualReportButton != null) {
+            shareAnnualReportButton.setText("生成" + title);
         }
     }
 
@@ -556,7 +607,7 @@ public class ReadingStatsActivity extends ThemedActivity {
 
     private void shareAnnualReport() {
         if (currentAnnualReport == null || !currentAnnualReport.hasReadingData()) {
-            AppUiUtils.showToast(this, "暂无可生成的年度报告");
+            AppUiUtils.showToast(this, "暂无可生成的" + reportCardTitleFor(selectedPeriod));
             return;
         }
         annualReportExportController.showPreview(currentAnnualReport);
@@ -584,14 +635,24 @@ public class ReadingStatsActivity extends ThemedActivity {
         BookCoverViewHelper.bindCover(coverImage, coverFallbackText, path, title);
     }
 
-    private String periodLabelPrefix(String period) {
+    private String periodLabelPrefix(String period, String weekMode) {
         if (ReadingStatsUtils.PERIOD_WEEK.equals(period)) {
-            return "本周";
+            return ReadingStatsUtils.WEEK_MODE_ROLLING.equals(weekMode) ? "过去七天" : "本周";
         }
         if (ReadingStatsUtils.PERIOD_YEAR.equals(period)) {
             return "本年";
         }
         return "本日";
+    }
+
+    private String reportCardTitleFor(String period) {
+        if (ReadingStatsUtils.PERIOD_WEEK.equals(period)) {
+            return "周报";
+        }
+        if (ReadingStatsUtils.PERIOD_YEAR.equals(period)) {
+            return "年度报告";
+        }
+        return "每日报告";
     }
 
     private static final class BookEta {

@@ -93,6 +93,38 @@
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/layout_home_week_range_mode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/button_home_week_natural"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_app_primary_button"
+                android:text="自然周"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonPrimaryText" />
+
+            <Button
+                android:id="@+id/button_home_week_rolling"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_app_outline_button"
+                android:text="过去七天"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonOutlineText" />
+        </LinearLayout>
+
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
@@ -128,6 +160,7 @@
             android:padding="18dp">
 
             <TextView
+                android:id="@+id/text_home_report_card_title"
                 style="@style/AppChromeCardTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -165,7 +198,7 @@
                 style="@style/AppChromeCardTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="年度报告"
+                android:text="每日报告"
                 android:textSize="16sp" />
 
             <TextView
@@ -185,7 +218,7 @@
                 android:layout_marginTop="14dp"
                 android:background="@drawable/bg_app_primary_button"
                 android:minHeight="46dp"
-                android:text="生成年度报告"
+                android:text="生成每日报告"
                 android:textAllCaps="false"
                 android:textColor="?attr/themeColorAppButtonPrimaryText" />
         </LinearLayout>

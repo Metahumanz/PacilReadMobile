@@ -69,7 +69,7 @@ public final class AnnualReportRenderer {
 
         RectF summary = new RectF(72, 678, 1008, 966);
         drawRoundRect(canvas, summary, 34, palette.card, palette.line, 2f);
-        drawMultiline(canvas, "年度摘要", 112, 728, 360, cardTitlePaint, 1);
+        drawMultiline(canvas, summaryTitleFor(report), 112, 728, 360, cardTitlePaint, 1);
         drawMetric(canvas, 112, 796, 258, summaryMetrics.get(0).label(report),
                 summaryMetrics.get(0).value(report), palette, palette.accent);
         drawMetric(canvas, 394, 796, 258, summaryMetrics.get(1).label(report),
@@ -83,14 +83,14 @@ public final class AnnualReportRenderer {
         float infoHeight = 118f + Math.max(1, rows.size()) * rowHeight;
         RectF info = new RectF(72, infoTop, 1008, infoTop + infoHeight);
         drawRoundRect(canvas, info, 34, palette.card, palette.line, 2f);
-        drawMultiline(canvas, report.isBookScope() ? "本书坐标" : "年度书页坐标", 112, infoTop + 46, 460, cardTitlePaint, 1);
+        drawMultiline(canvas, infoTitleFor(report, false), 112, infoTop + 46, 460, cardTitlePaint, 1);
         drawInfoRows(canvas, rows, 112, infoTop + 118, 820, rowHeight, palette);
 
         float rhythmTop = info.bottom + 66f;
         RectF rhythm = new RectF(72, rhythmTop, 1008, rhythmTop + 286f);
         drawRoundRect(canvas, rhythm, 34, palette.card, palette.line, 2f);
-        drawMultiline(canvas, "月度节奏", 112, rhythmTop + 38f, 360, cardTitlePaint, 1);
-        drawMonthlyBars(canvas, report, palette, 112, rhythmTop + 114f, 856, 104, false);
+        drawMultiline(canvas, rhythmTitleFor(report, false), 112, rhythmTop + 38f, 420, cardTitlePaint, 1);
+        drawRhythmBars(canvas, report, palette, 112, rhythmTop + 114f, 856, 104, false);
 
         float footerTop = Math.min(Math.max(rhythm.bottom + 26f, 1814f), 1864f);
         drawMultiline(canvas, "PacilRead Mobile", 72, footerTop, 360, textPaint(palette.mutedText, 26f, false), 1);
@@ -135,14 +135,14 @@ public final class AnnualReportRenderer {
         float infoTop = summary.bottom + 66f;
         float infoHeight = 126f + Math.max(1, rows.size()) * rowHeight;
         drawRoundRect(canvas, new RectF(72, infoTop, 1008, infoTop + infoHeight), 34, palette.card, palette.line, 2f);
-        drawMultiline(canvas, report.isBookScope() ? "本书高光" : "年度高光", 116, infoTop + 48, 520, cardTitlePaint, 1);
+        drawMultiline(canvas, infoTitleFor(report, true), 116, infoTop + 48, 520, cardTitlePaint, 1);
         drawInfoRows(canvas, rows, 116, infoTop + 126, 816, rowHeight, palette);
 
         float rhythmTop = infoTop + infoHeight + 58f;
         RectF rhythm = new RectF(72, rhythmTop, 1008, rhythmTop + 310f);
         drawRoundRect(canvas, rhythm, 34, palette.card, palette.line, 2f);
-        drawMultiline(canvas, "12 个月的节奏", 116, rhythmTop + 44f, 560, cardTitlePaint, 1);
-        drawMonthlyBars(canvas, report, palette, 116, rhythmTop + 128f, 846, 116, true);
+        drawMultiline(canvas, rhythmTitleFor(report, true), 116, rhythmTop + 44f, 560, cardTitlePaint, 1);
+        drawRhythmBars(canvas, report, palette, 116, rhythmTop + 128f, 846, 116, true);
 
         float footerTop = Math.min(Math.max(rhythm.bottom + 28f, 1814f), 1864f);
         drawMultiline(canvas, "PacilRead Mobile", 72, footerTop, 360, brandPaint, 1);
@@ -215,25 +215,31 @@ public final class AnnualReportRenderer {
                 textPaint(palette.primaryText, valueSize, true), 2);
     }
 
-    private void drawMonthlyBars(Canvas canvas, AnnualReportData report, Palette palette, float left, float top,
-                                 float width, float height, boolean bold) {
-        int max = maxMonthlySeconds(report);
-        float gap = bold ? 10f : 12f;
-        float barWidth = (width - gap * 11f) / 12f;
+    private void drawRhythmBars(Canvas canvas, AnnualReportData report, Palette palette, float left, float top,
+                                float width, float height, boolean bold) {
+        int[] values = rhythmValues(report);
+        String[] labels = rhythmLabels(report, values.length);
+        int count = Math.max(1, values.length);
+        int max = maxRhythmSeconds(values);
+        float gap = count <= 1 ? 0f : (bold ? 10f : 12f);
+        float barWidth = count <= 1
+                ? Math.min(160f, width * 0.36f)
+                : (width - gap * (count - 1f)) / count;
+        float firstX = count <= 1 ? left + (width - barWidth) / 2f : left;
         TextPaint monthPaint = textPaint(palette.mutedText, 20f, bold);
         Paint baselinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         baselinePaint.setColor(palette.line);
         baselinePaint.setStrokeWidth(2f);
         canvas.drawLine(left, top + height + 1, left + width, top + height + 1, baselinePaint);
-        for (int i = 0; i < 12; i++) {
-            int seconds = report.monthlySeconds == null ? 0 : Math.max(report.monthlySeconds[i], 0);
+        for (int i = 0; i < count; i++) {
+            int seconds = Math.max(values[i], 0);
             float ratio = seconds <= 0 ? 0.04f : seconds / (float) max;
             float barHeight = Math.max(seconds <= 0 ? 7f : 12f, height * ratio);
-            float x = left + i * (barWidth + gap);
+            float x = firstX + i * (barWidth + gap);
             float y = top + height - barHeight;
             int color = i % 3 == 0 ? palette.accent : (i % 3 == 1 ? palette.accent2 : palette.accent3);
             drawRoundRect(canvas, new RectF(x, y, x + barWidth, top + height), bold ? 8 : 9, color, Color.TRANSPARENT, 0);
-            drawMultiline(canvas, String.valueOf(i + 1), x - 4, top + height + 24, barWidth + 8, monthPaint, 1);
+            drawMultiline(canvas, labels[i], x - 8, top + height + 24, barWidth + 16, monthPaint, 1);
         }
     }
 
@@ -295,7 +301,49 @@ public final class AnnualReportRenderer {
     }
 
     private String titleFor(AnnualReportData report) {
+        if (report != null && report.reportTitle != null && !report.reportTitle.trim().isEmpty()) {
+            return report.reportTitle.trim();
+        }
         return report.year + (report.isBookScope() ? " 单书阅读报告" : " 年度阅读报告");
+    }
+
+    private String summaryTitleFor(AnnualReportData report) {
+        if (report == null) {
+            return "阅读摘要";
+        }
+        if (report.isDayReport()) {
+            return "每日摘要";
+        }
+        if (report.isWeekReport()) {
+            return "周报摘要";
+        }
+        return "年度摘要";
+    }
+
+    private String infoTitleFor(AnnualReportData report, boolean highlight) {
+        if (report != null && report.isBookScope()) {
+            return highlight ? "本书高光" : "本书坐标";
+        }
+        if (report != null && report.isDayReport()) {
+            return highlight ? "今日高光" : "今日书页坐标";
+        }
+        if (report != null && report.isWeekReport()) {
+            return highlight ? "周报高光" : "本周书页坐标";
+        }
+        return highlight ? "年度高光" : "年度书页坐标";
+    }
+
+    private String rhythmTitleFor(AnnualReportData report, boolean highlight) {
+        if (report == null) {
+            return "阅读节奏";
+        }
+        if (report.isYearReport()) {
+            return highlight ? "12 个月的节奏" : "月度节奏";
+        }
+        if (report.isWeekReport()) {
+            return report.periodTitle + "阅读节奏";
+        }
+        return "今日阅读节奏";
     }
 
     private String formatHoursCompact(int seconds) {
@@ -310,12 +358,35 @@ public final class AnnualReportRenderer {
         return String.format(Locale.SIMPLIFIED_CHINESE, "%,d", Math.max(value, 0));
     }
 
-    private int maxMonthlySeconds(AnnualReportData report) {
+    private int[] rhythmValues(AnnualReportData report) {
+        if (report != null && report.rhythmSeconds != null && report.rhythmSeconds.length > 0) {
+            return report.rhythmSeconds;
+        }
+        if (report != null && report.monthlySeconds != null && report.monthlySeconds.length > 0) {
+            return report.monthlySeconds;
+        }
+        return new int[]{0};
+    }
+
+    private String[] rhythmLabels(AnnualReportData report, int count) {
+        String[] labels = new String[Math.max(1, count)];
+        for (int i = 0; i < labels.length; i++) {
+            if (report != null && report.rhythmLabels != null && i < report.rhythmLabels.length
+                    && report.rhythmLabels[i] != null && !report.rhythmLabels[i].trim().isEmpty()) {
+                labels[i] = report.rhythmLabels[i].trim();
+            } else {
+                labels[i] = String.valueOf(i + 1);
+            }
+        }
+        return labels;
+    }
+
+    private int maxRhythmSeconds(int[] values) {
         int max = 1;
-        if (report == null || report.monthlySeconds == null) {
+        if (values == null) {
             return max;
         }
-        for (int value : report.monthlySeconds) {
+        for (int value : values) {
             max = Math.max(max, Math.max(0, value));
         }
         return max;

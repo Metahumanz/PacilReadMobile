@@ -36,14 +36,19 @@ public final class HomeStatsPanelController {
     private final TextView statusText;
     private final TextView totalText;
     private final TextView emptyText;
+    private final TextView reportCardTitleText;
     private final TextView annualReportSummaryText;
+    private final LinearLayout weekRangeModeLayout;
     private final Button todayButton;
     private final Button weekButton;
     private final Button yearButton;
+    private final Button weekNaturalButton;
+    private final Button weekRollingButton;
     private final Button annualReportButton;
     private final AnnualReportExportController annualReportExportController;
 
     private String selectedPeriod = ReadingStatsUtils.PERIOD_TODAY;
+    private String selectedWeekMode = ReadingStatsUtils.WEEK_MODE_NATURAL;
     private AnnualReportData currentAnnualReport;
     private final AtomicInteger loadGeneration = new AtomicInteger();
 
@@ -67,10 +72,14 @@ public final class HomeStatsPanelController {
         this.statusText = activity.findViewById(R.id.text_home_stats_status);
         this.totalText = activity.findViewById(R.id.text_home_stats_total);
         this.emptyText = activity.findViewById(R.id.text_home_stats_empty);
+        this.reportCardTitleText = activity.findViewById(R.id.text_home_report_card_title);
         this.annualReportSummaryText = activity.findViewById(R.id.text_home_annual_report_summary);
+        this.weekRangeModeLayout = activity.findViewById(R.id.layout_home_week_range_mode);
         this.todayButton = activity.findViewById(R.id.button_home_stats_today);
         this.weekButton = activity.findViewById(R.id.button_home_stats_week);
         this.yearButton = activity.findViewById(R.id.button_home_stats_year);
+        this.weekNaturalButton = activity.findViewById(R.id.button_home_week_natural);
+        this.weekRollingButton = activity.findViewById(R.id.button_home_week_rolling);
         this.annualReportButton = activity.findViewById(R.id.button_home_generate_annual_report);
         this.annualReportExportController = new AnnualReportExportController(activity);
         setupControls();
@@ -83,6 +92,7 @@ public final class HomeStatsPanelController {
         updatePeriodButtons();
         int requestId = loadGeneration.incrementAndGet();
         String period = selectedPeriod;
+        String weekMode = selectedWeekMode;
         boolean shouldSync = syncFirst && readingStatsSyncManager.canAutoSync();
         if (statusText != null) {
             statusText.setText(shouldSync
@@ -92,6 +102,7 @@ public final class HomeStatsPanelController {
         executor.execute(() -> {
             HomeStatsSnapshot localSnapshot = buildSnapshot(
                     period,
+                    weekMode,
                     shouldSync ? "正在同步云端阅读统计，本地数据已先显示" : "当前展示的是本地阅读统计"
             );
             postSnapshot(requestId, localSnapshot);
@@ -105,15 +116,16 @@ public final class HomeStatsPanelController {
             } catch (Exception error) {
                 syncMessage = "云端同步失败，当前展示本地统计：" + readableError(error);
             }
-            HomeStatsSnapshot syncedSnapshot = buildSnapshot(period, syncMessage);
+            HomeStatsSnapshot syncedSnapshot = buildSnapshot(period, weekMode, syncMessage);
             postSnapshot(requestId, syncedSnapshot);
         });
     }
 
-    private HomeStatsSnapshot buildSnapshot(String period, String syncMessage) {
+    private HomeStatsSnapshot buildSnapshot(String period, String weekMode, String syncMessage) {
         ReadingStatsUtils.Range range = ReadingStatsUtils.rangeForPeriod(
                 period,
-                java.time.ZoneId.systemDefault()
+                java.time.ZoneId.systemDefault(),
+                weekMode
         );
         HomeStatsSnapshot snapshot = new HomeStatsSnapshot();
         snapshot.syncMessage = syncMessage;
@@ -123,7 +135,7 @@ public final class HomeStatsPanelController {
                 null
         );
         snapshot.records = databaseHelper.getReadingBookStats(range.startDateString(), range.endDateString());
-        snapshot.annualReport = AnnualReportBuilder.buildGlobal(databaseHelper, ZoneId.systemDefault());
+        snapshot.annualReport = AnnualReportBuilder.buildGlobal(databaseHelper, ZoneId.systemDefault(), period, weekMode);
         return snapshot;
     }
 
@@ -153,10 +165,16 @@ public final class HomeStatsPanelController {
         if (yearButton != null) {
             yearButton.setOnClickListener(v -> selectPeriod(ReadingStatsUtils.PERIOD_YEAR));
         }
+        if (weekNaturalButton != null) {
+            weekNaturalButton.setOnClickListener(v -> selectWeekMode(ReadingStatsUtils.WEEK_MODE_NATURAL));
+        }
+        if (weekRollingButton != null) {
+            weekRollingButton.setOnClickListener(v -> selectWeekMode(ReadingStatsUtils.WEEK_MODE_ROLLING));
+        }
         if (annualReportButton != null) {
             annualReportButton.setOnClickListener(v -> {
                 if (currentAnnualReport == null || !currentAnnualReport.hasReadingData()) {
-                    AppUiUtils.showToast(activity, "暂无可生成的年度报告");
+                    AppUiUtils.showToast(activity, "暂无可生成的" + reportCardTitleFor(selectedPeriod));
                     return;
                 }
                 annualReportExportController.showPreview(currentAnnualReport);
@@ -171,10 +189,23 @@ public final class HomeStatsPanelController {
         refreshIfVisible(HomeNavigationController.PAGE_STATS, false);
     }
 
+    private void selectWeekMode(String weekMode) {
+        selectedWeekMode = ReadingStatsUtils.normalizeWeekMode(weekMode);
+        updatePeriodButtons();
+        if (ReadingStatsUtils.PERIOD_WEEK.equals(selectedPeriod)) {
+            refreshIfVisible(HomeNavigationController.PAGE_STATS, false);
+        }
+    }
+
     private void updatePeriodButtons() {
         AppUiUtils.styleToggleButton(activity, todayButton, ReadingStatsUtils.PERIOD_TODAY.equals(selectedPeriod));
         AppUiUtils.styleToggleButton(activity, weekButton, ReadingStatsUtils.PERIOD_WEEK.equals(selectedPeriod));
         AppUiUtils.styleToggleButton(activity, yearButton, ReadingStatsUtils.PERIOD_YEAR.equals(selectedPeriod));
+        if (weekRangeModeLayout != null) {
+            weekRangeModeLayout.setVisibility(ReadingStatsUtils.PERIOD_WEEK.equals(selectedPeriod) ? View.VISIBLE : View.GONE);
+        }
+        AppUiUtils.styleToggleButton(activity, weekNaturalButton, ReadingStatsUtils.WEEK_MODE_NATURAL.equals(selectedWeekMode));
+        AppUiUtils.styleToggleButton(activity, weekRollingButton, ReadingStatsUtils.WEEK_MODE_ROLLING.equals(selectedWeekMode));
     }
 
     public boolean onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -233,17 +264,31 @@ public final class HomeStatsPanelController {
         if (annualReportButton != null) {
             annualReportButton.setEnabled(hasData);
             annualReportButton.setAlpha(hasData ? 1f : 0.55f);
+            annualReportButton.setText("生成" + (annualReport == null ? reportCardTitleFor(selectedPeriod) : annualReport.reportKindLabel()));
+        }
+        if (reportCardTitleText != null) {
+            reportCardTitleText.setText(annualReport == null ? reportCardTitleFor(selectedPeriod) : annualReport.reportKindLabel());
         }
         if (annualReportSummaryText == null) {
             return;
         }
         if (!hasData) {
-            annualReportSummaryText.setText("今年还没有足够的阅读统计");
+            annualReportSummaryText.setText("当前范围还没有足够的阅读统计");
             return;
         }
-        annualReportSummaryText.setText(annualReport.year + " 年 · "
+        annualReportSummaryText.setText(annualReport.periodTitle + " · "
                 + ReadingStatsUtils.formatDuration(annualReport.totalSeconds)
                 + " · " + annualReport.readingDays + " 个阅读日");
+    }
+
+    private String reportCardTitleFor(String period) {
+        if (ReadingStatsUtils.PERIOD_WEEK.equals(period)) {
+            return "周报";
+        }
+        if (ReadingStatsUtils.PERIOD_YEAR.equals(period)) {
+            return "年度报告";
+        }
+        return "每日报告";
     }
 
     private String readableError(Throwable error) {
