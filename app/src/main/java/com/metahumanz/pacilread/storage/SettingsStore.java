@@ -94,6 +94,8 @@ public class SettingsStore {
     private static final String KEY_READER_MENU_PERSISTENT_ACTIONS = "reader_menu_persistent_actions";
     private static final String KEY_READING_TIME_TRACKING_ENABLED = "reading_time_tracking_enabled";
     private static final String KEY_READING_STATS_DEVICE_ID = "reading_stats_device_id";
+    private static final String KEY_ANNUAL_REPORT_GLOBAL_METRICS = "annual_report_global_metrics";
+    private static final String KEY_ANNUAL_REPORT_BOOK_METRICS = "annual_report_book_metrics";
     private static final String KEY_READER_DOUBLE_PAGE_ENABLED = "reader_double_page_enabled";
     private static final String KEY_READER_DOUBLE_PAGE_MODE = "reader_double_page_mode";
     private static final String KEY_READER_DOUBLE_PAGE_TURN_STEP = "reader_double_page_turn_step";
@@ -160,6 +162,8 @@ public class SettingsStore {
             KEY_READER_MENU_AUTO_HIDE,
             KEY_READER_MENU_PERSISTENT_ACTIONS,
             KEY_READING_TIME_TRACKING_ENABLED,
+            KEY_ANNUAL_REPORT_GLOBAL_METRICS,
+            KEY_ANNUAL_REPORT_BOOK_METRICS,
             KEY_READER_DOUBLE_PAGE_ENABLED,
             KEY_READER_DOUBLE_PAGE_MODE,
             KEY_READER_DOUBLE_PAGE_TURN_STEP,
@@ -357,6 +361,20 @@ public class SettingsStore {
         String created = UUID.randomUUID().toString();
         preferences.edit().putString(KEY_READING_STATS_DEVICE_ID, created).apply();
         return created;
+    }
+
+    public String getAnnualReportMetricSelection(boolean bookScope) {
+        return preferences.getString(
+                bookScope ? KEY_ANNUAL_REPORT_BOOK_METRICS : KEY_ANNUAL_REPORT_GLOBAL_METRICS,
+                ""
+        );
+    }
+
+    public void setAnnualReportMetricSelection(boolean bookScope, String value) {
+        preferences.edit().putString(
+                bookScope ? KEY_ANNUAL_REPORT_BOOK_METRICS : KEY_ANNUAL_REPORT_GLOBAL_METRICS,
+                value == null ? "" : value.trim()
+        ).apply();
     }
 
     public float getFontSizeSp() {

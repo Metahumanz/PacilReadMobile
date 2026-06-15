@@ -138,12 +138,12 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
                         android:layout_marginBottom="4dp"
-                        android:text="年度报告图片" />
+                        android:text="年度报告导出" />
 
-                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  年度报告分享前可选择“阅读杂志感”和“Wrapped 风格”两套图片模板" />
-                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  图片导出支持浅色与深色版本，默认跟随当前 App 明暗主题" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  年度报告导出前可预览，并可选择“静读留白”和“高光节奏”两种风格" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  报告支持保存到本地，也可继续通过系统分享面板发送" />
                     <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  年报长图升级为 1080×1920，优化大数字、指标卡片、月度趋势和长文本省略" />
-                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  导出文件名包含年份、模板和主题，继续通过系统分享面板发送" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  导出文件名包含年份、范围和风格，便于整理" />
 
                     <View
                         android:layout_width="match_parent"
