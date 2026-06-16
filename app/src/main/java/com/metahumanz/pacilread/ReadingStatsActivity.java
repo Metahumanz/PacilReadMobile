@@ -379,7 +379,7 @@ public class ReadingStatsActivity extends ThemedActivity {
             syncStatusText.setText(snapshot.syncMessage);
             scopeLabelText.setText(periodLabelPrefix(snapshot.period, snapshot.weekMode) + "阅读总时长");
             scopeTotalText.setText(ReadingStatsUtils.formatDuration(snapshot.totalSeconds));
-            scopeCharsText.setText("阅读字数 " + formatNumber(snapshot.totalChars));
+            scopeCharsText.setText(formatStatsMeta(snapshot.totalChars, snapshot.annualReport));
             renderCalendar(snapshot.rangeRows, snapshot.period, snapshot.weekMode);
             currentAnnualReport = snapshot.annualReport;
             renderAnnualReport(snapshot.annualReport);
@@ -664,6 +664,14 @@ public class ReadingStatsActivity extends ThemedActivity {
 
     private String formatNumber(int value) {
         return String.format(Locale.SIMPLIFIED_CHINESE, "%,d", Math.max(value, 0));
+    }
+
+    private String formatStatsMeta(int totalChars, AnnualReportData report) {
+        int readingDays = report == null ? 0 : Math.max(report.readingDays, 0);
+        int longestStreak = report == null ? 0 : Math.max(report.longestStreak, 0);
+        return "阅读字数 " + formatNumber(totalChars) + " 字"
+                + " · 阅读天数 " + readingDays + " 天"
+                + " · 最长连续 " + longestStreak + " 天";
     }
 
     private String readableError(Throwable error) {

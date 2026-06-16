@@ -23,6 +23,7 @@ import com.metahumanz.pacilread.ui.TransitionMotionModeHelper;
 
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -36,6 +37,7 @@ public final class HomeStatsPanelController {
     private final LinearLayout listLayout;
     private final TextView statusText;
     private final TextView totalText;
+    private final TextView totalMetaText;
     private final TextView emptyText;
     private final TextView reportCardTitleText;
     private final TextView annualReportSummaryText;
@@ -72,6 +74,7 @@ public final class HomeStatsPanelController {
         this.listLayout = activity.findViewById(R.id.layout_home_stats_list);
         this.statusText = activity.findViewById(R.id.text_home_stats_status);
         this.totalText = activity.findViewById(R.id.text_home_stats_total);
+        this.totalMetaText = activity.findViewById(R.id.text_home_stats_meta);
         this.emptyText = activity.findViewById(R.id.text_home_stats_empty);
         this.reportCardTitleText = activity.findViewById(R.id.text_home_report_card_title);
         this.annualReportSummaryText = activity.findViewById(R.id.text_home_annual_report_summary);
@@ -221,6 +224,9 @@ public final class HomeStatsPanelController {
         if (totalText != null) {
             totalText.setText(ReadingStatsUtils.formatDuration(totalSeconds));
         }
+        if (totalMetaText != null) {
+            totalMetaText.setText(formatStatsMeta(annualReport));
+        }
         renderAnnualReport(annualReport);
         if (listLayout == null || emptyText == null) {
             return;
@@ -291,6 +297,19 @@ public final class HomeStatsPanelController {
             return "年度报告";
         }
         return "每日报告";
+    }
+
+    private String formatStatsMeta(AnnualReportData report) {
+        int totalChars = report == null ? 0 : Math.max(report.totalChars, 0);
+        int readingDays = report == null ? 0 : Math.max(report.readingDays, 0);
+        int longestStreak = report == null ? 0 : Math.max(report.longestStreak, 0);
+        return "阅读字数 " + formatNumber(totalChars) + " 字"
+                + " · 阅读天数 " + readingDays + " 天"
+                + " · 最长连续 " + longestStreak + " 天";
+    }
+
+    private String formatNumber(int value) {
+        return String.format(Locale.SIMPLIFIED_CHINESE, "%,d", Math.max(value, 0));
     }
 
     private String readableError(Throwable error) {

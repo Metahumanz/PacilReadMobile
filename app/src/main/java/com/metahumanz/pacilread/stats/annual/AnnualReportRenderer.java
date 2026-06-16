@@ -77,20 +77,26 @@ public final class AnnualReportRenderer {
         drawMetric(canvas, 676, 796, 258, summaryMetrics.get(2).label(report),
                 summaryMetrics.get(2).value(report), palette, palette.accent3);
 
+        boolean dailyReport = report != null && report.isDayReport();
         List<String[]> rows = infoRows(report);
-        float rowHeight = 84f;
-        float infoTop = summary.bottom + 66f;
-        float infoHeight = 118f + Math.max(1, rows.size()) * rowHeight;
+        float rowHeight = dailyReport ? 72f : 84f;
+        float infoHeaderHeight = dailyReport ? 108f : 118f;
+        float infoTop = summary.bottom + (dailyReport ? 48f : 66f);
+        float infoHeight = infoHeaderHeight + Math.max(1, rows.size()) * rowHeight;
         RectF info = new RectF(72, infoTop, 1008, infoTop + infoHeight);
         drawRoundRect(canvas, info, 34, palette.card, palette.line, 2f);
         drawMultiline(canvas, infoTitleFor(report, false), 112, infoTop + 46, 460, cardTitlePaint, 1);
-        drawInfoRows(canvas, rows, 112, infoTop + 118, 820, rowHeight, palette);
+        drawInfoRows(canvas, rows, 112, infoTop + infoHeaderHeight, 820, rowHeight, palette);
 
-        float rhythmTop = info.bottom + 66f;
-        RectF rhythm = new RectF(72, rhythmTop, 1008, rhythmTop + 286f);
+        float rhythmTop = info.bottom + (dailyReport ? 46f : 66f);
+        RectF rhythm = new RectF(72, rhythmTop, 1008, rhythmTop + (dailyReport ? 348f : 286f));
         drawRoundRect(canvas, rhythm, 34, palette.card, palette.line, 2f);
-        drawMultiline(canvas, rhythmTitleFor(report, false), 112, rhythmTop + 38f, 420, cardTitlePaint, 1);
-        drawRhythmBars(canvas, report, palette, 112, rhythmTop + 114f, 856, 104, false);
+        if (dailyReport) {
+            drawDailyReportVisual(canvas, report, palette, rhythm, false);
+        } else {
+            drawMultiline(canvas, rhythmTitleFor(report, false), 112, rhythmTop + 38f, 420, cardTitlePaint, 1);
+            drawRhythmBars(canvas, report, palette, 112, rhythmTop + 114f, 856, 104, false);
+        }
 
         float footerTop = Math.min(Math.max(rhythm.bottom + 26f, 1814f), 1864f);
         drawMultiline(canvas, "PacilRead Mobile", 72, footerTop, 360, textPaint(palette.mutedText, 26f, false), 1);
@@ -130,19 +136,25 @@ public final class AnnualReportRenderer {
         drawHighlightStat(canvas, 674, 742, summaryMetrics.get(2).label(report),
                 summaryMetrics.get(2).value(report), palette, palette.accent3);
 
+        boolean dailyReport = report != null && report.isDayReport();
         List<String[]> rows = infoRows(report);
-        float rowHeight = 76f;
-        float infoTop = summary.bottom + 66f;
-        float infoHeight = 126f + Math.max(1, rows.size()) * rowHeight;
+        float rowHeight = dailyReport ? 68f : 76f;
+        float infoHeaderHeight = dailyReport ? 110f : 126f;
+        float infoTop = summary.bottom + (dailyReport ? 50f : 66f);
+        float infoHeight = infoHeaderHeight + Math.max(1, rows.size()) * rowHeight;
         drawRoundRect(canvas, new RectF(72, infoTop, 1008, infoTop + infoHeight), 34, palette.card, palette.line, 2f);
         drawMultiline(canvas, infoTitleFor(report, true), 116, infoTop + 48, 520, cardTitlePaint, 1);
-        drawInfoRows(canvas, rows, 116, infoTop + 126, 816, rowHeight, palette);
+        drawInfoRows(canvas, rows, 116, infoTop + infoHeaderHeight, 816, rowHeight, palette);
 
-        float rhythmTop = infoTop + infoHeight + 58f;
-        RectF rhythm = new RectF(72, rhythmTop, 1008, rhythmTop + 310f);
+        float rhythmTop = infoTop + infoHeight + (dailyReport ? 48f : 58f);
+        RectF rhythm = new RectF(72, rhythmTop, 1008, rhythmTop + (dailyReport ? 368f : 310f));
         drawRoundRect(canvas, rhythm, 34, palette.card, palette.line, 2f);
-        drawMultiline(canvas, rhythmTitleFor(report, true), 116, rhythmTop + 44f, 560, cardTitlePaint, 1);
-        drawRhythmBars(canvas, report, palette, 116, rhythmTop + 128f, 846, 116, true);
+        if (dailyReport) {
+            drawDailyReportVisual(canvas, report, palette, rhythm, true);
+        } else {
+            drawMultiline(canvas, rhythmTitleFor(report, true), 116, rhythmTop + 44f, 560, cardTitlePaint, 1);
+            drawRhythmBars(canvas, report, palette, 116, rhythmTop + 128f, 846, 116, true);
+        }
 
         float footerTop = Math.min(Math.max(rhythm.bottom + 28f, 1814f), 1864f);
         drawMultiline(canvas, "PacilRead Mobile", 72, footerTop, 360, brandPaint, 1);
@@ -315,6 +327,113 @@ public final class AnnualReportRenderer {
         }
     }
 
+    private void drawDailyReportVisual(Canvas canvas, AnnualReportData report, Palette palette, RectF panel, boolean bold) {
+        float left = panel.left + (bold ? 44f : 40f);
+        float width = panel.width() - (bold ? 88f : 80f);
+        float headerTop = panel.top + (bold ? 28f : 26f);
+        TextPaint kickerPaint = textPaint(palette.mutedText, bold ? 21f : 19f, true);
+        TextPaint titlePaint = textPaint(palette.primaryText, bold ? 38f : 34f, true);
+        TextPaint charsPaint = textPaint(palette.accent, bold ? 25f : 23f, true);
+
+        drawMultiline(canvas, "TODAY MIX", left, headerTop, 280, kickerPaint, 1);
+        drawMultiline(canvas, "今日阅读构成", left, headerTop + (bold ? 30f : 28f), 430, titlePaint, 1);
+        drawMultiline(canvas, formatCharsCompact(report.totalChars) + " 字",
+                left + width - 230f, headerTop + (bold ? 34f : 31f), 230, charsPaint, 1);
+
+        float contextTop = panel.bottom - (bold ? 100f : 96f);
+        float bookTop = panel.top + (bold ? 108f : 100f);
+        drawDailyBookBars(canvas, report, palette, left, bookTop, width, contextTop - bookTop - 14f, bold);
+        drawDailyContextBars(canvas, report, palette, left, contextTop, width, bold);
+    }
+
+    private void drawDailyBookBars(Canvas canvas, AnnualReportData report, Palette palette, float left, float top,
+                                   float width, float height, boolean bold) {
+        int rowCount = report == null ? 0 : Math.min(3, report.topBooks.size());
+        if (rowCount <= 0) {
+            drawMultiline(canvas, "暂无今日书籍记录", left, top + 8f, width,
+                    textPaint(palette.mutedText, bold ? 25f : 23f, false), 1);
+            return;
+        }
+        float stride = Math.max(44f, height / rowCount);
+        float rowHeight = Math.max(42f, Math.min(bold ? 52f : 50f, stride - 2f));
+        for (int i = 0; i < rowCount; i++) {
+            AnnualReportData.BookStat book = report.topBooks.get(i);
+            drawDailyBookRow(canvas, report, book, palette, left, top + i * stride, width, rowHeight, i, bold);
+        }
+    }
+
+    private void drawDailyBookRow(Canvas canvas, AnnualReportData report, AnnualReportData.BookStat book,
+                                  Palette palette, float left, float top, float width, float height, int index,
+                                  boolean bold) {
+        int totalSeconds = Math.max(1, report == null ? 0 : report.totalSeconds);
+        int bookSeconds = book == null ? 0 : Math.max(book.totalSeconds, 0);
+        int percent = bookSeconds <= 0 ? 0 : Math.max(1, Math.round(bookSeconds * 100f / totalSeconds));
+        float ratio = bookSeconds <= 0 ? 0f : Math.min(1f, bookSeconds / (float) totalSeconds);
+        float amountWidth = bold ? 104f : 96f;
+        float copyWidth = width - amountWidth - 20f;
+        TextPaint titlePaint = textPaint(palette.primaryText, bold ? 22f : 20f, true);
+        TextPaint metaPaint = textPaint(palette.mutedText, bold ? 16f : 15f, false);
+        TextPaint percentPaint = textPaint(palette.accent, bold ? 27f : 25f, true);
+        String title = book == null || book.title == null || book.title.trim().isEmpty()
+                ? "未命名书籍"
+                : book.title.trim();
+        drawMultiline(canvas, title, left, top, copyWidth, titlePaint, 1);
+        drawMultiline(canvas, dailyBookMeta(book), left, top + (bold ? 25f : 23f), copyWidth, metaPaint, 1);
+        drawMultiline(canvas, percent + "%", left + width - amountWidth, top + 3f, amountWidth, percentPaint, 1);
+
+        float trackTop = top + height - 8f;
+        RectF track = new RectF(left, trackTop, left + width, trackTop + 7f);
+        drawRoundRect(canvas, track, 4f, palette.cardAlt, palette.line, 1f);
+        if (ratio > 0f) {
+            int fillColor = index % 3 == 0 ? palette.accent : (index % 3 == 1 ? palette.accent2 : palette.accent3);
+            float fillWidth = Math.max(10f, track.width() * ratio);
+            drawRoundRect(canvas, new RectF(track.left, track.top, track.left + fillWidth, track.bottom),
+                    4f, fillColor, Color.TRANSPARENT, 0f);
+        }
+    }
+
+    private void drawDailyContextBars(Canvas canvas, AnnualReportData report, Palette palette, float left, float top,
+                                      float width, boolean bold) {
+        int[] values = dailyContextValues(report);
+        String[] labels = dailyContextLabels(report, values.length);
+        int count = Math.max(1, values.length);
+        int currentIndex = dailyContextCurrentIndex(report, count);
+        int max = maxRhythmSeconds(values);
+        TextPaint headingPaint = textPaint(palette.mutedText, bold ? 19f : 18f, true);
+        TextPaint currentPaint = textPaint(palette.accent2, bold ? 19f : 18f, true);
+        TextPaint labelPaint = textPaint(palette.mutedText, bold ? 16f : 15f, false);
+        drawMultiline(canvas, "最近 7 天", left, top, 220, headingPaint, 1);
+        drawMultiline(canvas, "今日高亮", left + width - 140f, top, 140, currentPaint, 1);
+
+        float barTop = top + (bold ? 34f : 32f);
+        float barMaxHeight = bold ? 42f : 40f;
+        float gap = count <= 1 ? 0f : (bold ? 11f : 10f);
+        float barWidth = count <= 1 ? Math.min(120f, width * 0.2f) : (width - gap * (count - 1f)) / count;
+        float firstX = count <= 1 ? left + (width - barWidth) / 2f : left;
+        for (int i = 0; i < count; i++) {
+            int seconds = Math.max(values[i], 0);
+            float ratio = seconds <= 0 ? 0.05f : seconds / (float) max;
+            float barHeight = Math.max(seconds <= 0 ? 5f : 8f, barMaxHeight * ratio);
+            float x = firstX + i * (barWidth + gap);
+            float y = barTop + barMaxHeight - barHeight;
+            boolean current = i == currentIndex;
+            int fillColor = current
+                    ? palette.accent2
+                    : (seconds <= 0 ? withAlpha(palette.mutedText, 72) : palette.accent3);
+            drawRoundRect(canvas, new RectF(x, y, x + barWidth, barTop + barMaxHeight),
+                    current ? 6f : 5f, fillColor, Color.TRANSPARENT, 0f);
+            if (current) {
+                Paint strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                strokePaint.setStyle(Paint.Style.STROKE);
+                strokePaint.setStrokeWidth(2f);
+                strokePaint.setColor(palette.line);
+                canvas.drawRoundRect(new RectF(x - 3f, y - 3f, x + barWidth + 3f, barTop + barMaxHeight + 3f),
+                        8f, 8f, strokePaint);
+            }
+            drawMultiline(canvas, labels[i], x - 6f, barTop + barMaxHeight + 8f, barWidth + 12f, labelPaint, 1);
+        }
+    }
+
     private void drawBackground(Canvas canvas, Palette palette) {
         Paint backgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         backgroundPaint.setShader(new LinearGradient(
@@ -415,7 +534,7 @@ public final class AnnualReportRenderer {
         if (report.isWeekReport()) {
             return report.periodTitle + "阅读节奏";
         }
-        return "今日阅读节奏";
+        return "今日阅读构成";
     }
 
     private String formatHoursCompact(int seconds) {
@@ -430,6 +549,45 @@ public final class AnnualReportRenderer {
         return String.format(Locale.SIMPLIFIED_CHINESE, "%,d", Math.max(value, 0));
     }
 
+    private String formatCharsCompact(int value) {
+        int safeValue = Math.max(value, 0);
+        if (safeValue >= 10000) {
+            float wan = safeValue / 10000f;
+            return wan >= 100f
+                    ? String.format(Locale.SIMPLIFIED_CHINESE, "%.0f万", wan)
+                    : String.format(Locale.SIMPLIFIED_CHINESE, "%.1f万", wan);
+        }
+        return String.format(Locale.SIMPLIFIED_CHINESE, "%,d", safeValue);
+    }
+
+    private String formatBookDurationCompact(int seconds) {
+        int safeSeconds = Math.max(seconds, 0);
+        if (safeSeconds <= 0) {
+            return "0 分钟";
+        }
+        float hours = safeSeconds / 3600f;
+        if (hours >= 10f) {
+            return String.format(Locale.SIMPLIFIED_CHINESE, "%.0f 小时", hours);
+        }
+        if (hours >= 1f) {
+            return String.format(Locale.SIMPLIFIED_CHINESE, "%.1f 小时", hours);
+        }
+        return Math.max(1, Math.round(safeSeconds / 60f)) + " 分钟";
+    }
+
+    private String dailyBookMeta(AnnualReportData.BookStat stat) {
+        if (stat == null) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder();
+        if (stat.author != null && !stat.author.trim().isEmpty()) {
+            builder.append(stat.author.trim()).append(" · ");
+        }
+        builder.append(formatBookDurationCompact(stat.totalSeconds));
+        builder.append(" · ").append(formatCharsCompact(stat.totalChars)).append(" 字");
+        return builder.toString();
+    }
+
     private int[] rhythmValues(AnnualReportData report) {
         if (report != null && report.rhythmSeconds != null && report.rhythmSeconds.length > 0) {
             return report.rhythmSeconds;
@@ -438,6 +596,13 @@ public final class AnnualReportRenderer {
             return report.monthlySeconds;
         }
         return new int[]{0};
+    }
+
+    private int[] dailyContextValues(AnnualReportData report) {
+        if (report != null && report.dailyContextSeconds != null && report.dailyContextSeconds.length > 0) {
+            return report.dailyContextSeconds;
+        }
+        return rhythmValues(report);
     }
 
     private String[] rhythmLabels(AnnualReportData report, int count) {
@@ -453,6 +618,26 @@ public final class AnnualReportRenderer {
         return labels;
     }
 
+    private String[] dailyContextLabels(AnnualReportData report, int count) {
+        String[] labels = new String[Math.max(1, count)];
+        for (int i = 0; i < labels.length; i++) {
+            if (report != null && report.dailyContextLabels != null && i < report.dailyContextLabels.length
+                    && report.dailyContextLabels[i] != null && !report.dailyContextLabels[i].trim().isEmpty()) {
+                labels[i] = report.dailyContextLabels[i].trim();
+            } else {
+                labels[i] = String.valueOf(i + 1);
+            }
+        }
+        return labels;
+    }
+
+    private int dailyContextCurrentIndex(AnnualReportData report, int count) {
+        if (report != null && report.dailyContextCurrentIndex >= 0 && report.dailyContextCurrentIndex < count) {
+            return report.dailyContextCurrentIndex;
+        }
+        return Math.max(0, count - 1);
+    }
+
     private int maxRhythmSeconds(int[] values) {
         int max = 1;
         if (values == null) {
@@ -462,6 +647,15 @@ public final class AnnualReportRenderer {
             max = Math.max(max, Math.max(0, value));
         }
         return max;
+    }
+
+    private int withAlpha(int color, int alpha) {
+        return Color.argb(
+                Math.max(0, Math.min(255, alpha)),
+                Color.red(color),
+                Color.green(color),
+                Color.blue(color)
+        );
     }
 
     private static final class Palette {
