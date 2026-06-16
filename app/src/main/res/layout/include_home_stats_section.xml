@@ -148,6 +148,15 @@
                 android:text="0 秒"
                 android:textSize="30sp"
                 android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/text_home_stats_meta"
+                style="@style/AppChromeBodyMuted"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="阅读字数 0 字 · 阅读天数 0 天 · 最长连续 0 天"
+                android:textSize="14sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -160,7 +169,6 @@
             android:padding="18dp">
 
             <TextView
-                android:id="@+id/text_home_report_card_title"
                 style="@style/AppChromeCardTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -195,6 +203,7 @@
             android:padding="18dp">
 
             <TextView
+                android:id="@+id/text_home_report_card_title"
                 style="@style/AppChromeCardTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
