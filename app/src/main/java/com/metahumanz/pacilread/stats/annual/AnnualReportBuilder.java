@@ -50,6 +50,15 @@ public final class AnnualReportBuilder {
         ReadingStatsUtils.Range range = ReadingStatsUtils.rangeForPeriod(safePeriod, safeZone, safeWeekMode);
 
         List<ReadingTimeEntryRecord> rows = database.getReadingStatsRows(range.startDateString(), range.endDateString());
+        List<ReadingTimeEntryRecord> dailyContextRows = Collections.emptyList();
+        LocalDate dailyContextStartDate = null;
+        if (ReadingStatsUtils.PERIOD_TODAY.equals(safePeriod)) {
+            dailyContextStartDate = range.endDate.minusDays(6);
+            dailyContextRows = database.getReadingStatsRows(
+                    ReadingStatsUtils.formatDate(dailyContextStartDate),
+                    range.endDateString()
+            );
+        }
         List<BookRecord> books = database.getBooks();
 
         AnnualReportData report = new AnnualReportData();
@@ -156,6 +165,7 @@ public final class AnnualReportBuilder {
                 report.topSeries = firstStatName(report.topSeriesStats);
             }
         }
+        populateDailyContext(report, dailyContextRows, scopedBook, dailyContextStartDate);
 
         return report;
     }
@@ -179,6 +189,7 @@ public final class AnnualReportBuilder {
         report.rangeTitle = scopedBook == null ? "全部书籍" : safeBookTitle(scopedBook.title);
         report.reportTitle = reportTitle(report, scopedBook != null);
         configureRhythmSlots(report, range);
+        configureDailyContextSlots(report, range);
     }
 
     private static void configureRhythmSlots(AnnualReportData report, ReadingStatsUtils.Range range) {
@@ -200,6 +211,21 @@ public final class AnnualReportBuilder {
             report.rhythmLabels[i] = days == 1 ? "今日" : shortDate(date);
         }
         report.activeRhythmUnit = "天";
+    }
+
+    private static void configureDailyContextSlots(AnnualReportData report, ReadingStatsUtils.Range range) {
+        if (report == null || range == null || !report.isDayReport()) {
+            return;
+        }
+        report.dailyContextSeconds = new int[7];
+        report.dailyContextChars = new int[7];
+        report.dailyContextLabels = new String[7];
+        LocalDate start = range.endDate.minusDays(6);
+        for (int i = 0; i < report.dailyContextLabels.length; i++) {
+            LocalDate date = start.plusDays(i);
+            report.dailyContextLabels[i] = i == report.dailyContextLabels.length - 1 ? "今日" : shortDate(date);
+        }
+        report.dailyContextCurrentIndex = report.dailyContextLabels.length - 1;
     }
 
     private static Map<LocalDate, Integer> rhythmDayIndex(AnnualReportData report, ReadingStatsUtils.Range range) {
@@ -283,6 +309,33 @@ public final class AnnualReportBuilder {
             report.activeMonths = active;
             report.peakMonth = peakIndex >= 0 ? peakIndex + 1 : 0;
             report.peakMonthSeconds = peakSeconds;
+        }
+    }
+
+    private static void populateDailyContext(
+            AnnualReportData report,
+            List<ReadingTimeEntryRecord> rows,
+            BookRecord scopedBook,
+            LocalDate contextStartDate
+    ) {
+        if (report == null || !report.isDayReport() || rows == null || contextStartDate == null
+                || report.dailyContextSeconds == null || report.dailyContextChars == null) {
+            return;
+        }
+        for (ReadingTimeEntryRecord row : rows) {
+            if (scopedBook != null && !matchesBook(row, scopedBook)) {
+                continue;
+            }
+            LocalDate date = parseDate(row.date);
+            if (date == null) {
+                continue;
+            }
+            int index = (int) ChronoUnit.DAYS.between(contextStartDate, date);
+            if (index < 0 || index >= report.dailyContextSeconds.length) {
+                continue;
+            }
+            report.dailyContextSeconds[index] += Math.max(row.durationSeconds, 0);
+            report.dailyContextChars[index] += Math.max(row.charCount, 0);
         }
     }
 

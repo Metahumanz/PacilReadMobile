@@ -42,6 +42,10 @@ public final class AnnualReportData {
     public int[] rhythmSeconds = new int[0];
     public int[] rhythmChars = new int[0];
     public String[] rhythmLabels = new String[0];
+    public int[] dailyContextSeconds = new int[0];
+    public int[] dailyContextChars = new int[0];
+    public String[] dailyContextLabels = new String[0];
+    public int dailyContextCurrentIndex = -1;
     public final List<BookStat> topBooks = new ArrayList<>();
     public final List<NamedStat> topAuthors = new ArrayList<>();
     public final List<NamedStat> topTags = new ArrayList<>();
