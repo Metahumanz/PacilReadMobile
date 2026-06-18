@@ -500,51 +500,44 @@ public class WebDavBackupManager {
             String databaseUrl = webDavClient.backupBaseUrl() + "database/";
             String manifestUrl = databaseUrl + MANIFEST_FILE;
 
-            // 检查远程是否有全量备份
-            if (webDavClient.head(databaseUrl + "books.json").code == 404 &&
-                    webDavClient.head(webDavClient.backupBaseUrl() + "reader.db").code == 404) {
+            // 检查远程是否有 JSON 全量备份
+            if (webDavClient.head(databaseUrl + "books.json").code == 404) {
                 throw new IllegalStateException("云端没有全量备份，请先执行全量备份");
             }
 
-            // 如果存在新格式 (JSON)，用新格式
-            if (webDavClient.head(databaseUrl + "books.json").code == 200) {
-                listener.onStatus("下载 JSON 数据文件...");
-                File dataDir = databaseHelper.getDataDir();
-                if (!dataDir.exists()) dataDir.mkdirs();
+            listener.onStatus("下载 JSON 数据文件...");
+            File dataDir = databaseHelper.getDataDir();
+            if (!dataDir.exists()) dataDir.mkdirs();
 
-                JSONObject manifest = downloadManifestIfExists(manifestUrl);
-                for (String fileName : SYNC_JSON_FILES) {
-                    File target = localJsonFile(dataDir, fileName);
-                    listener.onStatus("下载 " + fileName + "...");
-                    try {
-                        String remoteFileName = downloadJsonWithAliases(databaseUrl, fileName, target);
-                        // 校验
-                        if (manifest != null) {
-                            String expectedHash = getManifestFileHash(manifest.optJSONObject("files"), remoteFileName);
-                            if (expectedHash != null) {
-                                String actualHash = computeFileSha256(target);
-                                if (!expectedHash.equals(actualHash)) {
-                                    Log.w(TAG, fileName + " SHA-256 校验不匹配，继续使用");
-                                }
+            JSONObject manifest = downloadManifestIfExists(manifestUrl);
+            for (String fileName : SYNC_JSON_FILES) {
+                File target = localJsonFile(dataDir, fileName);
+                listener.onStatus("下载 " + fileName + "...");
+                try {
+                    String remoteFileName = downloadJsonWithAliases(databaseUrl, fileName, target);
+                    // 校验
+                    if (manifest != null) {
+                        String expectedHash = getManifestFileHash(manifest.optJSONObject("files"), remoteFileName);
+                        if (expectedHash != null) {
+                            String actualHash = computeFileSha256(target);
+                            if (!expectedHash.equals(actualHash)) {
+                                Log.w(TAG, fileName + " SHA-256 校验不匹配，继续使用");
                             }
                         }
-                    } catch (Exception e) {
-                        Log.w(TAG, "下载 " + fileName + " 失败: " + e.getMessage());
                     }
+                } catch (Exception e) {
+                    Log.w(TAG, "下载 " + fileName + " 失败: " + e.getMessage());
                 }
-                databaseHelper.reloadFromDisk();
-                normalizeReplacementRules(databaseHelper.getRulesMutable());
-                databaseHelper.flush();
-                databaseHelper.rebaseLocalAssetPaths();
-
-                listener.onStatus("恢复书籍资源文件...");
-                restoreBookAssetFiles(listener, settingsStore.isWebDavSyncFilesEnabled());
-                listener.onStatus("恢复章节正文...");
-                restoreChapterTextFiles(listener);
-            } else {
-                // 回退：使用旧格式 reader.db（如果 JSON 格式不存在）
-                restoreFromLegacyFullDatabase(listener);
             }
+            databaseHelper.reloadFromDisk();
+            normalizeReplacementRules(databaseHelper.getRulesMutable());
+            databaseHelper.flush();
+            databaseHelper.rebaseLocalAssetPaths();
+
+            listener.onStatus("恢复书籍资源文件...");
+            restoreBookAssetFiles(listener, settingsStore.isWebDavSyncFilesEnabled());
+            listener.onStatus("恢复章节正文...");
+            restoreChapterTextFiles(listener);
         }
 
         restoreSettingsJsonIfPresent(listener);
@@ -563,104 +556,97 @@ public class WebDavBackupManager {
         if (shouldSyncDatabaseSnapshot()) {
             String manifestUrl = webDavClient.syncBaseUrl() + MANIFEST_FILE;
 
-            // 检查远程是否有增量数据
-            if (webDavClient.head(webDavClient.syncBaseUrl() + "books.json").code == 404 &&
-                    webDavClient.head(webDavClient.backupBaseUrl() + "reader_lite.db").code == 404) {
+            // 检查远程是否有 JSON 增量数据
+            if (webDavClient.head(webDavClient.syncBaseUrl() + "books.json").code == 404) {
                 throw new IllegalStateException("云端没有增量备份，请先执行增量备份或改用全量恢复");
             }
 
-            // 如果存在新格式，用新格式
-            if (webDavClient.head(webDavClient.syncBaseUrl() + "books.json").code == 200) {
-                // 下载远程 manifest
-                JSONObject remoteManifest = downloadManifestIfExists(manifestUrl);
-                if (remoteManifest == null) {
-                    throw new IllegalStateException("云端 manifest 不存在，请先执行增量备份");
-                }
-
-                // 加载本地 manifest
-                JSONObject localManifest = loadLocalManifest();
-
-                // 对比，找出变化的文件
-                Set<String> changedFiles = compareManifests(remoteManifest.optJSONObject("files"),
-                        localManifest != null ? localManifest.optJSONObject("files") : null);
-                if (changedFiles.isEmpty()) {
-                    listener.onStatus("已是最新，无需恢复");
-                    cleanupLocalTempCache();
-                    return;
-                }
-
-                databaseHelper.flush();
-                listener.onStatus("下载并合并变化的数据...");
-
-                boolean mergedBooks = false;
-                boolean mergedChapters = false;
-                Map<Long, Long> restoredBookIdMap = new HashMap<>();
-
-                for (String fileName : SYNC_JSON_FILES) {
-                    if (!changedFiles.contains(fileName)) continue;
-                    File tempFile = new File(context.getCacheDir(), "restore_" + fileName);
-                    listener.onStatus("下载 " + fileName + "...");
-                    String remoteFileName = downloadJsonWithAliases(webDavClient.syncBaseUrl(), fileName, tempFile);
-
-                    // 校验
-                    String expectedHash = getManifestFileHash(remoteManifest.optJSONObject("files"), remoteFileName);
-                    if (expectedHash != null) {
-                        String actualHash = computeFileSha256(tempFile);
-                        if (!expectedHash.equals(actualHash)) {
-                            throw new IllegalStateException(fileName + " 校验失败，传输可能不完整");
-                        }
-                    }
-
-                    // 逐实体合并
-                    String content = readFileString(tempFile);
-                    if (content == null || content.trim().isEmpty()) continue;
-                    JSONArray array = readEntityArray(fileName, content);
-
-                    switch (fileName) {
-                        case "books.json":
-                            restoredBookIdMap.putAll(mergeBooks(array));
-                            mergedBooks = true;
-                            break;
-                        case "chapters.json":
-                            mergeChapters(array, restoredBookIdMap);
-                            mergedChapters = true;
-                            break;
-                        case "rules.json":
-                            mergeRules(array, restoredBookIdMap);
-                            break;
-                        case "themes.json":
-                            mergeThemes(array);
-                            break;
-                        case "bookmarks.json":
-                            mergeBookmarks(array);
-                            break;
-                        case READING_STATS_CANONICAL_FILE:
-                            mergeReadingStats(array);
-                            break;
-                    }
-                    tempFile.delete();
-                }
-
-                // 合并后钳制进度
-                if (mergedBooks || mergedChapters) {
-                    clampProgressIndex();
-                }
-
-                // 保存合并结果到磁盘并重定位路径（新增书籍的 coverFile/sourceFile → 绝对路径）
-                databaseHelper.flush();
-                databaseHelper.rebaseLocalAssetPaths();
-
-                // 恢复变化的资源文件
-                JSONObject remoteAssets = remoteManifest.optJSONObject("assets");
-                JSONObject localAssets = localManifest != null ? localManifest.optJSONObject("assets") : null;
-                restoreChangedAssets(listener, remoteAssets, localAssets);
-
-                // 保存远程 manifest 为本地副本
-                saveLocalManifest(remoteManifest);
-            } else {
-                // 回退：使用旧格式 reader_lite.db
-                restoreFromLegacyLiteDatabase(listener);
+            // 下载远程 manifest
+            JSONObject remoteManifest = downloadManifestIfExists(manifestUrl);
+            if (remoteManifest == null) {
+                throw new IllegalStateException("云端 manifest 不存在，请先执行增量备份");
             }
+
+            // 加载本地 manifest
+            JSONObject localManifest = loadLocalManifest();
+
+            // 对比，找出变化的文件
+            Set<String> changedFiles = compareManifests(remoteManifest.optJSONObject("files"),
+                    localManifest != null ? localManifest.optJSONObject("files") : null);
+            if (changedFiles.isEmpty()) {
+                listener.onStatus("已是最新，无需恢复");
+                cleanupLocalTempCache();
+                return;
+            }
+
+            databaseHelper.flush();
+            listener.onStatus("下载并合并变化的数据...");
+
+            boolean mergedBooks = false;
+            boolean mergedChapters = false;
+            Map<Long, Long> restoredBookIdMap = new HashMap<>();
+
+            for (String fileName : SYNC_JSON_FILES) {
+                if (!changedFiles.contains(fileName)) continue;
+                File tempFile = new File(context.getCacheDir(), "restore_" + fileName);
+                listener.onStatus("下载 " + fileName + "...");
+                String remoteFileName = downloadJsonWithAliases(webDavClient.syncBaseUrl(), fileName, tempFile);
+
+                // 校验
+                String expectedHash = getManifestFileHash(remoteManifest.optJSONObject("files"), remoteFileName);
+                if (expectedHash != null) {
+                    String actualHash = computeFileSha256(tempFile);
+                    if (!expectedHash.equals(actualHash)) {
+                        throw new IllegalStateException(fileName + " 校验失败，传输可能不完整");
+                    }
+                }
+
+                // 逐实体合并
+                String content = readFileString(tempFile);
+                if (content == null || content.trim().isEmpty()) continue;
+                JSONArray array = readEntityArray(fileName, content);
+
+                switch (fileName) {
+                    case "books.json":
+                        restoredBookIdMap.putAll(mergeBooks(array));
+                        mergedBooks = true;
+                        break;
+                    case "chapters.json":
+                        mergeChapters(array, restoredBookIdMap);
+                        mergedChapters = true;
+                        break;
+                    case "rules.json":
+                        mergeRules(array, restoredBookIdMap);
+                        break;
+                    case "themes.json":
+                        mergeThemes(array);
+                        break;
+                    case "bookmarks.json":
+                        mergeBookmarks(array);
+                        break;
+                    case READING_STATS_CANONICAL_FILE:
+                        mergeReadingStats(array);
+                        break;
+                }
+                tempFile.delete();
+            }
+
+            // 合并后钳制进度
+            if (mergedBooks || mergedChapters) {
+                clampProgressIndex();
+            }
+
+            // 保存合并结果到磁盘并重定位路径（新增书籍的 coverFile/sourceFile → 绝对路径）
+            databaseHelper.flush();
+            databaseHelper.rebaseLocalAssetPaths();
+
+            // 恢复变化的资源文件
+            JSONObject remoteAssets = remoteManifest.optJSONObject("assets");
+            JSONObject localAssets = localManifest != null ? localManifest.optJSONObject("assets") : null;
+            restoreChangedAssets(listener, remoteAssets, localAssets);
+
+            // 保存远程 manifest 为本地副本
+            saveLocalManifest(remoteManifest);
         }
 
         restoreSettingsJsonIfPresent(listener);
@@ -1052,45 +1038,6 @@ public class WebDavBackupManager {
                 Log.w(TAG, "恢复章节正文失败 chapter " + chapter.id, e);
             }
         }
-    }
-
-    // ==================== 旧格式回退 ====================
-
-    private void restoreFromLegacyFullDatabase(StatusListener listener) throws Exception {
-        File tempDir = new File(context.getCacheDir(), "backup_restore");
-        if (!tempDir.exists()) tempDir.mkdirs();
-        File fullDb = new File(tempDir, "reader_full_restore.db");
-        listener.onStatus("下载旧格式数据库...");
-        if (webDavClient.head(webDavClient.backupBaseUrl() + "reader.db").code == 404) {
-            throw new IllegalStateException("云端没有全量备份，请先执行全量备份");
-        }
-        webDavClient.downloadBinaryFile(webDavClient.backupBaseUrl() + "reader.db", fullDb);
-        listener.onStatus("应用旧格式数据库...");
-        databaseHelper.stripPlatformSettingsTable(fullDb);
-        databaseHelper.importDatabase(fullDb);
-        normalizeReplacementRules(databaseHelper.getRulesMutable());
-        databaseHelper.flush();
-        databaseHelper.rebaseLocalAssetPaths();
-        restoreBookAssetFiles(listener, settingsStore.isWebDavSyncFilesEnabled());
-        listener.onStatus("恢复章节正文...");
-        restoreChapterTextFiles(listener);
-    }
-
-    private void restoreFromLegacyLiteDatabase(StatusListener listener) throws Exception {
-        File tempDir = new File(context.getCacheDir(), "backup_restore");
-        if (!tempDir.exists()) tempDir.mkdirs();
-        File liteDb = new File(tempDir, "reader_lite_restore.db");
-        listener.onStatus("下载旧格式增量数据库...");
-        if (webDavClient.head(webDavClient.backupBaseUrl() + "reader_lite.db").code == 404) {
-            throw new IllegalStateException("云端没有增量备份，请先执行增量备份或改用全量恢复");
-        }
-        webDavClient.downloadBinaryFile(webDavClient.backupBaseUrl() + "reader_lite.db", liteDb);
-        listener.onStatus("合并旧格式数据...");
-        databaseHelper.stripPlatformSettingsTable(liteDb);
-        databaseHelper.mergeLiteDatabase(liteDb);
-        normalizeReplacementRules(databaseHelper.getRulesMutable());
-        databaseHelper.flush();
-        restoreBookAssetFiles(listener, settingsStore.isWebDavSyncFilesEnabled());
     }
 
     // ==================== 实体合并逻辑 ====================

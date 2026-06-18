@@ -21,9 +21,11 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileWriter;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -34,8 +36,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.zip.GZIPOutputStream;
 
@@ -48,21 +54,39 @@ public class JsonDatabase {
     private static final String FILE_THEMES = "themes.json";
     private static final String FILE_BOOKMARKS = "bookmarks.json";
     private static final String FILE_READING_STATS = "reading_stats.json";
+    private static final long WRITE_DEBOUNCE_MS = 800L;
+    private static final int MAX_DECOMPRESSED_TEXT_CACHE_BYTES = 16 * 1024 * 1024;
 
     private static volatile JsonDatabase instance;
     private final Context appContext;
     private final File dataDir;
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final Object dirtyScheduleLock = new Object();
+    private final ScheduledExecutorService writeExecutor = Executors.newSingleThreadScheduledExecutor();
+    private final Set<String> dirtyFiles = new HashSet<>();
+    private ScheduledFuture<?> pendingDirtyFlush;
 
     // 内存缓存
     private List<BookRecord> bookCache = new ArrayList<>();
     private List<ChapterRecord> chapterCache = new ArrayList<>();
     private List<ReplacementRuleRecord> ruleCache = new ArrayList<>();
     // 解压后的章节正文缓存（chapterId → 正文），避免重复解压 gzip 文件
-    private final LruCache<Long, String> decompressedTextCache = new LruCache<>(20);
+    private final LruCache<Long, String> decompressedTextCache = new LruCache<Long, String>(MAX_DECOMPRESSED_TEXT_CACHE_BYTES) {
+        @Override
+        protected int sizeOf(Long key, String value) {
+            return value == null ? 0 : value.length() * 2;
+        }
+    };
     private List<ReaderThemeRecord> themeCache = new ArrayList<>();
     private List<BookmarkRecord> bookmarkCache = new ArrayList<>();
     private List<ReadingTimeEntryRecord> readingStatsCache = new ArrayList<>();
+    private final Map<Long, BookRecord> bookById = new HashMap<>();
+    private final Map<Long, ChapterRecord> chapterById = new HashMap<>();
+    private final Map<Long, List<ChapterRecord>> chaptersByBookId = new HashMap<>();
+    private final List<ReplacementRuleRecord> globalRules = new ArrayList<>();
+    private final Map<Long, List<ReplacementRuleRecord>> bookRulesByBookId = new HashMap<>();
+    private final Map<Long, List<BookmarkRecord>> bookmarksByBookId = new HashMap<>();
+    private final Map<String, List<BookmarkRecord>> bookmarksByIdentity = new HashMap<>();
 
     private boolean loaded = false;
 
@@ -74,47 +98,8 @@ public class JsonDatabase {
     public static synchronized JsonDatabase getInstance(Context context) {
         if (instance == null) {
             instance = new JsonDatabase(context);
-            // 检查是否需要从 SQLite 迁移
-            JsonDatabaseMigrator migrator = new JsonDatabaseMigrator(context);
-            if (migrator.needsMigration()) {
-                Log.i(TAG, "检测到旧版 SQLite 数据库，开始迁移...");
-                // 删除可能残留的不完整 JSON 文件（上次迁移中断）
-                instance.purgeDataDir();
-                if (migrator.migrate()) {
-                    // 验证所有关键文件均已写入
-                    String[] requiredFiles = {FILE_BOOKS, FILE_CHAPTERS, FILE_RULES,
-                            FILE_THEMES, FILE_BOOKMARKS, FILE_READING_STATS};
-                    boolean allExist = true;
-                    for (String f : requiredFiles) {
-                        if (!new File(instance.dataDir, f).exists()) {
-                            Log.e(TAG, "迁移后文件缺失：" + f);
-                            allExist = false;
-                        }
-                    }
-                    if (!allExist) {
-                        Log.e(TAG, "迁移不完整，清理 JSON 并将在下次启动重试");
-                        instance.purgeDataDir();
-                    } else {
-                        instance.loadAll();
-                        instance.rebaseLocalAssetPaths();
-                        Log.i(TAG, "迁移完成，路径已重定位");
-                    }
-                }
-            }
         }
         return instance;
-    }
-
-    private void purgeDataDir() {
-        if (dataDir.exists()) {
-            File[] files = dataDir.listFiles();
-            if (files != null) {
-                for (File f : files) {
-                    f.delete();
-                }
-            }
-        }
-        dataDir.mkdirs();
     }
 
     // ========== 初始化 / 加载 ==========
@@ -141,6 +126,7 @@ public class JsonDatabase {
             rebasePathsLocked();
             boolean booksChanged = backfillBookReadingStatsKeysLocked();
             boolean statsChanged = normalizeReadingStatsCacheLocked();
+            rebuildIndexesLocked();
             if (booksChanged) {
                 saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
             }
@@ -168,22 +154,99 @@ public class JsonDatabase {
         }
     }
 
+    private void rebuildIndexesLocked() {
+        bookById.clear();
+        chapterById.clear();
+        chaptersByBookId.clear();
+        globalRules.clear();
+        bookRulesByBookId.clear();
+        bookmarksByBookId.clear();
+        bookmarksByIdentity.clear();
+        for (BookRecord book : bookCache) {
+            bookById.put(book.id, book);
+        }
+        for (ChapterRecord chapter : chapterCache) {
+            chapterById.put(chapter.id, chapter);
+            List<ChapterRecord> chapters = chaptersByBookId.computeIfAbsent(chapter.bookId, key -> new ArrayList<>());
+            chapters.add(chapter);
+        }
+        for (List<ChapterRecord> chapters : chaptersByBookId.values()) {
+            Collections.sort(chapters, Comparator.comparingInt(chapter -> chapter.orderIndex));
+        }
+        for (ReplacementRuleRecord rule : ruleCache) {
+            if ("global".equals(rule.scope)) {
+                globalRules.add(rule);
+            } else if ("book".equals(rule.scope) && rule.bookId != null) {
+                bookRulesByBookId.computeIfAbsent(rule.bookId, key -> new ArrayList<>()).add(rule);
+            }
+        }
+        sortRulesLocked(globalRules);
+        for (List<ReplacementRuleRecord> rules : bookRulesByBookId.values()) {
+            sortRulesLocked(rules);
+        }
+        for (BookmarkRecord bookmark : bookmarkCache) {
+            bookmarksByBookId.computeIfAbsent(bookmark.bookId, key -> new ArrayList<>()).add(bookmark);
+            if (bookmark.bookIdentity != null && !bookmark.bookIdentity.isEmpty()) {
+                bookmarksByIdentity.computeIfAbsent(bookmark.bookIdentity, key -> new ArrayList<>()).add(bookmark);
+            }
+        }
+    }
+
+    private void sortRulesLocked(List<ReplacementRuleRecord> rules) {
+        Collections.sort(rules, (a, b) -> {
+            if (!a.scope.equals(b.scope)) return "global".equals(a.scope) ? -1 : 1;
+            return Long.compare(b.id, a.id);
+        });
+    }
+
     public synchronized void reloadFromDisk() {
+        cancelPendingDirtyFlush();
+        lock.writeLock().lock();
+        try {
+            dirtyFiles.clear();
+        } finally {
+            lock.writeLock().unlock();
+        }
         loadAll();
     }
 
     public synchronized void flush() {
+        cancelPendingDirtyFlush();
         lock.writeLock().lock();
         try {
+            rebuildIndexesLocked();
             saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
             saveList(FILE_CHAPTERS, chapterCache, ChapterRecord::toJson);
             saveList(FILE_RULES, ruleCache, ReplacementRuleRecord::toJson);
             saveList(FILE_THEMES, themeCache, ReaderThemeRecord::toJson);
             saveList(FILE_BOOKMARKS, bookmarkCache, BookmarkRecord::toJson);
             saveList(FILE_READING_STATS, readingStatsCache, ReadingTimeEntryRecord::toJson);
+            dirtyFiles.clear();
         } finally {
             lock.writeLock().unlock();
         }
+    }
+
+    public void flushDirtyNow() {
+        cancelPendingDirtyFlush();
+        lock.writeLock().lock();
+        try {
+            if (dirtyFiles.isEmpty()) {
+                return;
+            }
+            List<String> files = new ArrayList<>(dirtyFiles);
+            dirtyFiles.clear();
+            for (String fileName : files) {
+                saveDirtyFileLocked(fileName);
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    public void shutdown() {
+        flush();
+        writeExecutor.shutdown();
     }
 
     // ========== 通用 JSON I/O ==========
@@ -197,12 +260,26 @@ public class JsonDatabase {
     }
 
     private <T> List<T> loadList(String fileName, JsonParser<T> parser) {
-        List<T> list = new ArrayList<>();
         File file = new File(dataDir, fileName);
-        if (!file.exists()) return list;
+        File backup = new File(dataDir, fileName + ".bak");
+        List<T> list = loadListFromFile(file, parser);
+        if (list != null) {
+            return list;
+        }
+        list = loadListFromFile(backup, parser);
+        if (list != null) {
+            Log.w(TAG, "使用备份 JSON 恢复 " + fileName);
+            return list;
+        }
+        return new ArrayList<>();
+    }
+
+    private <T> List<T> loadListFromFile(File file, JsonParser<T> parser) {
+        List<T> list = new ArrayList<>();
+        if (!file.exists()) return null;
         try {
             String content = readFileString(file);
-            if (content == null || content.trim().isEmpty()) return list;
+            if (content == null || content.trim().isEmpty()) return null;
             JSONArray array = new JSONArray(content);
             for (int i = 0; i < array.length(); i++) {
                 try {
@@ -211,18 +288,17 @@ public class JsonDatabase {
                         list.add(item);
                     }
                 } catch (Exception e) {
-                    Log.w(TAG, "解析 " + fileName + " 第 " + i + " 条失败", e);
+                    Log.w(TAG, "解析 " + file.getName() + " 第 " + i + " 条失败", e);
                 }
             }
         } catch (Exception e) {
-            Log.e(TAG, "加载 " + fileName + " 失败", e);
+            Log.e(TAG, "加载 " + file.getName() + " 失败", e);
+            return null;
         }
         return list;
     }
 
     private <T> void saveList(String fileName, List<T> list, JsonSerializer<T> serializer) {
-        File file = new File(dataDir, fileName);
-        File tmp = new File(dataDir, fileName + ".tmp");
         try {
             JSONArray array = new JSONArray();
             for (T item : list) {
@@ -231,19 +307,83 @@ public class JsonDatabase {
                     array.put(json);
                 }
             }
-            try (FileWriter writer = new FileWriter(tmp)) {
-                writer.write(array.toString(2));
-            }
-            file.delete();
-            if (!tmp.renameTo(file)) {
-                Log.w(TAG, "原子写入 " + fileName + " 失败，尝试直接写入");
-                try (FileWriter writer = new FileWriter(file)) {
-                    writer.write(array.toString(2));
-                }
-                tmp.delete();
-            }
+            writeJsonFileAtomic(fileName, array);
+            dirtyFiles.remove(fileName);
         } catch (Exception e) {
             Log.e(TAG, "保存 " + fileName + " 失败", e);
+        }
+    }
+
+    private void markDirty(String fileName) {
+        dirtyFiles.add(fileName);
+        synchronized (dirtyScheduleLock) {
+            if (pendingDirtyFlush != null) {
+                pendingDirtyFlush.cancel(false);
+            }
+            pendingDirtyFlush = writeExecutor.schedule(
+                    this::flushDirtyNow,
+                    WRITE_DEBOUNCE_MS,
+                    TimeUnit.MILLISECONDS
+            );
+        }
+    }
+
+    private void cancelPendingDirtyFlush() {
+        synchronized (dirtyScheduleLock) {
+            if (pendingDirtyFlush != null) {
+                pendingDirtyFlush.cancel(false);
+                pendingDirtyFlush = null;
+            }
+        }
+    }
+
+    private void saveDirtyFileLocked(String fileName) {
+        switch (fileName) {
+            case FILE_BOOKS:
+                saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
+                break;
+            case FILE_CHAPTERS:
+                saveList(FILE_CHAPTERS, chapterCache, ChapterRecord::toJson);
+                break;
+            case FILE_RULES:
+                saveList(FILE_RULES, ruleCache, ReplacementRuleRecord::toJson);
+                break;
+            case FILE_THEMES:
+                saveList(FILE_THEMES, themeCache, ReaderThemeRecord::toJson);
+                break;
+            case FILE_BOOKMARKS:
+                saveList(FILE_BOOKMARKS, bookmarkCache, BookmarkRecord::toJson);
+                break;
+            case FILE_READING_STATS:
+                saveList(FILE_READING_STATS, readingStatsCache, ReadingTimeEntryRecord::toJson);
+                break;
+        }
+    }
+
+    private void writeJsonFileAtomic(String fileName, JSONArray array) throws Exception {
+        if (!dataDir.exists() && !dataDir.mkdirs()) {
+            throw new IOException("无法创建 JSON 数据目录: " + dataDir.getAbsolutePath());
+        }
+        File file = new File(dataDir, fileName);
+        File tmp = new File(dataDir, fileName + ".tmp");
+        File backup = new File(dataDir, fileName + ".bak");
+        try (FileOutputStream outputStream = new FileOutputStream(tmp);
+             OutputStreamWriter writer = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8)) {
+            writer.write(array.toString(2));
+            writer.flush();
+            outputStream.getFD().sync();
+        }
+        if (backup.exists() && !backup.delete()) {
+            Log.w(TAG, "删除旧备份失败: " + backup.getName());
+        }
+        if (file.exists() && !file.renameTo(backup)) {
+            Log.w(TAG, "创建 JSON 备份失败: " + fileName);
+        }
+        if (!tmp.renameTo(file)) {
+            if (backup.exists() && !file.exists()) {
+                backup.renameTo(file);
+            }
+            throw new IOException("原子写入失败: " + fileName);
         }
     }
 
@@ -294,10 +434,8 @@ public class JsonDatabase {
         ensureLoaded();
         lock.readLock().lock();
         try {
-            for (BookRecord book : bookCache) {
-                if (book.id == id) return cloneBook(book);
-            }
-            return null;
+            BookRecord book = bookById.get(id);
+            return book == null ? null : cloneBook(book);
         } finally {
             lock.readLock().unlock();
         }
@@ -317,6 +455,8 @@ public class JsonDatabase {
             book.localPath = importedBook.storedPath;
             book.coverPath = importedBook.coverPath;
             book.bookType = importedBook.bookType != null ? importedBook.bookType : "text";
+            book.sourceDisplayName = importedBook.sourceDisplayName != null ? importedBook.sourceDisplayName : "";
+            book.contentSha256 = importedBook.contentSha256 != null ? importedBook.contentSha256 : "";
             book.readingStatsKey = ReadingStatsUtils.buildBookIdentity(importedBook.title, importedBook.author);
             book.progressIndex = 0;
             book.progressOffset = 0;
@@ -360,6 +500,7 @@ public class JsonDatabase {
                 chapterCache.add(chapter);
             }
 
+            rebuildIndexesLocked();
             saveBooksAndChapters();
             return bookId;
         } finally {
@@ -402,35 +543,184 @@ public class JsonDatabase {
     }
 
     public void deleteBook(long bookId) {
+        Set<Long> ids = new HashSet<>();
+        ids.add(bookId);
+        deleteBooks(ids);
+    }
+
+    public void deleteBooks(Set<Long> bookIds) {
+        ensureLoaded();
+        if (bookIds == null || bookIds.isEmpty()) return;
         lock.writeLock().lock();
         try {
-            BookRecord target = null;
+            List<BookRecord> targets = new ArrayList<>();
             for (BookRecord book : bookCache) {
-                if (book.id == bookId) { target = book; break; }
+                if (bookIds.contains(book.id)) targets.add(book);
             }
-            if (target != null) {
-                bookCache.remove(target);
-            }
-            // 驱逐该书籍所有章节的解压缓存（必须在 removeIf 之前，否则章节已移除）
             for (ChapterRecord ch : chapterCache) {
-                if (ch.bookId == bookId) {
+                if (bookIds.contains(ch.bookId)) {
                     decompressedTextCache.remove(ch.id);
                 }
             }
-            chapterCache.removeIf(c -> c.bookId == bookId);
-            ruleCache.removeIf(r -> r.bookId != null && r.bookId == bookId);
-            bookmarkCache.removeIf(b -> b.bookId == bookId);
+            bookCache.removeIf(book -> bookIds.contains(book.id));
+            chapterCache.removeIf(chapter -> bookIds.contains(chapter.bookId));
+            ruleCache.removeIf(rule -> rule.bookId != null && bookIds.contains(rule.bookId));
+            bookmarkCache.removeIf(bookmark -> bookIds.contains(bookmark.bookId));
+            rebuildIndexesLocked();
             saveBooksAndChapters();
             saveList(FILE_RULES, ruleCache, ReplacementRuleRecord::toJson);
             saveList(FILE_BOOKMARKS, bookmarkCache, BookmarkRecord::toJson);
-            if (target != null) {
+            for (BookRecord target : targets) {
                 deleteFileIfExists(target.localPath);
                 deleteFileIfExists(target.coverPath);
+                deleteChapterTextDir(target.id);
             }
-            deleteChapterTextDir(bookId);
         } finally {
             lock.writeLock().unlock();
         }
+    }
+
+    public void updateBookClassification(long bookId, List<String> tags, String series, String status) {
+        ensureLoaded();
+        lock.writeLock().lock();
+        try {
+            BookRecord book = bookById.get(bookId);
+            if (book == null) return;
+            book.tags = normalizeTags(tags);
+            book.series = series == null ? "" : series.trim();
+            book.readingStatus = BookRecord.normalizeReadingStatus(status, false);
+            book.updatedAt = System.currentTimeMillis();
+            saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    public void addTagsToBooks(Set<Long> bookIds, List<String> tags) {
+        mutateBookTags(bookIds, tags, true);
+    }
+
+    public void removeTagsFromBooks(Set<Long> bookIds, List<String> tags) {
+        mutateBookTags(bookIds, tags, false);
+    }
+
+    private void mutateBookTags(Set<Long> bookIds, List<String> tags, boolean add) {
+        ensureLoaded();
+        List<String> normalized = normalizeTags(tags);
+        if (bookIds == null || bookIds.isEmpty() || normalized.isEmpty()) return;
+        lock.writeLock().lock();
+        try {
+            boolean changed = false;
+            long now = System.currentTimeMillis();
+            for (BookRecord book : bookCache) {
+                if (!bookIds.contains(book.id)) continue;
+                List<String> current = normalizeTags(book.tags);
+                if (add) {
+                    for (String tag : normalized) {
+                        if (!current.contains(tag)) current.add(tag);
+                    }
+                } else {
+                    current.removeAll(normalized);
+                }
+                if (!current.equals(book.tags)) {
+                    book.tags = current;
+                    book.updatedAt = now;
+                    changed = true;
+                }
+            }
+            if (changed) saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    public void setSeriesForBooks(Set<Long> bookIds, String series) {
+        ensureLoaded();
+        if (bookIds == null || bookIds.isEmpty()) return;
+        String safeSeries = series == null ? "" : series.trim();
+        lock.writeLock().lock();
+        try {
+            boolean changed = false;
+            long now = System.currentTimeMillis();
+            for (BookRecord book : bookCache) {
+                if (bookIds.contains(book.id) && !safeSeries.equals(book.series == null ? "" : book.series)) {
+                    book.series = safeSeries;
+                    book.updatedAt = now;
+                    changed = true;
+                }
+            }
+            if (changed) saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    public void setReadingStatusForBooks(Set<Long> bookIds, String status) {
+        ensureLoaded();
+        if (bookIds == null || bookIds.isEmpty()) return;
+        String safeStatus = BookRecord.normalizeReadingStatus(status, false);
+        lock.writeLock().lock();
+        try {
+            boolean changed = false;
+            long now = System.currentTimeMillis();
+            for (BookRecord book : bookCache) {
+                if (bookIds.contains(book.id) && !safeStatus.equals(book.readingStatus)) {
+                    book.readingStatus = safeStatus;
+                    book.updatedAt = now;
+                    changed = true;
+                }
+            }
+            if (changed) saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    public List<BookRecord> backfillMissingContentHashes() {
+        ensureLoaded();
+        lock.writeLock().lock();
+        try {
+            boolean changed = false;
+            for (BookRecord book : bookCache) {
+                if (book.contentSha256 != null && !book.contentSha256.isBlank()) continue;
+                File source = book.localPath == null ? null : new File(book.localPath);
+                if (source == null || !source.isFile()) continue;
+                try {
+                    book.contentSha256 = sha256(source);
+                    changed = true;
+                } catch (Exception error) {
+                    Log.w(TAG, "计算书籍摘要失败: " + source, error);
+                }
+            }
+            if (changed) saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
+            List<BookRecord> result = new ArrayList<>();
+            for (BookRecord book : bookCache) result.add(cloneBook(book));
+            return result;
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    private List<String> normalizeTags(List<String> tags) {
+        List<String> result = new ArrayList<>();
+        if (tags == null) return result;
+        for (String tag : tags) {
+            String safe = tag == null ? "" : tag.trim();
+            if (!safe.isEmpty() && !result.contains(safe)) result.add(safe);
+        }
+        return result;
+    }
+
+    private String sha256(File file) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (FileInputStream input = new FileInputStream(file)) {
+            byte[] buffer = new byte[16 * 1024];
+            int read;
+            while ((read = input.read(buffer)) != -1) digest.update(buffer, 0, read);
+        }
+        StringBuilder value = new StringBuilder(64);
+        for (byte item : digest.digest()) value.append(String.format(Locale.ROOT, "%02x", item & 0xff));
+        return value.toString();
     }
 
     public void setPinned(long bookId, boolean pinned) {
@@ -478,7 +768,7 @@ public class JsonDatabase {
                         book.readingStatus = BookRecord.STATUS_READING;
                     }
                     book.currentChapterTitle = chapterTitleForProgressLocked(bookId, chapterIndex);
-                    saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
+                    markDirty(FILE_BOOKS);
                     return;
                 }
             }
@@ -498,7 +788,7 @@ public class JsonDatabase {
                     book.lastReadAt = safeRemoteLastReadAt;
                     book.updatedAt = safeRemoteLastReadAt;
                     book.currentChapterTitle = chapterTitleForProgressLocked(bookId, chapterIndex);
-                    saveList(FILE_BOOKS, bookCache, BookRecord::toJson);
+                    markDirty(FILE_BOOKS);
                     return;
                 }
             }
@@ -549,7 +839,11 @@ public class JsonDatabase {
     }
 
     private String chapterTitleForProgressLocked(long bookId, int chapterIndex) {
-        for (ChapterRecord ch : chapterCache) {
+        List<ChapterRecord> chapters = chaptersByBookId.get(bookId);
+        if (chapters == null) {
+            return "";
+        }
+        for (ChapterRecord ch : chapters) {
             if (ch.bookId == bookId && ch.orderIndex == chapterIndex) {
                 return ch.title != null ? ch.title : "";
             }
@@ -647,8 +941,9 @@ public class JsonDatabase {
         lock.readLock().lock();
         try {
             List<ChapterRecord> chapters = new ArrayList<>();
-            for (ChapterRecord ch : chapterCache) {
-                if (ch.bookId == bookId) {
+            List<ChapterRecord> source = chaptersByBookId.get(bookId);
+            if (source != null) {
+                for (ChapterRecord ch : source) {
                     ChapterRecord copy = new ChapterRecord();
                     copy.id = ch.id;
                     copy.bookId = ch.bookId;
@@ -664,7 +959,6 @@ public class JsonDatabase {
                     chapters.add(copy);
                 }
             }
-            Collections.sort(chapters, Comparator.comparingInt(a -> a.orderIndex));
             return chapters;
         } finally {
             lock.readLock().unlock();
@@ -675,9 +969,8 @@ public class JsonDatabase {
         int count = 0;
         lock.readLock().lock();
         try {
-            for (ChapterRecord ch : chapterCache) {
-                if (ch.bookId == bookId) count++;
-            }
+            List<ChapterRecord> chapters = chaptersByBookId.get(bookId);
+            count = chapters == null ? 0 : chapters.size();
         } finally {
             lock.readLock().unlock();
         }
@@ -688,15 +981,14 @@ public class JsonDatabase {
         ensureLoaded();
         lock.readLock().lock();
         try {
-            for (ChapterRecord ch : chapterCache) {
-                if (ch.id == chapterId) {
-                    ChapterRecord copy = new ChapterRecord();
-                    copy.id = ch.id;
-                    copy.bookId = ch.bookId;
-                    copy.bodyHtml = "";
-                    copy.bodyText = resolveChapterText(ch.bookId, ch.id, null, ch.bodyTextPath, ch.bodyTextStorage);
-                    return copy;
-                }
+            ChapterRecord ch = chapterById.get(chapterId);
+            if (ch != null) {
+                ChapterRecord copy = new ChapterRecord();
+                copy.id = ch.id;
+                copy.bookId = ch.bookId;
+                copy.bodyHtml = "";
+                copy.bodyText = resolveChapterText(ch.bookId, ch.id, null, ch.bodyTextPath, ch.bodyTextStorage);
+                return copy;
             }
             return null;
         } finally {
@@ -709,13 +1001,15 @@ public class JsonDatabase {
         lock.readLock().lock();
         try {
             List<ChapterRecord> chapters = new ArrayList<>();
-            for (ChapterRecord ch : chapterCache) {
-                if (ch.bookId == bookId && "file_gzip".equals(ch.bodyTextStorage) &&
+            List<ChapterRecord> source = chaptersByBookId.get(bookId);
+            if (source != null) {
+                for (ChapterRecord ch : source) {
+                    if ("file_gzip".equals(ch.bodyTextStorage) &&
                         ch.bodyTextPath != null && !ch.bodyTextPath.isEmpty()) {
-                    chapters.add(ch);
+                        chapters.add(ch);
+                    }
                 }
             }
-            Collections.sort(chapters, Comparator.comparingInt(a -> a.orderIndex));
             return chapters;
         } finally {
             lock.readLock().unlock();
@@ -729,17 +1023,15 @@ public class JsonDatabase {
         lock.readLock().lock();
         try {
             List<ReplacementRuleRecord> rules = new ArrayList<>();
-            for (ReplacementRuleRecord rule : ruleCache) {
-                if ("global".equals(rule.scope) ||
-                        ("book".equals(rule.scope) && rule.bookId != null && rule.bookId == bookId)) {
-                    ReplacementRuleRecord copy = cloneRule(rule);
-                    rules.add(copy);
+            for (ReplacementRuleRecord rule : globalRules) {
+                rules.add(cloneRule(rule));
+            }
+            List<ReplacementRuleRecord> bookRules = bookRulesByBookId.get(bookId);
+            if (bookRules != null) {
+                for (ReplacementRuleRecord rule : bookRules) {
+                    rules.add(cloneRule(rule));
                 }
             }
-            Collections.sort(rules, (a, b) -> {
-                if (!a.scope.equals(b.scope)) return "global".equals(a.scope) ? -1 : 1;
-                return Long.compare(b.id, a.id);
-            });
             return rules;
         } finally {
             lock.readLock().unlock();
@@ -759,6 +1051,7 @@ public class JsonDatabase {
             rule.active = true;
             rule.updatedAt = System.currentTimeMillis();
             ruleCache.add(rule);
+            rebuildIndexesLocked();
             saveList(FILE_RULES, ruleCache, ReplacementRuleRecord::toJson);
         } finally {
             lock.writeLock().unlock();
@@ -785,6 +1078,7 @@ public class JsonDatabase {
         lock.writeLock().lock();
         try {
             ruleCache.removeIf(r -> r.id == ruleId);
+            rebuildIndexesLocked();
             saveList(FILE_RULES, ruleCache, ReplacementRuleRecord::toJson);
         } finally {
             lock.writeLock().unlock();
@@ -876,12 +1170,14 @@ public class JsonDatabase {
                 if (bookmark.uuid.equals(existing.uuid)) {
                     bookmark.id = existing.id;
                     bookmarkCache.set(i, bookmark);
+                    rebuildIndexesLocked();
                     saveList(FILE_BOOKMARKS, bookmarkCache, BookmarkRecord::toJson);
                     return existing.id;
                 }
             }
             bookmark.id = nextId(bookmarkCache);
             bookmarkCache.add(bookmark);
+            rebuildIndexesLocked();
             saveList(FILE_BOOKMARKS, bookmarkCache, BookmarkRecord::toJson);
             return bookmark.id;
         } finally {
@@ -903,14 +1199,22 @@ public class JsonDatabase {
         ensureLoaded();
         lock.readLock().lock();
         try {
-            List<BookmarkRecord> list = new ArrayList<>();
-            for (BookmarkRecord bm : bookmarkCache) {
-                if (bm.bookId == bookId ||
-                        (bookIdentity != null && !bookIdentity.isEmpty() && bookIdentity.equals(bm.bookIdentity))) {
-                    list.add(bm);
+            Map<String, BookmarkRecord> unique = new HashMap<>();
+            List<BookmarkRecord> byBook = bookmarksByBookId.get(bookId);
+            if (byBook != null) {
+                for (BookmarkRecord bookmark : byBook) {
+                    unique.put(bookmark.uuid, bookmark);
                 }
             }
-            return list;
+            if (bookIdentity != null && !bookIdentity.isEmpty()) {
+                List<BookmarkRecord> byIdentity = bookmarksByIdentity.get(bookIdentity);
+                if (byIdentity != null) {
+                    for (BookmarkRecord bookmark : byIdentity) {
+                        unique.put(bookmark.uuid, bookmark);
+                    }
+                }
+            }
+            return new ArrayList<>(unique.values());
         } finally {
             lock.readLock().unlock();
         }
@@ -920,6 +1224,7 @@ public class JsonDatabase {
         lock.writeLock().lock();
         try {
             bookmarkCache.removeIf(b -> b.id == bookmarkId);
+            rebuildIndexesLocked();
             saveList(FILE_BOOKMARKS, bookmarkCache, BookmarkRecord::toJson);
         } finally {
             lock.writeLock().unlock();
@@ -972,7 +1277,7 @@ public class JsonDatabase {
                     entry.bookAuthor = safeAuthor;
                     entry.updatedAt = Math.max(updatedAt, 0L);
                     normalizeReadingStatsCacheLocked();
-                    saveList(FILE_READING_STATS, readingStatsCache, ReadingTimeEntryRecord::toJson);
+                    markDirty(FILE_READING_STATS);
                     return;
                 }
             }
@@ -988,7 +1293,7 @@ public class JsonDatabase {
             entry.updatedAt = Math.max(updatedAt, 0L);
             readingStatsCache.add(entry);
             normalizeReadingStatsCacheLocked();
-            saveList(FILE_READING_STATS, readingStatsCache, ReadingTimeEntryRecord::toJson);
+            markDirty(FILE_READING_STATS);
         } finally {
             lock.writeLock().unlock();
         }
@@ -1588,18 +1893,6 @@ public class JsonDatabase {
     public File exportLiteDatabase(File destination) throws IOException {
         flush();
         return dataDir;
-    }
-
-    public void importDatabase(File source) throws IOException {
-        // 由 WebDavBackupManager 下载 JSON 文件后调用 reloadFromDisk()
-    }
-
-    public void stripPlatformSettingsTable(File databaseFile) {
-        // JSON 没有 settings 表，无需操作
-    }
-
-    public void mergeLiteDatabase(File source) {
-        // 由 WebDavBackupManager 的逐实体合并逻辑替代
     }
 
     // ========== 章节正文文件管理 ==========
