@@ -24,6 +24,7 @@ import com.metahumanz.pacilread.reader.modern.ReaderSessionState;
 import com.metahumanz.pacilread.reader.modern.ReaderUiUtils;
 import com.metahumanz.pacilread.reader.modern.content.ReaderContentController;
 import com.metahumanz.pacilread.reader.modern.paging.ReaderNavigationController;
+import com.metahumanz.pacilread.reader.search.BookSearchIndex;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,6 +38,8 @@ public final class ReaderLibraryDialogs {
     private final ReaderDialogSupport dialogSupport;
     private final ReaderContentController content;
     private final ReaderNavigationController navigation;
+    private final BookSearchIndex searchIndex;
+    private int searchGeneration;
 
     public ReaderLibraryDialogs(
             ModernReaderActivity activity,
@@ -54,6 +57,7 @@ public final class ReaderLibraryDialogs {
         this.dialogSupport = dialogSupport;
         this.content = content;
         this.navigation = navigation;
+        this.searchIndex = new BookSearchIndex(activity, runtime.databaseHelper);
     }
 
     public void showTocDialog() {
@@ -127,6 +131,7 @@ public final class ReaderLibraryDialogs {
         ArrayAdapter<String> adapter = dialogSupport.buildDialogListAdapter(new ArrayList<>());
         listView.setAdapter(adapter);
         AlertDialog dialog = new AlertDialog.Builder(activity).setView(contentView).create();
+        dialog.setOnDismissListener(ignored -> searchGeneration++);
         attachListScrubber(
                 listView,
                 searchBody,
@@ -157,7 +162,8 @@ public final class ReaderLibraryDialogs {
             );
         });
         Runnable runSearch = () -> {
-            String query = queryInput.getText().toString().trim().toLowerCase(Locale.ROOT);
+            String query = queryInput.getText().toString().trim();
+            int generation = ++searchGeneration;
             if (query.isEmpty()) {
                 results.clear();
                 adapter.clear();
@@ -167,25 +173,32 @@ public final class ReaderLibraryDialogs {
             }
             results.clear();
             adapter.clear();
-            resultCount.setText("正在搜索...");
+            resultCount.setText(searchIndex.isReady(state.bookId) ? "正在搜索..." : "正在建立索引...");
             refreshListScrubber(listView, scrubberHost, scrubberTrack, scrubberThumb, scrubberPreview, results.size());
             runtime.safeExecute(() -> {
                 List<SearchResult> tempResults = new ArrayList<>();
-                for (int i = 0; i < state.chapters.size(); i++) {
-                    if (!activity.isReaderActive()) {
-                        return;
+                try {
+                    List<BookSearchIndex.Result> indexedResults = searchIndex.search(
+                            state.bookId,
+                            query,
+                            () -> generation != searchGeneration || !activity.isReaderActive()
+                    );
+                    for (BookSearchIndex.Result result : indexedResults) {
+                        tempResults.add(new SearchResult(
+                                result.chapterIndex,
+                                result.chapterTitle,
+                                result.snippet,
+                                result.charOffset
+                        ));
                     }
-                    String text = content.getProcessedChapterText(i);
-                    int index = text.toLowerCase(Locale.ROOT).indexOf(query);
-                    if (index >= 0) {
-                        String snippet = text.substring(
-                                Math.max(0, index - 18),
-                                Math.min(text.length(), index + query.length() + 24)
-                        ).replace('\n', ' ').trim();
-                        tempResults.add(new SearchResult(i, state.chapters.get(i).title, snippet, index));
-                    }
+                } catch (Exception error) {
+                    activity.runOnReaderUiThread(() -> {
+                        if (generation == searchGeneration) resultCount.setText("搜索失败: " + error.getMessage());
+                    });
+                    return;
                 }
                 activity.runOnReaderUiThread(() -> {
+                    if (generation != searchGeneration) return;
                     results.clear();
                     results.addAll(tempResults);
                     adapter.clear();
