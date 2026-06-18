@@ -20,8 +20,6 @@ public class SplashActivity extends ThemedActivity {
     public static final String EXTRA_AUTO_OPEN_BOOK_ID =
             "com.metahumanz.pacilread.EXTRA_AUTO_OPEN_BOOK_ID";
 
-    private static final long MIN_DISPLAY_MS = 600L;
-
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService splashExecutor = Executors.newSingleThreadExecutor();
     private boolean finishing;
@@ -41,12 +39,6 @@ public class SplashActivity extends ThemedActivity {
             splashExecutor.execute(() -> {
                 try {
                     JsonDatabase databaseHelper = JsonDatabase.getInstance(SplashActivity.this);
-                    try {
-                        new SnapshotManager(SplashActivity.this, databaseHelper, settingsStore)
-                                .createDailyStartupSnapshotIfNeeded();
-                    } catch (Exception error) {
-                        Log.w(TAG, "Daily startup snapshot failed", error);
-                    }
                     long bookId = -1L;
                     if (databaseHelper.isDatabaseHealthyForStartup()) {
                         bookId = databaseHelper.getMostRecentBookId();
@@ -54,7 +46,7 @@ public class SplashActivity extends ThemedActivity {
                         Log.w(TAG, "Database health check failed, opening bookshelf instead of reader");
                     }
                     long launchBookId = bookId;
-                    handler.postDelayed(() -> {
+                    handler.post(() -> {
                         if (finishing) return;
                         Intent intent = new Intent(SplashActivity.this, BookshelfActivity.class);
                         if (launchBookId > 0) {
@@ -62,31 +54,40 @@ public class SplashActivity extends ThemedActivity {
                         }
                         startActivity(intent);
                         finish();
-                    }, MIN_DISPLAY_MS);
+                    });
+                    createDailyStartupSnapshot(databaseHelper, settingsStore);
                 } catch (Exception error) {
                     Log.w(TAG, "Auto-open startup failed, opening bookshelf", error);
-                    handler.postDelayed(() -> {
+                    handler.post(() -> {
                         if (finishing) return;
                         startActivity(new Intent(SplashActivity.this, BookshelfActivity.class));
                         finish();
-                    }, MIN_DISPLAY_MS);
+                    });
                 }
             });
         } else {
+            handler.post(() -> {
+                if (finishing) return;
+                startActivity(new Intent(SplashActivity.this, BookshelfActivity.class));
+                finish();
+            });
             splashExecutor.execute(() -> {
                 try {
                     JsonDatabase databaseHelper = JsonDatabase.getInstance(SplashActivity.this);
-                    new SnapshotManager(SplashActivity.this, databaseHelper, settingsStore)
-                            .createDailyStartupSnapshotIfNeeded();
+                    createDailyStartupSnapshot(databaseHelper, settingsStore);
                 } catch (Exception error) {
                     Log.w(TAG, "Daily startup snapshot failed", error);
                 }
-                handler.postDelayed(() -> {
-                    if (finishing) return;
-                    startActivity(new Intent(SplashActivity.this, BookshelfActivity.class));
-                    finish();
-                }, MIN_DISPLAY_MS);
             });
+        }
+    }
+
+    private void createDailyStartupSnapshot(JsonDatabase databaseHelper, SettingsStore settingsStore) {
+        try {
+            new SnapshotManager(getApplicationContext(), databaseHelper, settingsStore)
+                    .createDailyStartupSnapshotIfNeeded();
+        } catch (Exception error) {
+            Log.w(TAG, "Daily startup snapshot failed", error);
         }
     }
 
@@ -95,6 +96,6 @@ public class SplashActivity extends ThemedActivity {
         finishing = true;
         super.onDestroy();
         handler.removeCallbacksAndMessages(null);
-        splashExecutor.shutdownNow();
+        splashExecutor.shutdown();
     }
 }

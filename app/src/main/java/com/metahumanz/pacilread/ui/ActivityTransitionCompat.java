@@ -8,18 +8,19 @@ public final class ActivityTransitionCompat {
     private ActivityTransitionCompat() {
     }
 
+    @SuppressLint({"NewApi", "InlinedApi"})
     public static void overrideOpen(Activity activity, int enterAnim, int exitAnim) {
-        override(activity, Activity.OVERRIDE_TRANSITION_OPEN, enterAnim, exitAnim);
-    }
-
-    public static void overrideClose(Activity activity, int enterAnim, int exitAnim) {
-        override(activity, Activity.OVERRIDE_TRANSITION_CLOSE, enterAnim, exitAnim);
-    }
-
-    @SuppressLint("NewApi")
-    private static void override(Activity activity, int transitionType, int enterAnim, int exitAnim) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            activity.overrideActivityTransition(transitionType, enterAnim, exitAnim);
+            activity.overrideActivityTransition(Activity.OVERRIDE_TRANSITION_OPEN, enterAnim, exitAnim);
+        } else {
+            activity.overridePendingTransition(enterAnim, exitAnim);
+        }
+    }
+
+    @SuppressLint({"NewApi", "InlinedApi"})
+    public static void overrideClose(Activity activity, int enterAnim, int exitAnim) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            activity.overrideActivityTransition(Activity.OVERRIDE_TRANSITION_CLOSE, enterAnim, exitAnim);
         } else {
             activity.overridePendingTransition(enterAnim, exitAnim);
         }
