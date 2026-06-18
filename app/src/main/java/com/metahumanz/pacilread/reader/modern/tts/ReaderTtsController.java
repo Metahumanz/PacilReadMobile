@@ -1,6 +1,15 @@
 package com.metahumanz.pacilread.reader.modern.tts;
 
 import android.app.AlertDialog;
+import android.Manifest;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
+import android.os.Build;
+import android.os.IBinder;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -8,8 +17,12 @@ import android.widget.Button;
 import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.NumberPicker;
+
+import androidx.core.content.ContextCompat;
 
 import com.metahumanz.pacilread.R;
+import com.metahumanz.pacilread.AppUiUtils;
 import com.metahumanz.pacilread.reader.PageSlice;
 import com.metahumanz.pacilread.reader.modern.ModernReaderActivity;
 import com.metahumanz.pacilread.reader.modern.ReaderRuntime;
@@ -22,6 +35,9 @@ import com.metahumanz.pacilread.reader.modern.paging.ReaderNavigationController;
 import com.metahumanz.pacilread.reader.modern.paging.ReaderPagingAnimator;
 import com.metahumanz.pacilread.reader.modern.ui.ReaderChromeController;
 import com.metahumanz.pacilread.tts.SystemTtsClient;
+import com.metahumanz.pacilread.tts.TtsPlaybackService;
+import com.metahumanz.pacilread.tts.TtsPlaybackSnapshot;
+import com.metahumanz.pacilread.tts.TtsSleepTimer;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -50,6 +66,27 @@ public final class ReaderTtsController {
     private final Map<Integer, byte[]> mimoPcmCache = new LinkedHashMap<>();
     private final List<Runnable> pendingHighlightTasks = new CopyOnWriteArrayList<>();
     private boolean batchQueued = false;
+    private TtsPlaybackService.LocalBinder playbackBinder;
+    private boolean playbackBound;
+    private boolean playbackBindingRequested;
+    private long stagedSleepDurationMillis;
+    private final TtsPlaybackService.Listener playbackListener = this::applyPlaybackSnapshot;
+    private final ServiceConnection playbackConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            playbackBinder = (TtsPlaybackService.LocalBinder) service;
+            playbackBound = true;
+            playbackBindingRequested = true;
+            playbackBinder.addListener(playbackListener);
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            playbackBound = false;
+            playbackBindingRequested = false;
+            playbackBinder = null;
+        }
+    };
 
     private ReaderNavigationController navigation;
     private ReaderContentController content;
@@ -88,6 +125,27 @@ public final class ReaderTtsController {
         return state.ttsActive;
     }
 
+    public void bindPlaybackService() {
+        if (playbackBound || playbackBindingRequested) return;
+        try {
+            playbackBindingRequested = activity.bindService(
+                    new Intent(activity, TtsPlaybackService.class), playbackConnection, 0);
+        } catch (Exception ignored) {
+        }
+    }
+
+    public void unbindPlaybackService() {
+        if (!playbackBound && !playbackBindingRequested) return;
+        try {
+            if (playbackBinder != null) playbackBinder.removeListener(playbackListener);
+            activity.unbindService(playbackConnection);
+        } catch (Exception ignored) {
+        }
+        playbackBound = false;
+        playbackBindingRequested = false;
+        playbackBinder = null;
+    }
+
     public void toggleTts() {
         if (state.ttsPaused) {
             resumeTts();
@@ -101,19 +159,11 @@ public final class ReaderTtsController {
             ui.showToast("请先在设置页填写 MiMo API Key");
             return;
         }
-        boolean hasCurrentUnits = rebuildTtsUnitsForChapter(state.currentChapterIndex, content.currentCharOffset());
-        if (!hasCurrentUnits && state.currentChapterIndex >= state.chapters.size() - 1) {
+        if (state.chapters.isEmpty()) {
             ui.showToast("当前位置没有可朗读的文本");
             return;
         }
-        state.ttsActive = true;
-        state.ttsSessionId++;
-        chrome.styleReaderMenuButton(views.ttsButton, true);
-        if (hasCurrentUnits) {
-            playCurrentTtsUnit();
-            return;
-        }
-        advanceToNextTtsChapter();
+        startTtsFrom(state.currentChapterIndex, content.currentCharOffset());
     }
 
     public void startTtsFrom(int chapterIndex, int charOffset) {
@@ -121,28 +171,34 @@ public final class ReaderTtsController {
             ui.showToast("请先在设置页填写 MiMo API Key");
             return;
         }
-        stopTts();
-        boolean hasUnits = rebuildTtsUnitsForChapter(chapterIndex, Math.max(charOffset, 0));
-        if (!hasUnits) {
-            ui.showToast("当前位置没有可朗读的文本");
-            return;
-        }
+        long timerDuration = currentSleepTimerDuration();
+        stagedSleepDurationMillis = timerDuration;
         state.ttsActive = true;
+        state.ttsPaused = false;
         state.ttsSessionId++;
         chrome.styleReaderMenuButton(views.ttsButton, true);
-        playCurrentTtsUnit();
+        requestNotificationPermissionIfNeeded();
+        Intent intent = new Intent(activity, TtsPlaybackService.class)
+                .setAction(TtsPlaybackService.ACTION_START)
+                .putExtra(TtsPlaybackService.EXTRA_BOOK_ID, state.bookId)
+                .putExtra(TtsPlaybackService.EXTRA_CHAPTER_INDEX, chapterIndex)
+                .putExtra(TtsPlaybackService.EXTRA_CHAR_OFFSET, Math.max(charOffset, 0))
+                .putExtra(TtsPlaybackService.EXTRA_TIMER_MILLIS, timerDuration);
+        ContextCompat.startForegroundService(activity, intent);
+        if (!playbackBound && !playbackBindingRequested) {
+            playbackBindingRequested = activity.bindService(
+                    new Intent(activity, TtsPlaybackService.class),
+                    playbackConnection,
+                    Context.BIND_AUTO_CREATE
+            );
+        }
     }
 
     public void stopTts() {
         state.ttsActive = false;
         state.ttsPaused = false;
         state.ttsSessionId++;
-        ttsUnits.clear();
-        state.ttsChapterIndex = -1;
-        state.currentTtsUnitIndex = -1;
-        batchQueued = false;
-        runtime.systemTtsClient.stop();
-        runtime.mimoTtsClient.cancel();
+        activity.startService(new Intent(activity, TtsPlaybackService.class).setAction(TtsPlaybackService.ACTION_STOP));
         cancelHighlightProgression();
         synchronized (mimoPcmCache) {
             mimoPcmCache.clear();
@@ -156,10 +212,8 @@ public final class ReaderTtsController {
 
     public void pauseTts() {
         if (!state.ttsActive || state.ttsPaused) return;
-        batchQueued = false;
         state.ttsPaused = true;
-        runtime.systemTtsClient.pause();
-        runtime.mimoTtsClient.cancel();
+        activity.startService(new Intent(activity, TtsPlaybackService.class).setAction(TtsPlaybackService.ACTION_PAUSE));
         cancelHighlightProgression();
         synchronized (mimoPcmCache) {
             mimoPcmCache.clear();
@@ -174,11 +228,7 @@ public final class ReaderTtsController {
     public void resumeTts() {
         if (!state.ttsActive || !state.ttsPaused) return;
         state.ttsPaused = false;
-        if ("mimo".equals(runtime.settingsStore.getTtsEngine())) {
-            playCurrentTtsUnit();
-        } else {
-            playCurrentTtsUnit();
-        }
+        activity.startService(new Intent(activity, TtsPlaybackService.class).setAction(TtsPlaybackService.ACTION_RESUME));
     }
 
     public void updateTtsHighlight() {
@@ -202,6 +252,101 @@ public final class ReaderTtsController {
         }
     }
 
+    private void requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= 33
+                && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 3002);
+        }
+    }
+
+    private void applyPlaybackSnapshot(TtsPlaybackSnapshot playback) {
+        if (playback == null) return;
+        if (TtsPlaybackSnapshot.STATE_STOPPED.equals(playback.state)) {
+            stagedSleepDurationMillis = 0L;
+        }
+        boolean sameBook = playback.bookId == state.bookId;
+        state.ttsActive = sameBook && playback.isActive();
+        state.ttsPaused = state.ttsActive && playback.isPaused();
+        chrome.styleReaderMenuButton(views.ttsButton, state.ttsActive);
+        if (!state.ttsActive || state.ttsPaused || playback.chapterIndex < 0) {
+            state.ttsHighlightPageIndex = -1;
+            state.ttsHighlightStart = -1;
+            state.ttsHighlightEnd = -1;
+            updateTtsHighlight();
+            return;
+        }
+        state.ttsChapterIndex = playback.chapterIndex;
+        syncServiceHighlight(playback, 0);
+    }
+
+    private void syncServiceHighlight(TtsPlaybackSnapshot playback, int retry) {
+        if (!state.ttsActive || playback.chapterIndex < 0 || playback.chapterIndex >= state.chapters.size()) return;
+        if (state.currentChapterIndex != playback.chapterIndex) {
+            navigation.openChapter(
+                    playback.chapterIndex,
+                    playback.sentenceStart,
+                    true,
+                    playback.chapterIndex >= state.currentChapterIndex ? 1 : -1
+            );
+            if (retry < 3) {
+                runtime.mainHandler.postDelayed(
+                        () -> syncServiceHighlight(playback, retry + 1),
+                        paging.readerFlipDurationMs() + 40L
+                );
+            }
+            return;
+        }
+        List<PageSlice> pages = content.getPagesForChapter(playback.chapterIndex);
+        if (pages == null || pages.isEmpty()) return;
+        int pageIndex = -1;
+        for (int i = 0; i < pages.size(); i++) {
+            PageSlice slice = pages.get(i);
+            if (playback.sentenceStart >= slice.start && playback.sentenceStart < slice.end) {
+                pageIndex = i;
+                break;
+            }
+        }
+        if (pageIndex < 0) return;
+        int lastVisible = state.currentPageIndex + content.pagesPerScreen() - 1;
+        if ((pageIndex < state.currentPageIndex || pageIndex > lastVisible) && retry < 3) {
+            navigation.openChapter(playback.chapterIndex, playback.sentenceStart, true,
+                    pageIndex >= state.currentPageIndex ? 1 : -1);
+            runtime.mainHandler.postDelayed(
+                    () -> syncServiceHighlight(playback, retry + 1),
+                    paging.readerFlipDurationMs() + 40L
+            );
+            return;
+        }
+        PageSlice slice = pages.get(pageIndex);
+        int bodyStart = Math.max(0, slice.bodyStartInSlice);
+        state.ttsHighlightPageIndex = pageIndex;
+        state.ttsHighlightStart = bodyStart + Math.max(0, playback.sentenceStart - slice.start);
+        state.ttsHighlightEnd = bodyStart + Math.max(
+                state.ttsHighlightStart - bodyStart,
+                Math.min(slice.end, playback.sentenceEnd) - slice.start
+        );
+        updateTtsHighlight();
+    }
+
+    private void setSleepTimerDuration(long durationMillis) {
+        stagedSleepDurationMillis = Math.max(0L, durationMillis);
+        if (!state.ttsActive) return;
+        activity.startService(new Intent(activity, TtsPlaybackService.class)
+                .setAction(TtsPlaybackService.ACTION_SET_TIMER)
+                .putExtra(TtsPlaybackService.EXTRA_TIMER_MILLIS, stagedSleepDurationMillis));
+    }
+
+    private long currentSleepTimerDuration() {
+        if (playbackBinder != null) {
+            TtsPlaybackSnapshot current = playbackBinder.snapshot();
+            if (current != null && current.sleepDeadlineElapsed > 0L) {
+                return Math.max(0L, current.sleepDeadlineElapsed - SystemClock.elapsedRealtime());
+            }
+        }
+        return stagedSleepDurationMillis;
+    }
+
     public void showTtsDialog() {
         View contentView = LayoutInflater.from(activity).inflate(R.layout.dialog_tts, null, false);
         Spinner engineSpinner = contentView.findViewById(R.id.tts_spinner_engine);
@@ -214,6 +359,79 @@ public final class ReaderTtsController {
         TextView noteText = contentView.findViewById(R.id.tts_text_note);
         Button toggleButton = contentView.findViewById(R.id.tts_button_toggle);
         Button stopButton = contentView.findViewById(R.id.tts_button_stop);
+        Button timerSliderModeButton = contentView.findViewById(R.id.tts_button_timer_slider_mode);
+        Button timerPreciseModeButton = contentView.findViewById(R.id.tts_button_timer_precise_mode);
+        View timerSliderLayout = contentView.findViewById(R.id.tts_layout_timer_slider);
+        View timerPreciseLayout = contentView.findViewById(R.id.tts_layout_timer_precise);
+        SeekBar timerSeekBar = contentView.findViewById(R.id.tts_seek_timer);
+        TextView timerText = contentView.findViewById(R.id.tts_text_timer);
+        NumberPicker timerHours = contentView.findViewById(R.id.tts_picker_timer_hours);
+        NumberPicker timerMinutes = contentView.findViewById(R.id.tts_picker_timer_minutes);
+        NumberPicker timerSeconds = contentView.findViewById(R.id.tts_picker_timer_seconds);
+
+        long[] timerDuration = new long[]{currentSleepTimerDuration()};
+        String[] timerMode = new String[]{runtime.settingsStore.getTtsTimerMode()};
+        timerHours.setMinValue(0);
+        timerHours.setMaxValue(23);
+        timerMinutes.setMinValue(0);
+        timerMinutes.setMaxValue(59);
+        timerSeconds.setMinValue(0);
+        timerSeconds.setMaxValue(59);
+        timerHours.setFormatter(value -> String.format(Locale.ROOT, "%02d", value));
+        timerMinutes.setFormatter(value -> String.format(Locale.ROOT, "%02d", value));
+        timerSeconds.setFormatter(value -> String.format(Locale.ROOT, "%02d", value));
+        int[] preciseValues = TtsSleepTimer.millisToPrecise(timerDuration[0]);
+        timerHours.setValue(preciseValues[0]);
+        timerMinutes.setValue(preciseValues[1]);
+        timerSeconds.setValue(preciseValues[2]);
+        timerSeekBar.setProgress(TtsSleepTimer.millisToSliderProgress(timerDuration[0]));
+        timerText.setText(formatTimerDuration(timerDuration[0]));
+        Runnable refreshTimerMode = () -> {
+            boolean slider = "slider".equals(timerMode[0]);
+            timerSliderLayout.setVisibility(slider ? View.VISIBLE : View.GONE);
+            timerPreciseLayout.setVisibility(slider ? View.GONE : View.VISIBLE);
+            AppUiUtils.styleSelectionButton(activity, timerSliderModeButton, slider);
+            AppUiUtils.styleSelectionButton(activity, timerPreciseModeButton, !slider);
+        };
+        timerSliderModeButton.setOnClickListener(v -> {
+            timerMode[0] = "slider";
+            runtime.settingsStore.setTtsTimerMode("slider");
+            timerSeekBar.setProgress(TtsSleepTimer.millisToSliderProgress(timerDuration[0]));
+            refreshTimerMode.run();
+        });
+        timerPreciseModeButton.setOnClickListener(v -> {
+            timerMode[0] = "precise";
+            runtime.settingsStore.setTtsTimerMode("precise");
+            int[] values = TtsSleepTimer.millisToPrecise(timerDuration[0]);
+            timerHours.setValue(values[0]);
+            timerMinutes.setValue(values[1]);
+            timerSeconds.setValue(values[2]);
+            refreshTimerMode.run();
+        });
+        refreshTimerMode.run();
+        timerSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (!fromUser) return;
+                timerDuration[0] = TtsSleepTimer.sliderProgressToMillis(progress);
+                timerText.setText(formatTimerDuration(timerDuration[0]));
+                setSleepTimerDuration(timerDuration[0]);
+            }
+
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        NumberPicker.OnValueChangeListener preciseListener = (picker, oldValue, newValue) -> {
+            timerDuration[0] = TtsSleepTimer.preciseToMillis(
+                    timerHours.getValue(), timerMinutes.getValue(), timerSeconds.getValue());
+            timerText.setText(formatTimerDuration(timerDuration[0]));
+            setSleepTimerDuration(timerDuration[0]);
+        };
+        timerHours.setOnValueChangedListener(preciseListener);
+        timerMinutes.setOnValueChangedListener(preciseListener);
+        timerSeconds.setOnValueChangedListener(preciseListener);
 
         // Engine spinner
         engineSpinner.setAdapter(dialogSupport.buildSpinnerAdapter(TTS_ENGINE_LABELS));
@@ -862,6 +1080,16 @@ public final class ReaderTtsController {
 
     private String engineLabel(String engine) {
         return "mimo".equals(engine) ? "MiMo" : "系统 TTS";
+    }
+
+    private String formatTimerDuration(long durationMillis) {
+        if (durationMillis <= 0L) return "关闭";
+        long totalMinutes = Math.max(1L, Math.round(durationMillis / 60_000f));
+        long hours = totalMinutes / 60L;
+        long minutes = totalMinutes % 60L;
+        if (hours == 0L) return minutes + " 分钟后停止";
+        if (minutes == 0L) return hours + " 小时后停止";
+        return hours + " 小时 " + minutes + " 分钟后停止";
     }
 
     private int indexOf(String[] values, String target, int fallback) {

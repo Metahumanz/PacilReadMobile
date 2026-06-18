@@ -51,6 +51,104 @@
         android:layout_height="wrap_content"
         android:textColor="?attr/themeColorOnSurfaceMuted" />
 
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="睡眠定时"
+        android:textColor="?attr/themeColorOnSurface"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_reader_menu_panel_solid"
+        android:orientation="horizontal"
+        android:padding="3dp">
+
+        <Button
+            android:id="@+id/tts_button_timer_slider_mode"
+            android:layout_width="0dp"
+            android:layout_height="38dp"
+            android:layout_weight="1"
+            android:minWidth="0dp"
+            android:text="滑块"
+            android:textAllCaps="false" />
+
+        <Button
+            android:id="@+id/tts_button_timer_precise_mode"
+            android:layout_width="0dp"
+            android:layout_height="38dp"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1"
+            android:minWidth="0dp"
+            android:text="精确"
+            android:textAllCaps="false" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/tts_layout_timer_slider"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <SeekBar
+            android:id="@+id/tts_seek_timer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="36" />
+
+        <TextView
+            android:id="@+id/tts_text_timer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="关闭"
+            android:textColor="?attr/themeColorOnSurfaceMuted" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/tts_layout_timer_precise"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <NumberPicker
+            android:id="@+id/tts_picker_timer_hours"
+            android:layout_width="72dp"
+            android:layout_height="96dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="时"
+            android:textColor="?attr/themeColorOnSurfaceMuted" />
+
+        <NumberPicker
+            android:id="@+id/tts_picker_timer_minutes"
+            android:layout_width="72dp"
+            android:layout_height="96dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="分"
+            android:textColor="?attr/themeColorOnSurfaceMuted" />
+
+        <NumberPicker
+            android:id="@+id/tts_picker_timer_seconds"
+            android:layout_width="72dp"
+            android:layout_height="96dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="秒"
+            android:textColor="?attr/themeColorOnSurfaceMuted" />
+    </LinearLayout>
+
     <LinearLayout
         android:id="@+id/tts_layout_mimo_voice"
         android:layout_width="match_parent"

@@ -17,6 +17,7 @@ import com.metahumanz.pacilread.R;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 public final class SystemTtsClient {
     private static final String TAG = "SystemTts";
@@ -53,6 +54,8 @@ public final class SystemTtsClient {
     private volatile int completedCount = 0;
     private volatile boolean paused = false;
     private volatile boolean firstSpeak = true;
+    private final AtomicLong utteranceSequence = new AtomicLong();
+    private volatile Runnable audioFocusLossListener;
 
     private AudioManager audioManager;
     private AudioFocusRequest focusRequest;
@@ -122,7 +125,7 @@ public final class SystemTtsClient {
         paused = false;
         engine.setSpeechRate(Math.max(0.5f, Math.min(rate, 3.0f)));
         int result = engine.speak(text, TextToSpeech.QUEUE_FLUSH, null,
-                "tts_" + System.currentTimeMillis());
+                "tts_" + utteranceSequence.incrementAndGet());
         if (result != TextToSpeech.SUCCESS) {
             currentCallback = null;
             if (callback != null) callback.onError("系统 TTS 开始朗读失败");
@@ -156,7 +159,7 @@ public final class SystemTtsClient {
             if (TextUtils.isEmpty(text)) continue;
             int mode = (first && i == 0) ? TextToSpeech.QUEUE_FLUSH : TextToSpeech.QUEUE_ADD;
             int result = engine.speak(text, mode, null,
-                    "tts_" + System.currentTimeMillis());
+                    "tts_" + utteranceSequence.incrementAndGet());
             if (result != TextToSpeech.SUCCESS) {
                 currentCallback = null;
                 queuedCount = 0;
@@ -266,6 +269,10 @@ public final class SystemTtsClient {
         return hasAudioFocus;
     }
 
+    public void setAudioFocusLossListener(Runnable listener) {
+        audioFocusLossListener = listener;
+    }
+
     public void abandonAudioFocus() {
         if (!hasAudioFocus || audioManager == null) return;
         try {
@@ -290,6 +297,8 @@ public final class SystemTtsClient {
         if (focusChange == AudioManager.AUDIOFOCUS_LOSS ||
                 focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
             pause();
+            Runnable listener = audioFocusLossListener;
+            if (listener != null) mainHandler.post(listener);
         }
     }
 

@@ -183,6 +183,12 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         }
     }
 
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if (tts != null) tts.bindPlaybackService();
+    }
+
     public void applyReaderUiThemeWithoutRecreate() {
         applyResolvedReaderThemeWithoutRecreate();
         if (style != null) {
@@ -236,9 +242,6 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         if (autoPage != null) {
             autoPage.stopAutoPage();
         }
-        if (tts != null) {
-            tts.stopTts();
-        }
         if (content != null) {
             content.cancelPendingReflow();
         }
@@ -247,10 +250,11 @@ public class ModernReaderActivity extends ThemedReaderActivity {
 
     @Override
     protected void onStop() {
-        super.onStop();
         if (!readerExitProgressPersisted) {
             persistReaderProgress(true);
         }
+        if (tts != null) tts.unbindPlaybackService();
+        super.onStop();
     }
 
     @Override
@@ -269,6 +273,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
         if (readingStatsTracker != null) {
             readingStatsTracker.shutdown();
         }
+        if (tts != null) tts.unbindPlaybackService();
         if (runtime != null) {
             runtime.shutdown();
         }
@@ -372,6 +377,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (selection != null && selection.onActivityResult(requestCode, resultCode, data)) {
+            return;
+        }
         if (resultCode != RESULT_OK || data == null || data.getData() == null) {
             return;
         }
