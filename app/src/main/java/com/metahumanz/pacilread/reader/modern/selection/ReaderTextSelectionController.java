@@ -41,6 +41,8 @@ import com.metahumanz.pacilread.reader.modern.tts.ReaderTtsController;
 import com.metahumanz.pacilread.reader.share.QuoteShareCard;
 import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.ui.PredictiveBackScaleController;
+import com.metahumanz.pacilread.ui.PredictiveDialogDismissController;
+import com.metahumanz.pacilread.ui.TransitionMotionModeHelper;
 
 import java.text.BreakIterator;
 import java.util.List;
@@ -737,15 +739,24 @@ public final class ReaderTextSelectionController {
             }
         });
         closeButton.setOnClickListener(v -> dialog.dismiss());
-        dialog.setOnDismissListener(unused -> {
-            previewImage.setImageDrawable(null);
-            card.recyclePreview();
-        });
         dialog.show();
         Window window = dialog.getWindow();
         if (window != null) {
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.setWindowAnimations(R.style.AppPopDialogAnimation);
         }
+        PredictiveDialogDismissController.Registration backRegistration =
+                PredictiveDialogDismissController.install(
+                        dialog,
+                        window,
+                        TransitionMotionModeHelper.isFluidMode(runtime.settingsStore),
+                        null
+                );
+        dialog.setOnDismissListener(unused -> {
+            backRegistration.unregister();
+            previewImage.setImageDrawable(null);
+            card.recyclePreview();
+        });
     }
 
     private Button previewActionButton(String text, boolean primary) {
