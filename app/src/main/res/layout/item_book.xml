@@ -6,9 +6,11 @@
     android:paddingBottom="3dp">
 
     <LinearLayout
+        android:id="@+id/container_book_card"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_app_card"
+        android:baselineAligned="false"
         android:elevation="3dp"
         android:gravity="center_vertical"
         android:minHeight="112dp"
