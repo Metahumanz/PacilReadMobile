@@ -39,7 +39,6 @@ import com.metahumanz.pacilread.sync.WebDavProgressSyncCoordinator;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CancellationException;
@@ -64,19 +63,7 @@ public final class ReaderContentController {
     private static BookRecord cachedBook;
     private static final List<ChapterRecord> cachedChapters = new ArrayList<>();
     private static final List<ReplacementRuleRecord> cachedRules = new ArrayList<>();
-    private static final Map<Integer, List<PageSlice>> cachedPageSlicesMap = new HashMap<>();
-    private static final Map<ReaderLayoutSignature, Map<Integer, List<PageSlice>>> cachedPageSlicesByLayout =
-            new LinkedHashMap<ReaderLayoutSignature, Map<Integer, List<PageSlice>>>(
-                    MAX_LAYOUT_PAGE_CACHE_SIGNATURES,
-                    0.75f,
-                    true
-            ) {
-                @Override
-                protected boolean removeEldestEntry(Map.Entry<ReaderLayoutSignature, Map<Integer, List<PageSlice>>> eldest) {
-                    return size() > MAX_LAYOUT_PAGE_CACHE_SIGNATURES;
-                }
-            };
-    private static ReaderLayoutSignature cachedLayoutSignature;
+    private static final ReaderPageCache PAGE_CACHE = new ReaderPageCache(MAX_LAYOUT_PAGE_CACHE_SIGNATURES);
     private static final ExecutorService PROGRESS_UPLOAD_EXECUTOR = Executors.newSingleThreadExecutor();
 
     private final ModernReaderActivity activity;
@@ -242,9 +229,7 @@ public final class ReaderContentController {
         if (!activity.isReaderActive()) {
             return;
         }
-        synchronized (cachedPageSlicesMap) {
-            if (cachedPageSlicesMap.containsKey(chapterIndex)) return;
-        }
+        if (PAGE_CACHE.contains(chapterIndex)) return;
         Log.d(TAG, "[时序] 后台分页开始执行 - chapter=" + chapterIndex + " w=" + pageWidth + " h=" + pageHeight);
         final long startTime = System.currentTimeMillis();
         float lineSpacing = views.pageBodyCurrent.getLineSpacingExtra();
@@ -259,9 +244,7 @@ public final class ReaderContentController {
             if (!activity.isReaderActive()) {
                 return;
             }
-            synchronized (cachedPageSlicesMap) {
-                if (cachedPageSlicesMap.containsKey(chapterIndex)) return;
-            }
+            if (PAGE_CACHE.contains(chapterIndex)) return;
             PaginationSnapshot snapshot = new PaginationSnapshot(
                     pageWidth, pageHeight, lineSpacing, basePaint, sig,
                     titleTypeface, titleTextSize, titleMargin, indentPx);
@@ -316,6 +299,7 @@ public final class ReaderContentController {
     }
 
     public void loadBook() {
+        PAGE_CACHE.setBookId(state.bookId);
         if (lastCachedBookId == state.bookId && cachedBook != null && !cachedChapters.isEmpty()) {
             isCacheHit = true;
             state.book = cachedBook;
@@ -747,12 +731,10 @@ public final class ReaderContentController {
 
     public List<PageSlice> getPagesForChapter(int chapterIndex) {
         ensurePaginationCacheMatchesLayout();
-        synchronized (cachedPageSlicesMap) {
-            List<PageSlice> cached = cachedPageSlicesMap.get(chapterIndex);
-            if (cached != null) {
-                Log.d(TAG, "[时序] getPagesForChapter 缓存命中 - chapter=" + chapterIndex);
-                return cached;
-            }
+        List<PageSlice> cached = PAGE_CACHE.get(chapterIndex);
+        if (cached != null) {
+            Log.d(TAG, "[时序] getPagesForChapter 缓存命中 - chapter=" + chapterIndex);
+            return cached;
         }
         Log.w(TAG, "[时序] getPagesForChapter 缓存未命中! 主线程分页 - chapter=" + chapterIndex);
         final long t0 = System.currentTimeMillis();
@@ -777,11 +759,9 @@ public final class ReaderContentController {
 
     public int getKnownPageCountForChapter(int chapterIndex) {
         ensurePaginationCacheMatchesLayout();
-        synchronized (cachedPageSlicesMap) {
-            List<PageSlice> cached = cachedPageSlicesMap.get(chapterIndex);
-            if (cached != null) {
-                return cached.size();
-            }
+        List<PageSlice> cached = PAGE_CACHE.get(chapterIndex);
+        if (cached != null) {
+            return cached.size();
         }
         PartialPagination partial = activePartialPagination;
         if (partial != null && partial.chapterIndex == chapterIndex) {
@@ -792,9 +772,7 @@ public final class ReaderContentController {
 
     public boolean isPageCountCompleteForChapter(int chapterIndex) {
         ensurePaginationCacheMatchesLayout();
-        synchronized (cachedPageSlicesMap) {
-            return cachedPageSlicesMap.containsKey(chapterIndex);
-        }
+        return PAGE_CACHE.contains(chapterIndex);
     }
 
     public int getReaderPageTextWidth() {
@@ -1165,10 +1143,7 @@ public final class ReaderContentController {
                 && pageIndex < partial.pages.size()) {
             return Math.max(partial.pages.get(pageIndex).start, 0);
         }
-        List<PageSlice> pages;
-        synchronized (cachedPageSlicesMap) {
-            pages = cachedPageSlicesMap.get(chapterIndex);
-        }
+        List<PageSlice> pages = PAGE_CACHE.get(chapterIndex);
         if (pages != null && !pages.isEmpty()) {
             return Math.max(pages.get(ui.clamp(pageIndex, 0, pages.size() - 1)).start, 0);
         }
@@ -1283,63 +1258,16 @@ public final class ReaderContentController {
         state.totalProcessedBookLength = -1;
     }
 
-    private static void clearAllPageSliceCaches() {
-        synchronized (cachedPageSlicesMap) {
-            cachedPageSlicesMap.clear();
-            cachedPageSlicesByLayout.clear();
-            cachedLayoutSignature = null;
-        }
-    }
-
-    private static void rememberActiveLayoutCacheLocked() {
-        if (cachedLayoutSignature == null) {
-            return;
-        }
-        if (cachedPageSlicesMap.isEmpty()) {
-            cachedPageSlicesByLayout.remove(cachedLayoutSignature);
-        } else {
-            cachedPageSlicesByLayout.put(cachedLayoutSignature, new HashMap<>(cachedPageSlicesMap));
-        }
+    private void clearAllPageSliceCaches() {
+        PAGE_CACHE.clear();
     }
 
     private boolean activateLayoutSignature(ReaderLayoutSignature signature) {
-        if (signature == null) {
-            return false;
-        }
-        synchronized (cachedPageSlicesMap) {
-            if (signature.equals(cachedLayoutSignature)) {
-                return false;
-            }
-            if (cachedLayoutSignature != null
-                    && cachedLayoutSignature.isPaginationCompatibleWith(signature)) {
-                Map<Integer, List<PageSlice>> restored = cachedPageSlicesByLayout.get(signature);
-                if (cachedPageSlicesMap.isEmpty() && restored != null) {
-                    cachedPageSlicesMap.putAll(restored);
-                    Log.d(TAG, "[时序] 恢复兼容布局分页缓存 - chapters=" + restored.size());
-                }
-                cachedPageSlicesByLayout.remove(cachedLayoutSignature);
-                cachedLayoutSignature = signature;
-                rememberActiveLayoutCacheLocked();
-                return false;
-            }
-            rememberCurrentPageAnchor();
-            rememberActiveLayoutCacheLocked();
-            cachedPageSlicesMap.clear();
-            Map<Integer, List<PageSlice>> restored = cachedPageSlicesByLayout.get(signature);
-            if (restored != null) {
-                cachedPageSlicesMap.putAll(restored);
-                Log.d(TAG, "[时序] 恢复布局分页缓存 - chapters=" + restored.size());
-            }
-            cachedLayoutSignature = signature;
-            return true;
-        }
+        return PAGE_CACHE.activate(signature, this::rememberCurrentPageAnchor);
     }
 
     private void putPagesForActiveLayout(int chapterIndex, List<PageSlice> pages) {
-        synchronized (cachedPageSlicesMap) {
-            cachedPageSlicesMap.put(chapterIndex, pages);
-            rememberActiveLayoutCacheLocked();
-        }
+        PAGE_CACHE.put(chapterIndex, pages);
     }
 
     private void clearPartialPagination() {
@@ -1354,17 +1282,7 @@ public final class ReaderContentController {
     }
 
     private boolean hasAnyCachedPagesForChapter(int chapterIndex) {
-        synchronized (cachedPageSlicesMap) {
-            if (cachedPageSlicesMap.containsKey(chapterIndex)) {
-                return true;
-            }
-            for (Map<Integer, List<PageSlice>> pagesByChapter : cachedPageSlicesByLayout.values()) {
-                if (pagesByChapter != null && pagesByChapter.containsKey(chapterIndex)) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        return PAGE_CACHE.hasAny(chapterIndex);
     }
 
     private boolean isProgressivePaginationCancelled(int chapterIndex, int paginationGeneration) {
@@ -1688,10 +1606,8 @@ public final class ReaderContentController {
         } else {
             ensurePaginationCacheMatchesLayout();
         }
-        synchronized (cachedPageSlicesMap) {
-            if (cachedPageSlicesMap.containsKey(chapterIndex)) {
-                return;
-            }
+        if (PAGE_CACHE.contains(chapterIndex)) {
+            return;
         }
         PartialPagination partial = activePartialPagination;
         if ((partial != null && partial.chapterIndex == chapterIndex)
@@ -1988,7 +1904,7 @@ public final class ReaderContentController {
                 paging.invalidatePreparedPagingSnapshots();
             }
             ensurePaginationCacheMatchesLayout();
-            boolean cacheHit = cachedPageSlicesMap.containsKey(chapterIndex);
+            boolean cacheHit = PAGE_CACHE.contains(chapterIndex);
             Log.d(TAG, "[时序] 分页缓存检查 - chapter=" + chapterIndex + " hit=" + cacheHit + " initialReflow=" + completingInitialReflow);
             if (cacheHit) {
                 cancelInitialProgressivePagination(chapterIndex, "cache_hit");

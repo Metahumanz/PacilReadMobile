@@ -20,6 +20,7 @@ import android.widget.Spinner;
 import android.widget.TextView;
 
 import com.metahumanz.pacilread.importer.BookImportService;
+import com.metahumanz.pacilread.importer.BookDuplicateDetector;
 import com.metahumanz.pacilread.model.BookRecord;
 import com.metahumanz.pacilread.model.ReplacementRuleRecord;
 import com.metahumanz.pacilread.storage.JsonDatabase;
@@ -841,19 +842,63 @@ final class SettingsScreenController {
 
     private void importBook(Uri uri) {
         setBusy(true);
+        statusText.setText("正在检查书籍...");
+        executor.execute(() -> {
+            try {
+                BookImportService.PreparedImport prepared = importService.prepareFromUri(uri);
+                List<BookDuplicateDetector.Candidate> existing = new ArrayList<>();
+                for (BookRecord book : databaseHelper.backfillMissingContentHashes()) {
+                    existing.add(new BookDuplicateDetector.Candidate(
+                            "existing-" + book.id, book.title, book.author, book.contentSha256));
+                }
+                List<BookDuplicateDetector.Candidate> incoming = new ArrayList<>();
+                incoming.add(new BookDuplicateDetector.Candidate(
+                        "incoming", prepared.title, prepared.author, prepared.contentSha256));
+                boolean duplicate = !BookDuplicateDetector.detect(existing, incoming).isEmpty();
+                activity.runOnUiThread(() -> {
+                    if (duplicate) {
+                        new AlertDialog.Builder(activity)
+                                .setTitle("发现重复书籍")
+                                .setMessage("《" + prepared.title + "》与书架中的书籍内容或书名作者重复。")
+                                .setNegativeButton("跳过重复", (dialog, which) -> {
+                                    prepared.deleteLocalCopy();
+                                    setBusy(false);
+                                    statusText.setText("已跳过重复书籍");
+                                })
+                                .setPositiveButton("仍然导入", (dialog, which) ->
+                                        continueSettingsImport(prepared))
+                                .setOnCancelListener(dialog -> {
+                                    prepared.deleteLocalCopy();
+                                    setBusy(false);
+                                })
+                                .show();
+                    } else {
+                        continueSettingsImport(prepared);
+                    }
+                });
+            } catch (Exception error) {
+                activity.runOnUiThread(() -> {
+                    setBusy(false);
+                    statusText.setText("导入失败: " + error.getMessage());
+                    showToast("导入失败");
+                });
+            }
+        });
+    }
+
+    private void continueSettingsImport(BookImportService.PreparedImport prepared) {
         statusText.setText("正在导入书籍...");
         executor.execute(() -> {
             try {
-                long bookId = databaseHelper.insertImportedBook(importService.importFromUri(uri, false));
+                long bookId = databaseHelper.insertImportedBook(importService.parsePrepared(prepared, false));
                 activity.runOnUiThread(() -> {
                     setBusy(false);
                     statusText.setText("书籍已导入");
                     showToast("导入成功");
-                    if (host != null) {
-                        host.openReader(bookId);
-                    }
+                    if (host != null) host.openReader(bookId);
                 });
             } catch (Exception error) {
+                prepared.deleteLocalCopy();
                 activity.runOnUiThread(() -> {
                     setBusy(false);
                     statusText.setText("导入失败: " + error.getMessage());

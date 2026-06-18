@@ -19,10 +19,15 @@ public class HsvColorPlaneView extends View {
     private final Paint overlayPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint markerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint markerStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final float[] hsvScratch = new float[3];
 
     private float hue = 210f;
     private float saturation = 0.55f;
     private float value = 0.65f;
+    private float markerRadius;
+    private int shaderWidth = -1;
+    private int shaderHeight = -1;
+    private float shaderHue = Float.NaN;
     private OnColorChangeListener listener;
 
     public HsvColorPlaneView(Context context) {
@@ -47,6 +52,7 @@ public class HsvColorPlaneView extends View {
         markerStrokePaint.setStyle(Paint.Style.STROKE);
         markerStrokePaint.setStrokeWidth(dp(4));
         markerStrokePaint.setColor(0x99000000);
+        markerRadius = dp(7);
         setFocusable(true);
     }
 
@@ -55,11 +61,10 @@ public class HsvColorPlaneView extends View {
     }
 
     public void setColor(int color) {
-        float[] hsv = new float[3];
-        Color.colorToHSV(color, hsv);
-        hue = hsv[0];
-        saturation = clamp01(hsv[1]);
-        value = clamp01(hsv[2]);
+        Color.colorToHSV(color, hsvScratch);
+        hue = hsvScratch[0];
+        saturation = clamp01(hsvScratch[1]);
+        value = clamp01(hsvScratch[2]);
         invalidate();
     }
 
@@ -70,7 +75,10 @@ public class HsvColorPlaneView extends View {
     }
 
     public int getSelectedColor() {
-        return Color.HSVToColor(new float[]{hue, saturation, value});
+        hsvScratch[0] = hue;
+        hsvScratch[1] = saturation;
+        hsvScratch[2] = value;
+        return Color.HSVToColor(hsvScratch);
     }
 
     public float getHue() {
@@ -85,7 +93,25 @@ public class HsvColorPlaneView extends View {
         if (width <= 0 || height <= 0) {
             return;
         }
-        int hueColor = Color.HSVToColor(new float[]{hue, 1f, 1f});
+        updateShadersIfNeeded(width, height);
+        canvas.drawRect(0f, 0f, width, height, planePaint);
+
+        canvas.drawRect(0f, 0f, width, height, overlayPaint);
+
+        float markerX = saturation * width;
+        float markerY = (1f - value) * height;
+        canvas.drawCircle(markerX, markerY, markerRadius, markerStrokePaint);
+        canvas.drawCircle(markerX, markerY, markerRadius, markerPaint);
+    }
+
+    private void updateShadersIfNeeded(int width, int height) {
+        if (width == shaderWidth && height == shaderHeight && hue == shaderHue) {
+            return;
+        }
+        hsvScratch[0] = hue;
+        hsvScratch[1] = 1f;
+        hsvScratch[2] = 1f;
+        int hueColor = Color.HSVToColor(hsvScratch);
         planePaint.setShader(new LinearGradient(
                 0f,
                 0f,
@@ -95,8 +121,6 @@ public class HsvColorPlaneView extends View {
                 hueColor,
                 Shader.TileMode.CLAMP
         ));
-        canvas.drawRect(0f, 0f, width, height, planePaint);
-
         overlayPaint.setShader(new LinearGradient(
                 0f,
                 0f,
@@ -106,13 +130,9 @@ public class HsvColorPlaneView extends View {
                 Color.BLACK,
                 Shader.TileMode.CLAMP
         ));
-        canvas.drawRect(0f, 0f, width, height, overlayPaint);
-
-        float markerX = saturation * width;
-        float markerY = (1f - value) * height;
-        float radius = dp(7);
-        canvas.drawCircle(markerX, markerY, radius, markerStrokePaint);
-        canvas.drawCircle(markerX, markerY, radius, markerPaint);
+        shaderWidth = width;
+        shaderHeight = height;
+        shaderHue = hue;
     }
 
     @Override

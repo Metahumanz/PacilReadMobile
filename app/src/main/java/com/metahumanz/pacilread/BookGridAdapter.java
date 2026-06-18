@@ -16,6 +16,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.HashSet;
+import java.util.Set;
 
 public class BookGridAdapter extends BaseAdapter {
     private static final int TYPE_BOOK = 0;
@@ -24,6 +26,7 @@ public class BookGridAdapter extends BaseAdapter {
     private final LayoutInflater inflater;
     private final DateFormat dateFormat = DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.SIMPLIFIED_CHINESE);
     private final List<BookRecord> books = new ArrayList<>();
+    private final Set<Long> selectedBookIds = new HashSet<>();
     private boolean showAddEntry = true;
 
     public BookGridAdapter(Context context) {
@@ -41,6 +44,12 @@ public class BookGridAdapter extends BaseAdapter {
             return;
         }
         this.showAddEntry = showAddEntry;
+        notifyDataSetChanged();
+    }
+
+    public void setSelectedBookIds(Set<Long> selectedIds) {
+        selectedBookIds.clear();
+        if (selectedIds != null) selectedBookIds.addAll(selectedIds);
         notifyDataSetChanged();
     }
 
@@ -95,12 +104,16 @@ public class BookGridAdapter extends BaseAdapter {
             holder.cover = convertView.findViewById(R.id.image_cover);
             holder.coverFallback = convertView.findViewById(R.id.text_cover_fallback);
             holder.type = convertView.findViewById(R.id.text_type);
+            holder.card = convertView.findViewById(R.id.container_book_card);
             convertView.setTag(holder);
         } else {
             holder = (BookViewHolder) convertView.getTag();
         }
 
         BookRecord book = getItem(position);
+        holder.card.setBackgroundResource(selectedBookIds.contains(book.id)
+                ? R.drawable.bg_book_selected
+                : R.drawable.bg_app_card);
         holder.title.setText(book.title == null || book.title.isBlank() ? "未命名书籍" : book.title);
         holder.author.setText(book.author == null || book.author.isBlank() ? "未知作者" : book.author);
         holder.currentChapter.setText(currentChapterText(book));
@@ -141,5 +154,6 @@ public class BookGridAdapter extends BaseAdapter {
         TextView coverFallback;
         TextView type;
         ImageView cover;
+        View card;
     }
 }

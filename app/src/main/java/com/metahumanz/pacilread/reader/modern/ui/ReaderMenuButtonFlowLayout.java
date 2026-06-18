@@ -6,9 +6,6 @@ import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public final class ReaderMenuButtonFlowLayout extends ViewGroup {
     private final int rowGapPx;
 
@@ -82,54 +79,53 @@ public final class ReaderMenuButtonFlowLayout extends ViewGroup {
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         int availableWidth = Math.max(0, right - left - getPaddingLeft() - getPaddingRight());
         int maxRows = maxRowsForOrientation();
-
-        // First pass: group visible children into rows
-        List<List<View>> rows = new ArrayList<>();
-        List<Integer> rowContentWidths = new ArrayList<>();
-        List<View> currentRow = new ArrayList<>();
-        int currentRowWidth = 0;
+        int rowTop = getPaddingTop();
+        int rowStartIndex = -1;
+        int rowContentWidth = 0;
+        int rowCount = 0;
 
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
             if (child.getVisibility() == GONE) {
                 continue;
             }
+            if (rowStartIndex < 0) {
+                rowStartIndex = i;
+            }
             MarginLayoutParams lp = (MarginLayoutParams) child.getLayoutParams();
             int childWidth = child.getMeasuredWidth() + lp.getMarginStart() + lp.getMarginEnd();
-            if (!currentRow.isEmpty() && currentRowWidth + childWidth > availableWidth && rows.size() + 1 < maxRows) {
-                rows.add(currentRow);
-                rowContentWidths.add(currentRowWidth);
-                currentRow = new ArrayList<>();
-                currentRowWidth = 0;
+            if (rowContentWidth > 0 && rowContentWidth + childWidth > availableWidth && rowCount + 1 < maxRows) {
+                int rowHeight = layoutRow(rowStartIndex, i, rowContentWidth, rowTop, availableWidth);
+                rowTop += rowHeight + rowGapPx;
+                rowCount++;
+                rowStartIndex = i;
+                rowContentWidth = 0;
             }
-            currentRow.add(child);
-            currentRowWidth += childWidth;
+            rowContentWidth += childWidth;
         }
-        if (!currentRow.isEmpty()) {
-            rows.add(currentRow);
-            rowContentWidths.add(currentRowWidth);
+        if (rowStartIndex >= 0) {
+            layoutRow(rowStartIndex, getChildCount(), rowContentWidth, rowTop, availableWidth);
         }
+    }
 
-        // Second pass: layout rows centered horizontally
-        int rowTop = getPaddingTop();
-        for (int rowIdx = 0; rowIdx < rows.size(); rowIdx++) {
-            List<View> rowChildren = rows.get(rowIdx);
-            int rowContentWidth = rowContentWidths.get(rowIdx);
-            int rowStartOffset = (availableWidth - rowContentWidth) / 2;
-
-            int x = getPaddingLeft() + rowStartOffset;
-            int rowHeight = 0;
-            for (View child : rowChildren) {
-                MarginLayoutParams lp = (MarginLayoutParams) child.getLayoutParams();
-                int expandedWidth = child.getMeasuredWidth();
-                int childLeft = x + lp.getMarginStart();
-                int childTop = rowTop + lp.topMargin;
-                child.layout(childLeft, childTop, childLeft + expandedWidth, childTop + child.getMeasuredHeight());
-                x += expandedWidth + lp.getMarginStart() + lp.getMarginEnd();
-                rowHeight = Math.max(rowHeight, child.getMeasuredHeight() + lp.topMargin + lp.bottomMargin);
+    private int layoutRow(int startIndex, int endIndex, int rowContentWidth, int rowTop, int availableWidth) {
+        int rowStartOffset = (availableWidth - rowContentWidth) / 2;
+        int x = getPaddingLeft() + rowStartOffset;
+        int rowHeight = 0;
+        for (int i = startIndex; i < endIndex; i++) {
+            View child = getChildAt(i);
+            if (child.getVisibility() == GONE) {
+                continue;
             }
-            rowTop += rowHeight + rowGapPx;
+            MarginLayoutParams lp = (MarginLayoutParams) child.getLayoutParams();
+            int expandedWidth = child.getMeasuredWidth();
+            int childLeft = x + lp.getMarginStart();
+            int childTop = rowTop + lp.topMargin;
+            child.layout(childLeft, childTop, childLeft + expandedWidth, childTop + child.getMeasuredHeight());
+            x += expandedWidth + lp.getMarginStart() + lp.getMarginEnd();
+            rowHeight = Math.max(rowHeight, child.getMeasuredHeight() + lp.topMargin + lp.bottomMargin);
         }
+        return rowHeight;
     }
 
     @Override

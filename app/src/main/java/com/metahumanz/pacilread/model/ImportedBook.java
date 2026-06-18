@@ -7,6 +7,7 @@ public class ImportedBook {
     public String title;
     public String author;
     public String sourceDisplayName;
+    public String contentSha256;
     public String storedPath;
     public String coverPath;
     public String bookType = "text";

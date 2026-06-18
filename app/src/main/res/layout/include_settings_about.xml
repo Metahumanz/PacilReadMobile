@@ -90,7 +90,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <!-- v1.2.5 日报与统计体验优化 -->
+                <!-- v1.3.0 书架、搜索、分享与听书增强 -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -121,6 +121,80 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
+                            android:text="v1.3.0 — 书架、搜索、分享与听书增强" />
+
+                        <TextView
+                            style="@style/AppChromeCaption"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="end"
+                            android:text="2026-06-18" />
+                    </LinearLayout>
+
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="书架整理与导入导出" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  新增书架管理模式，可多选书籍并批量设置标签、系列和阅读状态" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  标签、系列、阅读状态可与书名作者搜索组合筛选，卡片与列表布局均支持" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  导入前检查内容摘要及书名作者重复，支持将 TXT、EPUB、PDF 原文件批量导出" />
+
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="全文搜索与引用分享" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  全文搜索加入每书持久化索引，返回各章节全部命中并保持精确跳转" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  选中文字可生成带淡化上下文的自适应引用卡，自动跟随主页浅色或深色模式" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  引用卡生成时提供进度提示，分享前可完整预览，并可直接保存原尺寸 PNG" />
+
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="后台听书与性能体验" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  系统 TTS 与 MiMo 支持后台、锁屏持续播放，并可在通知栏暂停、继续或停止" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  新增滑块和精确两种睡眠定时方式，支持跨章节预取下一句" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  优化启动、封面解码、分页缓存和界面绘制，减少等待与重复计算" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="14dp"
+                        android:layout_marginBottom="10dp"
+                        android:background="?attr/themeColorAppBorder" />
+
+                </LinearLayout>
+
+                <!-- v1.2.5 日报与统计体验优化 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            style="@style/AppChromeBodyStrong"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
                             android:text="v1.2.5 — 日报与统计体验优化" />
 
                         <TextView

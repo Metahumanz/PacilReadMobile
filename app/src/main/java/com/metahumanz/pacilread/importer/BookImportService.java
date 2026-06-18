@@ -11,8 +11,10 @@ import com.metahumanz.pacilread.model.ImportedBook;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.security.MessageDigest;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -29,6 +31,16 @@ public class BookImportService {
      * 导入书籍，支持指定 PDF 是否按页拆分。
      */
     public ImportedBook importFromUri(Uri uri, boolean pdfSplitByPage) throws Exception {
+        PreparedImport prepared = prepareFromUri(uri);
+        try {
+            return parsePrepared(prepared, pdfSplitByPage);
+        } catch (Exception error) {
+            prepared.deleteLocalCopy();
+            throw error;
+        }
+    }
+
+    public PreparedImport prepareFromUri(Uri uri) throws Exception {
         String displayName = resolveDisplayName(uri);
         String extension = extensionOf(displayName);
         if (!".txt".equals(extension) && !".epub".equals(extension) && !".pdf".equals(extension)) {
@@ -41,40 +53,60 @@ public class BookImportService {
         }
 
         File localCopy = new File(booksDir, UUID.randomUUID() + extension);
-        try (InputStream inputStream = context.getContentResolver().openInputStream(uri);
-             FileOutputStream outputStream = new FileOutputStream(localCopy)) {
-            if (inputStream == null) {
-                throw new IOException("无法读取导入文件");
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try {
+            try (InputStream inputStream = context.getContentResolver().openInputStream(uri);
+                 FileOutputStream outputStream = new FileOutputStream(localCopy)) {
+                if (inputStream == null) {
+                    throw new IOException("无法读取导入文件");
+                }
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, read);
+                    digest.update(buffer, 0, read);
+                }
             }
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = inputStream.read(buffer)) != -1) {
-                outputStream.write(buffer, 0, read);
-            }
+        } catch (Exception error) {
+            localCopy.delete();
+            throw error;
         }
 
         BookFileNameParser.ParsedName parsedName = BookFileNameParser.parse(displayName);
+        return new PreparedImport(
+                uri,
+                displayName,
+                extension,
+                parsedName.title,
+                parsedName.author,
+                localCopy,
+                toHex(digest.digest())
+        );
+    }
+
+    public ImportedBook parsePrepared(PreparedImport prepared, boolean pdfSplitByPage) throws Exception {
+        if (prepared == null || prepared.localCopy == null || !prepared.localCopy.isFile()) {
+            throw new IOException("导入暂存文件不存在");
+        }
         ImportedBook importedBook = new ImportedBook();
-        importedBook.title = parsedName.title;
-        importedBook.author = parsedName.author;
-        importedBook.sourceDisplayName = displayName;
-        importedBook.storedPath = localCopy.getAbsolutePath();
+        importedBook.title = prepared.title;
+        importedBook.author = prepared.author;
+        importedBook.sourceDisplayName = prepared.displayName;
+        importedBook.contentSha256 = prepared.contentSha256;
+        importedBook.storedPath = prepared.localCopy.getAbsolutePath();
 
         List<ImportedBook.ChapterSeed> parsedChapters;
-        if (".txt".equals(extension)) {
-            try (InputStream inputStream = context.getContentResolver().openInputStream(uri)) {
-                if (inputStream == null) {
-                    throw new IOException("TXT 文件读取失败");
-                }
+        if (".txt".equals(prepared.extension)) {
+            try (InputStream inputStream = new FileInputStream(prepared.localCopy)) {
                 parsedChapters = TxtChapterParser.parse(inputStream);
             }
             importedBook.bookType = "text";
-        } else if (".pdf".equals(extension)) {
-            parsedChapters = PdfChapterParser.parse(localCopy, pdfSplitByPage);
+        } else if (".pdf".equals(prepared.extension)) {
+            parsedChapters = PdfChapterParser.parse(prepared.localCopy, pdfSplitByPage);
             importedBook.bookType = "pdf";
         } else {
-            parsedChapters = EpubChapterParser.parse(localCopy);
-            File coverFile = EpubChapterParser.extractCover(context, localCopy, "epub_cover");
+            parsedChapters = EpubChapterParser.parse(prepared.localCopy);
+            File coverFile = EpubChapterParser.extractCover(context, prepared.localCopy, "epub_cover");
             if (coverFile != null) {
                 importedBook.coverPath = coverFile.getAbsolutePath();
             }
@@ -82,6 +114,53 @@ public class BookImportService {
         }
         importedBook.chapters.addAll(parsedChapters);
         return importedBook;
+    }
+
+    public String sha256(File file) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (InputStream input = new FileInputStream(file)) {
+            byte[] buffer = new byte[16 * 1024];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                digest.update(buffer, 0, read);
+            }
+        }
+        return toHex(digest.digest());
+    }
+
+    private static String toHex(byte[] bytes) {
+        StringBuilder result = new StringBuilder(bytes.length * 2);
+        for (byte value : bytes) {
+            result.append(String.format(Locale.ROOT, "%02x", value & 0xff));
+        }
+        return result.toString();
+    }
+
+    public static final class PreparedImport {
+        public final Uri sourceUri;
+        public final String displayName;
+        public final String extension;
+        public final String title;
+        public final String author;
+        public final File localCopy;
+        public final String contentSha256;
+
+        private PreparedImport(Uri sourceUri, String displayName, String extension,
+                               String title, String author, File localCopy, String contentSha256) {
+            this.sourceUri = sourceUri;
+            this.displayName = displayName;
+            this.extension = extension;
+            this.title = title;
+            this.author = author;
+            this.localCopy = localCopy;
+            this.contentSha256 = contentSha256;
+        }
+
+        public void deleteLocalCopy() {
+            if (localCopy != null && localCopy.isFile()) {
+                localCopy.delete();
+            }
+        }
     }
 
     private String resolveDisplayName(Uri uri) {

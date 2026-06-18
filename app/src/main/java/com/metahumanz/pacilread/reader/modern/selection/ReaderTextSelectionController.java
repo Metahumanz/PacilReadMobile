@@ -1,10 +1,15 @@
 package com.metahumanz.pacilread.reader.modern.selection;
 
+import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
+import android.graphics.Color;
 import android.graphics.RectF;
 import android.graphics.drawable.ColorDrawable;
+import android.net.Uri;
 import android.os.Build;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
@@ -12,9 +17,15 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
+import android.widget.ProgressBar;
+import android.widget.ScrollView;
+import android.widget.TextView;
 
 import com.metahumanz.pacilread.R;
 import com.metahumanz.pacilread.reader.JustifiedPageTextView;
@@ -27,6 +38,8 @@ import com.metahumanz.pacilread.reader.modern.ReaderViewRefs;
 import com.metahumanz.pacilread.reader.modern.content.ReaderContentController;
 import com.metahumanz.pacilread.reader.modern.dialog.ReaderLibraryDialogs;
 import com.metahumanz.pacilread.reader.modern.tts.ReaderTtsController;
+import com.metahumanz.pacilread.reader.share.QuoteShareCard;
+import com.metahumanz.pacilread.theme.ThemeModeHelper;
 import com.metahumanz.pacilread.ui.PredictiveBackScaleController;
 
 import java.text.BreakIterator;
@@ -38,6 +51,7 @@ public final class ReaderTextSelectionController {
     private static final int HANDLE_NONE = 0;
     private static final int HANDLE_START = 1;
     private static final int HANDLE_END = 2;
+    private static final int REQUEST_SAVE_QUOTE_CARD = 2002;
 
     private final ModernReaderActivity activity;
     private final ReaderRuntime runtime;
@@ -65,6 +79,7 @@ public final class ReaderTextSelectionController {
     private int selectionStart;
     private int selectionEnd;
     private int draggingHandle = HANDLE_NONE;
+    private QuoteShareCard.GeneratedCard pendingSaveCard;
 
     public ReaderTextSelectionController(
             ModernReaderActivity activity,
@@ -489,11 +504,12 @@ public final class ReaderTextSelectionController {
         container.setPadding(ui.dp(8), ui.dp(7), ui.dp(8), ui.dp(7));
         container.setBackgroundResource(R.drawable.bg_reader_menu_panel_solid);
 
-        // Row 1: 复制 | 替换
+        // Row 1: 复制 | 分享 | 替换
         LinearLayout row1 = new LinearLayout(activity);
         row1.setOrientation(LinearLayout.HORIZONTAL);
         row1.setGravity(Gravity.CENTER);
         row1.addView(createActionButton("复制", this::copySelection, true));
+        row1.addView(createActionButton("分享", this::shareSelection, true));
         row1.addView(createActionButton("替换", this::replaceSelection, false));
         container.addView(row1);
 
@@ -572,6 +588,215 @@ public final class ReaderTextSelectionController {
         }
         clearSelection();
         libraryDialogs.showRulesDialog(text);
+    }
+
+    private void shareSelection() {
+        String text = selectedText();
+        if (text.isEmpty() || activeTarget == null) return;
+        int chapterIndex = activeTarget.chapterIndex;
+        int chapterStart = selectedChapterOffset();
+        String chapterText = content.getProcessedChapterText(chapterIndex);
+        QuoteShareCard.ContextExcerpt excerpt = QuoteShareCard.contextExcerpt(
+                chapterText, chapterStart, chapterStart + text.length());
+        String title = state.book == null ? "" : state.book.title;
+        String author = state.book == null ? "" : state.book.author;
+        String chapter = chapterIndex >= 0 && chapterIndex < state.chapters.size()
+                ? state.chapters.get(chapterIndex).title : "";
+        clearSelection();
+        AlertDialog progressDialog = showShareGenerationDialog();
+        runtime.safeExecute(() -> {
+            try {
+                QuoteShareCard.GeneratedCard card = QuoteShareCard.generate(
+                        activity, text, excerpt.before, excerpt.after, title, author, chapter);
+                if (!activity.isReaderActive()) {
+                    card.recyclePreview();
+                    return;
+                }
+                activity.runOnReaderUiThread(() -> {
+                    progressDialog.dismiss();
+                    showSharePreview(card);
+                });
+            } catch (Exception error) {
+                activity.runOnReaderUiThread(() -> {
+                    progressDialog.dismiss();
+                    ui.showToast("生成分享卡失败: " + error.getMessage());
+                });
+            }
+        }, "render quote share card");
+    }
+
+    private AlertDialog showShareGenerationDialog() {
+        LinearLayout contentView = new LinearLayout(activity);
+        contentView.setOrientation(LinearLayout.HORIZONTAL);
+        contentView.setGravity(Gravity.CENTER_VERTICAL);
+        contentView.setPadding(ui.dp(22), ui.dp(18), ui.dp(22), ui.dp(18));
+
+        ProgressBar progress = new ProgressBar(activity);
+        contentView.addView(progress, new LinearLayout.LayoutParams(ui.dp(32), ui.dp(32)));
+
+        TextView message = new TextView(activity);
+        message.setText("正在整理上下文并生成分享图片…");
+        message.setTextColor(ui.themeColor(R.color.on_surface));
+        message.setTextSize(14f);
+        LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        messageParams.setMarginStart(ui.dp(14));
+        contentView.addView(message, messageParams);
+
+        AlertDialog dialog = new AlertDialog.Builder(activity)
+                .setView(contentView)
+                .setCancelable(false)
+                .create();
+        dialog.setCanceledOnTouchOutside(false);
+        dialog.show();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(R.drawable.bg_app_dialog);
+        }
+        return dialog;
+    }
+
+    private void showSharePreview(QuoteShareCard.GeneratedCard card) {
+        if (card == null || card.bitmap == null || card.bitmap.isRecycled()) {
+            ui.showToast("分享图片预览失败");
+            return;
+        }
+
+        ScrollView scrollView = new ScrollView(activity);
+        scrollView.setFillViewport(false);
+        scrollView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        scrollView.setVerticalScrollBarEnabled(false);
+
+        LinearLayout contentView = new LinearLayout(activity);
+        contentView.setOrientation(LinearLayout.VERTICAL);
+        contentView.setBackgroundResource(R.drawable.bg_app_dialog);
+        int padding = ui.dp(18);
+        contentView.setPadding(padding, padding, padding, padding);
+        scrollView.addView(contentView, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        TextView titleView = new TextView(activity);
+        titleView.setText("分享图片预览");
+        titleView.setTextColor(ThemeModeHelper.resolveColor(activity, R.color.app_text_primary));
+        titleView.setTextSize(24f);
+        titleView.setTypeface(null, android.graphics.Typeface.BOLD);
+        contentView.addView(titleView);
+
+        TextView detailView = new TextView(activity);
+        detailView.setText("完整图片 · " + card.bitmap.getWidth() + " × " + card.bitmap.getHeight() + " PNG");
+        detailView.setTextColor(ThemeModeHelper.resolveColor(activity, R.color.app_text_muted));
+        detailView.setTextSize(13f);
+        LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        detailParams.setMargins(0, ui.dp(4), 0, 0);
+        contentView.addView(detailView, detailParams);
+
+        FrameLayout previewFrame = new FrameLayout(activity);
+        previewFrame.setPadding(ui.dp(10), ui.dp(10), ui.dp(10), ui.dp(10));
+        previewFrame.setBackgroundResource(R.drawable.bg_app_card);
+        int availableWidth = Math.max(ui.dp(240),
+                activity.getResources().getDisplayMetrics().widthPixels - ui.dp(72));
+        int scaledHeight = Math.round(availableWidth
+                * (card.bitmap.getHeight() / (float) card.bitmap.getWidth())) + ui.dp(20);
+        int previewHeight = Math.max(ui.dp(180), Math.min(ui.dp(520), scaledHeight));
+        LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, previewHeight);
+        previewParams.setMargins(0, ui.dp(16), 0, 0);
+
+        ImageView previewImage = new ImageView(activity);
+        previewImage.setAdjustViewBounds(true);
+        previewImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        previewImage.setImageBitmap(card.bitmap);
+        previewFrame.addView(previewImage, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER));
+        contentView.addView(previewFrame, previewParams);
+
+        LinearLayout actionRow = new LinearLayout(activity);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams actionParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        actionParams.setMargins(0, ui.dp(16), 0, 0);
+        Button saveButton = previewActionButton("保存到本地", false);
+        Button shareButton = previewActionButton("分享", true);
+        actionRow.addView(saveButton, weightedPreviewButtonParams(0));
+        actionRow.addView(shareButton, weightedPreviewButtonParams(ui.dp(10)));
+        contentView.addView(actionRow, actionParams);
+
+        Button closeButton = previewActionButton("关闭", false);
+        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        closeParams.setMargins(0, ui.dp(12), 0, 0);
+        contentView.addView(closeButton, closeParams);
+
+        AlertDialog dialog = new AlertDialog.Builder(activity).setView(scrollView).create();
+        saveButton.setOnClickListener(v -> saveShareCard(card));
+        shareButton.setOnClickListener(v -> {
+            try {
+                activity.startActivity(QuoteShareCard.createShareIntent(card));
+            } catch (Exception error) {
+                ui.showToast("分享失败: " + error.getMessage());
+            }
+        });
+        closeButton.setOnClickListener(v -> dialog.dismiss());
+        dialog.setOnDismissListener(unused -> {
+            previewImage.setImageDrawable(null);
+            card.recyclePreview();
+        });
+        dialog.show();
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        }
+    }
+
+    private Button previewActionButton(String text, boolean primary) {
+        Button button = new Button(activity);
+        button.setText(text);
+        button.setAllCaps(false);
+        button.setMinHeight(ui.dp(52));
+        button.setMinimumHeight(ui.dp(52));
+        button.setTextSize(15f);
+        button.setGravity(Gravity.CENTER);
+        button.setPadding(ui.dp(12), ui.dp(8), ui.dp(12), ui.dp(8));
+        button.setBackgroundResource(primary
+                ? R.drawable.bg_app_primary_button : R.drawable.bg_app_outline_button);
+        button.setTextColor(ThemeModeHelper.resolveColor(activity,
+                primary ? R.color.app_button_primary_text : R.color.app_button_outline_text));
+        return button;
+    }
+
+    private LinearLayout.LayoutParams weightedPreviewButtonParams(int marginStart) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        params.setMargins(marginStart, 0, 0, 0);
+        return params;
+    }
+
+    private void saveShareCard(QuoteShareCard.GeneratedCard card) {
+        pendingSaveCard = card;
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/png");
+        intent.putExtra(Intent.EXTRA_TITLE, card.fileName());
+        activity.startActivityForResult(intent, REQUEST_SAVE_QUOTE_CARD);
+    }
+
+    public boolean onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode != REQUEST_SAVE_QUOTE_CARD) return false;
+        QuoteShareCard.GeneratedCard card = pendingSaveCard;
+        pendingSaveCard = null;
+        if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null || card == null) {
+            return true;
+        }
+        Uri destination = data.getData();
+        runtime.safeExecute(() -> {
+            try {
+                card.writeTo(activity, destination);
+                activity.runOnReaderUiThread(() -> ui.showToast("分享图片已保存"));
+            } catch (Exception error) {
+                activity.runOnReaderUiThread(() -> ui.showToast("保存失败: " + error.getMessage()));
+            }
+        }, "save quote share card");
+        return true;
     }
 
     private void searchSelection() {

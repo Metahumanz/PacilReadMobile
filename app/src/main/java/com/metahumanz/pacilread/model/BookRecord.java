@@ -20,6 +20,8 @@ public class BookRecord {
     public String localPath;
     public String coverPath;
     public String bookType;
+    public String sourceDisplayName;
+    public String contentSha256;
     public String readingStatsKey;
     public int progressIndex;
     public int progressOffset;
@@ -42,6 +44,8 @@ public class BookRecord {
             json.put("title", title != null ? title : "");
             json.put("author", author != null ? author : "");
             json.put("bookType", bookType != null ? bookType : "text");
+            json.put("sourceDisplayName", sourceDisplayName != null ? sourceDisplayName : "");
+            json.put("contentSha256", contentSha256 != null ? contentSha256 : "");
             json.put("readingStatsKey", readingStatsKey != null ? readingStatsKey : "");
             json.put("progressIndex", progressIndex);
             json.put("progressOffset", progressOffset);
@@ -83,6 +87,8 @@ public class BookRecord {
         book.title = json.optString("title", "");
         book.author = json.optString("author", "");
         book.bookType = json.optString("bookType", "text");
+        book.sourceDisplayName = json.optString("sourceDisplayName", "");
+        book.contentSha256 = json.optString("contentSha256", "");
         book.readingStatsKey = json.optString("readingStatsKey", "");
         book.progressIndex = json.optInt("progressIndex", 0);
         book.progressOffset = json.optInt("progressOffset", 0);
@@ -120,6 +126,8 @@ public class BookRecord {
                 source.readingStatus,
                 hasReadingProgress(progressIndex, progressOffset, lastReadAt)
         );
+        sourceDisplayName = source.sourceDisplayName != null ? source.sourceDisplayName : "";
+        contentSha256 = source.contentSha256 != null ? source.contentSha256 : "";
         extraJson = cloneJson(source.extraJson);
     }
 
@@ -204,6 +212,8 @@ public class BookRecord {
                 || "localPath".equals(key)
                 || "coverPath".equals(key)
                 || "bookType".equals(key)
+                || "sourceDisplayName".equals(key)
+                || "contentSha256".equals(key)
                 || "readingStatsKey".equals(key)
                 || "progressIndex".equals(key)
                 || "progressOffset".equals(key)
