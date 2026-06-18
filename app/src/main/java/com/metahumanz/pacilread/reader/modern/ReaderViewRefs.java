@@ -35,6 +35,11 @@ public final class ReaderViewRefs {
     public final View pageFoldShadow;
     public final View pageFoldHighlight;
     public final ImageView readerBackgroundImage;
+    public final View remoteProgressBanner;
+    public final TextView remoteProgressTitle;
+    public final TextView remoteProgressDetail;
+    public final Button keepLocalProgressButton;
+    public final Button jumpRemoteProgressButton;
     public final TextView hudTopLeft;
     public final TextView hudTopCenter;
     public final TextView hudTopRight;
@@ -81,6 +86,11 @@ public final class ReaderViewRefs {
         pageFoldShadow = activity.findViewById(R.id.view_page_fold_shadow);
         pageFoldHighlight = activity.findViewById(R.id.view_page_fold_highlight);
         readerBackgroundImage = activity.findViewById(R.id.reader_background_image);
+        remoteProgressBanner = activity.findViewById(R.id.remote_progress_banner);
+        remoteProgressTitle = activity.findViewById(R.id.text_remote_progress_title);
+        remoteProgressDetail = activity.findViewById(R.id.text_remote_progress_detail);
+        keepLocalProgressButton = activity.findViewById(R.id.button_keep_local_progress);
+        jumpRemoteProgressButton = activity.findViewById(R.id.button_jump_remote_progress);
         hudTopContainer = activity.findViewById(R.id.hud_container_top);
         hudBottomContainer = activity.findViewById(R.id.hud_container_bottom);
         hudTopLeft = activity.findViewById(R.id.text_hud_top_left);

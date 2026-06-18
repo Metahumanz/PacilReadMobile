@@ -241,6 +241,86 @@
             android:visibility="gone" />
     </FrameLayout>
 
+    <LinearLayout
+        android:id="@+id/remote_progress_banner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:layout_marginLeft="12dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginRight="12dp"
+        android:background="@drawable/bg_reader_menu_panel_solid"
+        android:elevation="12dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingLeft="14dp"
+        android:paddingTop="10dp"
+        android:paddingRight="10dp"
+        android:paddingBottom="10dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/text_remote_progress_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="?attr/themeColorReaderMenuText"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/text_remote_progress_detail"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="?attr/themeColorReaderMenuTextMuted"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/button_keep_local_progress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="8dp"
+            android:background="@drawable/bg_reader_menu_button_solid"
+            android:minWidth="0dp"
+            android:minHeight="40dp"
+            android:paddingLeft="11dp"
+            android:paddingTop="8dp"
+            android:paddingRight="11dp"
+            android:paddingBottom="8dp"
+            android:text="留在这里"
+            android:textAllCaps="false"
+            android:textColor="?attr/themeColorReaderMenuButtonText"
+            android:textSize="11sp" />
+
+        <Button
+            android:id="@+id/button_jump_remote_progress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="6dp"
+            android:background="@drawable/bg_reader_menu_button_active"
+            android:minWidth="0dp"
+            android:minHeight="40dp"
+            android:paddingLeft="12dp"
+            android:paddingTop="8dp"
+            android:paddingRight="12dp"
+            android:paddingBottom="8dp"
+            android:text="跳转"
+            android:textAllCaps="false"
+            android:textColor="?attr/themeColorReaderMenuButtonActiveText"
+            android:textSize="11sp" />
+    </LinearLayout>
+
     <!-- HUD Top -->
     <FrameLayout
         android:id="@+id/hud_container_top"

@@ -100,6 +100,7 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     private Runnable readerEnterForegroundFadeRunnable;
     private LaunchSourceTransition.Source launchSource;
     private long lastScrollPageTurnTime;
+    private boolean remoteProgressBannerTouch;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -260,6 +261,9 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     @Override
     protected void onDestroy() {
         readerDestroyed = true;
+        if (content != null) {
+            content.releasePendingRemoteProgressSuggestion();
+        }
         super.onDestroy();
         cancelReaderForegroundTransition();
         if (sysMetricsReceiver != null) {
@@ -311,6 +315,16 @@ public class ModernReaderActivity extends ThemedReaderActivity {
     public boolean dispatchTouchEvent(MotionEvent event) {
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
             markReadingActivity();
+            remoteProgressBannerTouch = views.remoteProgressBanner.getVisibility() == View.VISIBLE
+                    && chrome.isInsideView(event, views.remoteProgressBanner);
+        }
+        if (remoteProgressBannerTouch) {
+            boolean handled = super.dispatchTouchEvent(event);
+            if (event.getActionMasked() == MotionEvent.ACTION_UP
+                    || event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                remoteProgressBannerTouch = false;
+            }
+            return handled;
         }
         if (selection != null && selection.handleTouchEvent(event)) {
             return true;
