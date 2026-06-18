@@ -6,16 +6,18 @@ PacilRead 的纯原生 Android 版本，包名为 `com.metahumanz.pacilread`。
 
 ## 功能概览
 
-- 本地书架
+- 本地书架，支持标签、系列、阅读状态筛选与批量管理
 - TXT / EPUB / PDF 导入
+- 导入重复检测与原文件批量导出
 - 自定义封面
 - 阅读页分页显示
-- 目录与全文搜索
+- 目录与带持久化索引的全文搜索
+- 选中文字生成引用分享卡
 - 替换规则系统
 - 自定义主题与背景图
 - 多种翻页动画
 - 自动翻页
-- Android 原生 TTS / 小米 MiMo 听书
+- Android 原生 TTS / 小米 MiMo 后台听书、通知栏控制与睡眠定时
 - WebDAV 进度同步
 - WebDAV 全量 / 增量备份恢复
 - 浅色 / 深色资源适配
@@ -148,9 +150,15 @@ keyPassword=你的 key 密码
 - **本地系统 TTS**：使用 Android 设备自带的语音合成服务，无需联网。
 - **小米 MiMo**：使用 `mimo-v2.5-tts` 云端 TTS，需要在设置页配置 API Key。阅读页听书面板可在 `冰糖`、`茉莉`、`苏打`、`白桦` 4 种中文内置音色间切换。实现类为 `com.metahumanz.pacilread.tts.MimoTtsClient`。
 - **分句逻辑**：所有引擎均采用与 Win11 版一致的分句正则，确保跨平台听书节奏统一。
+- **后台播放**：听书由媒体前台服务承载，支持锁屏和通知栏暂停、继续、停止。
+- **睡眠定时**：支持 5 分钟步进滑块和时分秒精确滚轮，两种方式共用一次性倒计时。
 
 ## 项目结构
 
 - `app/` Android 应用主模块
 - `app/src/main/java/` Java 源码根目录，主包声明统一为 `com.metahumanz.pacilread`
 - `app/src/main/res/` 资源文件
+
+## 数据存储
+
+当前版本使用 JSON 文件作为唯一应用数据源，目录位于应用私有 `files/database/`；章节正文外置为 gzip 文本文件，位于 `files/chapter_text/`。旧版 SQLite `reader.db` 不再参与启动或迁移。
