@@ -1,7 +1,6 @@
 package com.metahumanz.pacilread.storage;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 
 import com.metahumanz.pacilread.BuildConfig;
 
@@ -17,8 +16,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -34,8 +31,6 @@ public class SnapshotManager {
     private static final String SNAPSHOT_DIR = "snapshots";
     private static final String BUNDLE_FILE = "bundle.zip";
     private static final String MANIFEST_FILE = "manifest.json";
-    private static final String PREFS_NAME = "pacil_read_snapshots";
-    private static final String KEY_LAST_DAILY_SNAPSHOT_DATE = "last_daily_snapshot_date";
 
     private static final String ENTRY_ANDROID_SETTINGS = "android-settings.json";
     private static final String DATABASE_PREFIX = "database/";
@@ -104,17 +99,6 @@ public class SnapshotManager {
             writer.write(manifest.toString(2));
         }
         return Snapshot.fromManifest(manifest, bundle.length());
-    }
-
-    public Snapshot createDailyStartupSnapshotIfNeeded() throws Exception {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        String today = LocalDate.now(ZoneId.systemDefault()).toString();
-        if (today.equals(prefs.getString(KEY_LAST_DAILY_SNAPSHOT_DATE, ""))) {
-            return null;
-        }
-        Snapshot snapshot = createSnapshot("daily-startup");
-        prefs.edit().putString(KEY_LAST_DAILY_SNAPSHOT_DATE, today).apply();
-        return snapshot;
     }
 
     public List<Snapshot> listSnapshots() {

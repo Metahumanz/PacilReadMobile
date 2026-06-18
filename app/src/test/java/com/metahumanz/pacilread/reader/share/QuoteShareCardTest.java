@@ -12,8 +12,8 @@ public class QuoteShareCardTest {
         QuoteShareCard.ContextExcerpt excerpt = QuoteShareCard.contextExcerpt(
                 "前面的文字。这里是选中的文字。后面的文字。", 6, 14);
 
-        assertEquals("前面的文字。", excerpt.before);
-        assertEquals("。后面的文字。", excerpt.after);
+        assertEquals("面的文字。", excerpt.before);
+        assertEquals("。后面的文", excerpt.after);
     }
 
     @Test
@@ -21,12 +21,12 @@ public class QuoteShareCardTest {
         String source = "选中" + "后".repeat(120);
         QuoteShareCard.ContextExcerpt atStart = QuoteShareCard.contextExcerpt(source, 0, 2);
         assertTrue(atStart.before.isEmpty());
-        assertEquals(40, atStart.after.length());
+        assertEquals(5, atStart.after.length());
 
         String longBefore = "前".repeat(120) + "选中";
         QuoteShareCard.ContextExcerpt atEnd = QuoteShareCard.contextExcerpt(
                 longBefore, longBefore.length() - 2, longBefore.length());
-        assertEquals(40, atEnd.before.length());
+        assertEquals(5, atEnd.before.length());
         assertFalse(atEnd.before.isEmpty());
         assertTrue(atEnd.after.isEmpty());
     }

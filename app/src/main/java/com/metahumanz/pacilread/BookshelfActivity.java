@@ -124,7 +124,6 @@ public class BookshelfActivity extends ThemedActivity {
     private int progressPrefetchCurrent;
     private int progressPrefetchTotal;
     private boolean progressPrefetchFailed;
-    private long openingBookAfterProgressSyncId = -1L;
     private PopupWindow bookActionsPopup;
     private boolean bookshelfManagementMode;
     private String selectedTagFilter = "";
@@ -1131,62 +1130,7 @@ public class BookshelfActivity extends ThemedActivity {
         if (!isBookshelfActive()) {
             return;
         }
-        if (shouldSyncProgressBeforeOpen(bookId)) {
-            syncProgressThenOpenBook(bookId, sourceView);
-            return;
-        }
         launchReader(bookId, sourceView);
-    }
-
-    private boolean shouldSyncProgressBeforeOpen(long bookId) {
-        return bookId > 0
-                && settingsStore != null
-                && settingsStore.isWebDavEnabled()
-                && progressSyncCoordinator != null
-                && !WebDavProgressSyncCoordinator.isProgressFresh(bookId);
-    }
-
-    private void syncProgressThenOpenBook(long bookId, View sourceView) {
-        if (openingBookAfterProgressSyncId > 0) {
-            return;
-        }
-        openingBookAfterProgressSyncId = bookId;
-        showLoading("正在同步阅读进度...");
-        boolean scheduled = safeExecute(() -> {
-            boolean failed = false;
-            try {
-                BookRecord book = databaseHelper.getBook(bookId);
-                if (book != null) {
-                    WebDavProgressSyncCoordinator.SyncResult result =
-                            progressSyncCoordinator.syncBookProgressIfNeeded(snapshotBookForProgressPrefetch(book));
-                    if (result.remoteApplied || result.skippedFresh) {
-                        BookRecord latestBook = databaseHelper.getBook(bookId);
-                        if (latestBook != null) {
-                            runOnBookshelfUiThread(() -> applyRemoteProgressToBookItem(latestBook));
-                        }
-                    }
-                }
-            } catch (Exception error) {
-                failed = true;
-                Log.d(TAG, "WebDAV progress sync before opening book failed for book " + bookId, error);
-            }
-            boolean showFailureHint = failed;
-            runOnBookshelfUiThread(() -> {
-                if (openingBookAfterProgressSyncId == bookId) {
-                    openingBookAfterProgressSyncId = -1L;
-                }
-                hideLoading();
-                if (showFailureHint) {
-                    showToast("云端进度同步失败，已使用本地进度打开");
-                }
-                launchReader(bookId, sourceView);
-            });
-        }, "sync progress before opening book");
-        if (!scheduled) {
-            openingBookAfterProgressSyncId = -1L;
-            hideLoading();
-            launchReader(bookId, sourceView);
-        }
     }
 
     private void launchReader(long bookId, View sourceView) {

@@ -996,6 +996,99 @@ public class JsonDatabase {
         }
     }
 
+    /**
+     * 流式读取章节进度附近的一小段文字，避免仅为提示文案完整解压超长章节。
+     */
+    public String getChapterTextExcerpt(long chapterId, int charOffset, int maxChars) {
+        ensureLoaded();
+        ChapterRecord chapter;
+        String cached;
+        lock.readLock().lock();
+        try {
+            ChapterRecord source = chapterById.get(chapterId);
+            if (source == null) {
+                return "";
+            }
+            cached = decompressedTextCache.get(chapterId);
+            chapter = new ChapterRecord();
+            chapter.bodyText = source.bodyText;
+            chapter.bodyTextPath = source.bodyTextPath;
+            chapter.bodyTextStorage = source.bodyTextStorage;
+        } finally {
+            lock.readLock().unlock();
+        }
+
+        int safeMaxChars = Math.max(16, Math.min(maxChars, 160));
+        int safeOffset = Math.max(charOffset, 0);
+        int excerptStart = Math.max(0, safeOffset - safeMaxChars / 3);
+        if (cached != null && !cached.isEmpty()) {
+            return textExcerpt(cached, excerptStart, safeMaxChars);
+        }
+        if (!"file_gzip".equals(chapter.bodyTextStorage)
+                || chapter.bodyTextPath == null
+                || chapter.bodyTextPath.isEmpty()) {
+            return textExcerpt(chapter.bodyText, excerptStart, safeMaxChars);
+        }
+
+        File file = resolveChapterTextFile(chapter.bodyTextPath);
+        if (file == null || !file.exists()) {
+            return "";
+        }
+        try (java.io.FileInputStream input = new java.io.FileInputStream(file);
+             java.util.zip.GZIPInputStream gzip = new java.util.zip.GZIPInputStream(input);
+             java.io.InputStreamReader reader = new java.io.InputStreamReader(gzip, StandardCharsets.UTF_8)) {
+            long remaining = excerptStart;
+            while (remaining > 0) {
+                long skipped = reader.skip(remaining);
+                if (skipped > 0) {
+                    remaining -= skipped;
+                    continue;
+                }
+                if (reader.read() == -1) {
+                    return "";
+                }
+                remaining--;
+            }
+            char[] buffer = new char[safeMaxChars + 1];
+            int total = 0;
+            while (total < buffer.length) {
+                int read = reader.read(buffer, total, buffer.length - total);
+                if (read == -1) {
+                    break;
+                }
+                total += read;
+            }
+            int visibleLength = Math.min(total, safeMaxChars);
+            String excerpt = new String(buffer, 0, visibleLength)
+                    .replaceAll("\\s+", " ")
+                    .trim();
+            if (excerpt.isEmpty()) {
+                return "";
+            }
+            return (excerptStart > 0 ? "…" : "")
+                    + excerpt
+                    + (total > safeMaxChars ? "…" : "");
+        } catch (Exception error) {
+            Log.w(TAG, "流式读取章节摘要失败: chapter=" + chapterId, error);
+            return "";
+        }
+    }
+
+    private String textExcerpt(String text, int excerptStart, int maxChars) {
+        if (text == null || text.isEmpty()) {
+            return "";
+        }
+        int safeStart = Math.min(Math.max(excerptStart, 0), text.length());
+        int end = Math.min(text.length(), safeStart + maxChars);
+        String excerpt = text.substring(safeStart, end)
+                .replaceAll("\\s+", " ")
+                .trim();
+        if (excerpt.isEmpty()) {
+            return "";
+        }
+        return (safeStart > 0 ? "…" : "") + excerpt + (end < text.length() ? "…" : "");
+    }
+
     public List<ChapterRecord> getChaptersWithExternalStorage(long bookId) {
         ensureLoaded();
         lock.readLock().lock();

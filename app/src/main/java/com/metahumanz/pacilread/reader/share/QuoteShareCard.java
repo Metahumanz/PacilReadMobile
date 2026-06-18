@@ -28,7 +28,7 @@ public final class QuoteShareCard {
     private static final int HORIZONTAL_PADDING = 96;
     private static final int QUOTE_TOP = 222;
     private static final int TARGET_QUOTE_HEIGHT = 1720;
-    private static final int CONTEXT_LIMIT = 40;
+    private static final int CONTEXT_LIMIT = 5;
     private static final long CACHE_MAX_AGE_MILLIS = 24L * 60L * 60L * 1000L;
 
     private QuoteShareCard() {

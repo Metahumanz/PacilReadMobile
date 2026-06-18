@@ -8,7 +8,6 @@ import android.util.Log;
 
 import com.metahumanz.pacilread.storage.JsonDatabase;
 import com.metahumanz.pacilread.storage.SettingsStore;
-import com.metahumanz.pacilread.storage.SnapshotManager;
 import com.metahumanz.pacilread.theme.ThemedActivity;
 
 import java.util.concurrent.ExecutorService;
@@ -55,7 +54,6 @@ public class SplashActivity extends ThemedActivity {
                         startActivity(intent);
                         finish();
                     });
-                    createDailyStartupSnapshot(databaseHelper, settingsStore);
                 } catch (Exception error) {
                     Log.w(TAG, "Auto-open startup failed, opening bookshelf", error);
                     handler.post(() -> {
@@ -71,23 +69,6 @@ public class SplashActivity extends ThemedActivity {
                 startActivity(new Intent(SplashActivity.this, BookshelfActivity.class));
                 finish();
             });
-            splashExecutor.execute(() -> {
-                try {
-                    JsonDatabase databaseHelper = JsonDatabase.getInstance(SplashActivity.this);
-                    createDailyStartupSnapshot(databaseHelper, settingsStore);
-                } catch (Exception error) {
-                    Log.w(TAG, "Daily startup snapshot failed", error);
-                }
-            });
-        }
-    }
-
-    private void createDailyStartupSnapshot(JsonDatabase databaseHelper, SettingsStore settingsStore) {
-        try {
-            new SnapshotManager(getApplicationContext(), databaseHelper, settingsStore)
-                    .createDailyStartupSnapshotIfNeeded();
-        } catch (Exception error) {
-            Log.w(TAG, "Daily startup snapshot failed", error);
         }
     }
 

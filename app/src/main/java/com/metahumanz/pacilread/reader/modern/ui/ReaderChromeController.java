@@ -180,6 +180,13 @@ public final class ReaderChromeController {
                 0
         );
         updateFrameLayoutMargins(
+                views.remoteProgressBanner,
+                ui.dp(12) + state.systemInsetLeft,
+                ui.dp(12) + state.systemInsetTop,
+                ui.dp(12) + state.systemInsetRight,
+                0
+        );
+        updateFrameLayoutMargins(
                 views.menuInfoPanel,
                 ui.dp(10) + state.systemInsetLeft,
                 0,

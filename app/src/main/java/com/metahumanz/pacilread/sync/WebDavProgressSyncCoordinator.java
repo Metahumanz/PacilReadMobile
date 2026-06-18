@@ -88,6 +88,52 @@ public final class WebDavProgressSyncCoordinator {
         }
     }
 
+    /**
+     * 只检查云端进度，不改写本地数据库。阅读页用它在后台取得候选位置，
+     * 再把是否跳转的决定交给用户。
+     */
+    public SyncResult findRemoteProgressIfNeeded(BookRecord book, ProgressBaseline baseline) throws Exception {
+        if (book == null || book.id <= 0) {
+            return SyncResult.skipped(false);
+        }
+        if (!settingsStore.isWebDavEnabled()) {
+            return SyncResult.skipped(false);
+        }
+        if (!beginSync(book.id)) {
+            return SyncResult.skipped(true);
+        }
+        boolean completedSuccessfully = false;
+        try {
+            BookRecord currentBook = databaseHelper.getBook(book.id);
+            if (currentBook == null) {
+                currentBook = book;
+            }
+            WebDavClient.ProgressPayload payload = webDavClient.downloadProgress(currentBook);
+            if (payload == null) {
+                completedSuccessfully = true;
+                return SyncResult.checkedNoRemote();
+            }
+
+            ProgressBaseline comparison = baseline != null ? baseline : ProgressBaseline.fromBook(currentBook);
+            boolean localEmpty = comparison.progressIndex == 0 && comparison.progressOffset == 0;
+            boolean remoteNewer = payload.chapterTime > comparison.lastReadAt + REMOTE_NEWER_GRACE_MS;
+            if (!remoteNewer && !localEmpty) {
+                completedSuccessfully = true;
+                return SyncResult.checkedNotApplied(true);
+            }
+
+            int chapterOrderIndex = resolveChapterOrderIndex(currentBook, payload.chapterIndex);
+            completedSuccessfully = true;
+            return SyncResult.suggested(
+                    chapterOrderIndex,
+                    Math.max(payload.chapterPosition, 0),
+                    payload.chapterTime
+            );
+        } finally {
+            finishSync(book.id, completedSuccessfully);
+        }
+    }
+
     private boolean beginSync(long bookId) {
         synchronized (LOCK) {
             while (IN_FLIGHT_BOOK_IDS.contains(bookId)) {
@@ -158,6 +204,7 @@ public final class WebDavProgressSyncCoordinator {
         public final boolean checkedRemote;
         public final boolean remoteAvailable;
         public final boolean remoteApplied;
+        public final boolean remoteSuggested;
         public final boolean skippedFresh;
         public final int chapterOrderIndex;
         public final int chapterPosition;
@@ -167,6 +214,7 @@ public final class WebDavProgressSyncCoordinator {
                 boolean checkedRemote,
                 boolean remoteAvailable,
                 boolean remoteApplied,
+                boolean remoteSuggested,
                 boolean skippedFresh,
                 int chapterOrderIndex,
                 int chapterPosition,
@@ -175,6 +223,7 @@ public final class WebDavProgressSyncCoordinator {
             this.checkedRemote = checkedRemote;
             this.remoteAvailable = remoteAvailable;
             this.remoteApplied = remoteApplied;
+            this.remoteSuggested = remoteSuggested;
             this.skippedFresh = skippedFresh;
             this.chapterOrderIndex = chapterOrderIndex;
             this.chapterPosition = chapterPosition;
@@ -182,19 +231,25 @@ public final class WebDavProgressSyncCoordinator {
         }
 
         static SyncResult skipped(boolean skippedFresh) {
-            return new SyncResult(false, false, false, skippedFresh, 0, 0, 0L);
+            return new SyncResult(false, false, false, false, skippedFresh, 0, 0, 0L);
         }
 
         static SyncResult checkedNoRemote() {
-            return new SyncResult(true, false, false, false, 0, 0, 0L);
+            return new SyncResult(true, false, false, false, false, 0, 0, 0L);
         }
 
         static SyncResult checkedNotApplied(boolean remoteAvailable) {
-            return new SyncResult(true, remoteAvailable, false, false, 0, 0, 0L);
+            return new SyncResult(true, remoteAvailable, false, false, false, 0, 0, 0L);
         }
 
         static SyncResult applied(int chapterOrderIndex, int chapterPosition, long chapterTime) {
-            return new SyncResult(true, true, true, false, chapterOrderIndex, chapterPosition, chapterTime);
+            return new SyncResult(true, true, true, false, false,
+                    chapterOrderIndex, chapterPosition, chapterTime);
+        }
+
+        static SyncResult suggested(int chapterOrderIndex, int chapterPosition, long chapterTime) {
+            return new SyncResult(true, true, false, true, false,
+                    chapterOrderIndex, chapterPosition, chapterTime);
         }
     }
 }

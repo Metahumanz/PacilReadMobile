@@ -54,6 +54,7 @@ public final class ReaderContentController {
     private static final long PROGRESSIVE_WAIT_LOG_MS = 800L;
     private static final long PROGRESSIVE_HARD_FALLBACK_MS = 5000L;
     private static final int MAX_LAYOUT_PAGE_CACHE_SIGNATURES = 4;
+    private static final int SIMILAR_PROGRESS_MAX_OFFSET_DELTA = 800;
     private static final String EMPTY_CHAPTER_TEXT_PLACEHOLDER = "章节正文为空或外置正文文件缺失。";
     private static final Pattern VOLUME_CHAPTER_TITLE_PATTERN = Pattern.compile(
             "^\\s*第\\s*[0-9０-９一二三四五六七八九十百千万零〇两]+\\s*卷(?:\\s*|[：:、.．·\\-].*)$"
@@ -104,6 +105,8 @@ public final class ReaderContentController {
     private int initialRemoteProgressBaselineIndex = 0;
     private int initialRemoteProgressBaselineOffset = 0;
     private DeferredProgressUpload deferredProgressUpload = null;
+    private volatile RemoteProgressSuggestion pendingRemoteProgressSuggestion = null;
+    private volatile RemoteProgressComparison pendingRemoteProgressComparison = null;
 
     public ReaderContentController(
             ModernReaderActivity activity,
@@ -117,6 +120,8 @@ public final class ReaderContentController {
         this.views = views;
         this.state = state;
         this.ui = ui;
+        views.keepLocalProgressButton.setOnClickListener(v -> resolveRemoteProgressSuggestion(false));
+        views.jumpRemoteProgressButton.setOnClickListener(v -> resolveRemoteProgressSuggestion(true));
     }
 
     public void attachControllers(
@@ -483,9 +488,12 @@ public final class ReaderContentController {
             }
             return;
         }
+        if (pendingRemoteProgressSuggestion != null) {
+            return;
+        }
         RemoteProgressComparison initialComparison = captureInitialRemoteProgressComparison();
         runtime.safeExecute(() -> {
-            boolean remoteApplied = false;
+            boolean waitingForUserDecision = false;
             try {
                 if (!activity.isReaderActive()) {
                     return;
@@ -502,71 +510,65 @@ public final class ReaderContentController {
                         initialComparison.progressOffset
                 );
                 WebDavProgressSyncCoordinator.SyncResult result =
-                        runtime.progressSyncCoordinator.syncBookProgressIfNeeded(currentBook, baseline);
+                        runtime.progressSyncCoordinator.findRemoteProgressIfNeeded(currentBook, baseline);
                 if (result.checkedRemote && !result.remoteAvailable) {
                     if (!silent) {
                         activity.runOnReaderUiThread(() -> ui.showToast("云端暂时没有可恢复的进度"));
                     }
                     return;
                 }
-                if (!result.remoteApplied) {
-                    if (result.skippedFresh && applyFreshLocalProgressFromDatabase(initialComparison)) {
-                        remoteApplied = true;
-                    }
+                RemoteProgressSuggestion suggestion = result.remoteSuggested
+                        ? buildRemoteProgressSuggestion(
+                        result.chapterOrderIndex,
+                        result.chapterPosition,
+                        result.chapterTime
+                )
+                        : result.skippedFresh
+                        ? buildFreshDatabaseProgressSuggestion(initialComparison)
+                        : null;
+                if (isSimilarToLocalProgress(suggestion, initialComparison)) {
+                    return;
+                }
+                if (suggestion == null) {
                     return;
                 }
                 if (!activity.isReaderActive() || state.chapters.isEmpty()) {
                     return;
                 }
-                int remoteIndex = ui.clamp(
-                        navigation.chapterIndexFromOrder(result.chapterOrderIndex),
-                        0,
-                        state.chapters.size() - 1
-                );
-                state.book.progressIndex = state.chapters.get(remoteIndex).orderIndex;
-                state.book.progressOffset = Math.max(result.chapterPosition, 0);
-                state.book.lastReadAt = result.chapterTime;
-                remoteApplied = true;
-                activity.runOnReaderUiThread(() -> scheduleReflowAfterLayout(remoteIndex, result.chapterPosition));
+                pendingRemoteProgressSuggestion = suggestion;
+                pendingRemoteProgressComparison = initialComparison;
+                waitingForUserDecision = true;
+                activity.runOnReaderUiThread(() -> showRemoteProgressSuggestion(suggestion));
             } catch (Exception error) {
                 if (!silent) {
                     activity.runOnReaderUiThread(() -> ui.showToast("同步失败: " + error.getMessage()));
                 }
             } finally {
-                DeferredProgressUpload upload = finishInitialRemoteProgressSync(initialComparison, remoteApplied);
-                if (upload != null) {
-                    uploadProgressSnapshot(upload.book, upload.chapter, upload.offset);
+                if (!waitingForUserDecision) {
+                    DeferredProgressUpload upload = finishInitialRemoteProgressSync(initialComparison, false);
+                    if (upload != null) {
+                        uploadProgressSnapshot(upload.book, upload.chapter, upload.offset);
+                    }
                 }
             }
         }, "sync reader progress from WebDAV");
     }
 
-    private boolean applyFreshLocalProgressFromDatabase(RemoteProgressComparison initialComparison) {
+    private RemoteProgressSuggestion buildFreshDatabaseProgressSuggestion(
+            RemoteProgressComparison initialComparison
+    ) {
         if (initialComparison == null || state.book == null || state.chapters.isEmpty()) {
-            return false;
+            return null;
         }
         BookRecord latestBook = runtime.databaseHelper.getBook(state.book.id);
         if (latestBook == null || !isProgressNewerThanInitial(latestBook, initialComparison)) {
-            return false;
+            return null;
         }
-        int latestIndex = ui.clamp(
-                navigation.chapterIndexFromOrder(latestBook.progressIndex),
-                0,
-                state.chapters.size() - 1
+        return buildRemoteProgressSuggestion(
+                latestBook.progressIndex,
+                latestBook.progressOffset,
+                latestBook.lastReadAt
         );
-        ChapterRecord latestChapter = state.chapters.get(latestIndex);
-        int latestChapterOrderIndex = latestChapter == null ? latestBook.progressIndex : latestChapter.orderIndex;
-        int latestOffset = Math.max(latestBook.progressOffset, 0);
-        if (state.book.progressIndex == latestChapterOrderIndex
-                && state.book.progressOffset == latestOffset) {
-            state.book.lastReadAt = Math.max(state.book.lastReadAt, latestBook.lastReadAt);
-            return false;
-        }
-        state.book.progressIndex = latestChapterOrderIndex;
-        state.book.progressOffset = latestOffset;
-        state.book.lastReadAt = latestBook.lastReadAt;
-        activity.runOnReaderUiThread(() -> scheduleReflowAfterLayout(latestIndex, latestOffset));
-        return true;
     }
 
     private boolean isProgressNewerThanInitial(BookRecord latestBook, RemoteProgressComparison initialComparison) {
@@ -584,29 +586,136 @@ public final class ReaderContentController {
         return initialEmpty || latestBook.lastReadAt > initialComparison.lastReadAt;
     }
 
-    private void scheduleRemoteProgressSync() {
-        if (state.book != null && WebDavProgressSyncCoordinator.isProgressFresh(state.book.id)) {
-            completeInitialRemoteProgressSyncWithoutRemoteApply();
-            return;
+    private boolean isSimilarToLocalProgress(
+            RemoteProgressSuggestion suggestion,
+            RemoteProgressComparison initialComparison
+    ) {
+        if (suggestion == null || state.book == null) {
+            return false;
         }
+        int localChapterOrderIndex = initialComparison == null
+                ? state.book.progressIndex
+                : initialComparison.progressIndex;
+        int localOffset = initialComparison == null
+                ? state.book.progressOffset
+                : initialComparison.progressOffset;
+        return suggestion.chapterOrderIndex == localChapterOrderIndex
+                && Math.abs((long) suggestion.chapterOffset - Math.max(localOffset, 0))
+                <= SIMILAR_PROGRESS_MAX_OFFSET_DELTA;
+    }
+
+    private void scheduleRemoteProgressSync() {
         runtime.mainHandler.postDelayed(() -> {
             if (!activity.isReaderActive()) {
-                return;
-            }
-            if (state.book != null && WebDavProgressSyncCoordinator.isProgressFresh(state.book.id)) {
-                completeInitialRemoteProgressSyncWithoutRemoteApply();
                 return;
             }
             syncFromWebDav(true);
         }, 250L);
     }
 
-    private void completeInitialRemoteProgressSyncWithoutRemoteApply() {
-        RemoteProgressComparison comparison = captureInitialRemoteProgressComparison();
+    private RemoteProgressSuggestion buildRemoteProgressSuggestion(
+            int chapterOrderIndex,
+            int chapterOffset,
+            long chapterTime
+    ) {
+        if (state.chapters.isEmpty()) {
+            return null;
+        }
+        int chapterIndex = ui.clamp(
+                navigation.chapterIndexFromOrder(chapterOrderIndex),
+                0,
+                state.chapters.size() - 1
+        );
+        ChapterRecord chapter = state.chapters.get(chapterIndex);
+        int safeOffset = Math.max(chapterOffset, 0);
+        String title = chapter.title == null || chapter.title.isBlank()
+                ? "第 " + (chapterIndex + 1) + " 章"
+                : chapter.title.trim();
+        return new RemoteProgressSuggestion(
+                chapterIndex,
+                chapter.orderIndex,
+                safeOffset,
+                chapterTime,
+                title,
+                buildProgressExcerpt(chapter, safeOffset)
+        );
+    }
+
+    private String buildProgressExcerpt(ChapterRecord chapter, int offset) {
+        String excerpt = runtime.databaseHelper.getChapterTextExcerpt(chapter.id, offset, 64);
+        if (excerpt.isEmpty()) {
+            return "打开后可从该章的云端位置继续阅读";
+        }
+        return excerpt;
+    }
+
+    private void showRemoteProgressSuggestion(RemoteProgressSuggestion suggestion) {
+        if (suggestion == null || pendingRemoteProgressSuggestion != suggestion) {
+            return;
+        }
+        views.remoteProgressTitle.setText("云端进度 · " + suggestion.chapterTitle);
+        views.remoteProgressDetail.setText("大约读到：" + suggestion.excerpt);
+        views.remoteProgressBanner.animate().cancel();
+        views.remoteProgressBanner.setAlpha(0f);
+        views.remoteProgressBanner.setTranslationY(-ui.dp(16));
+        views.remoteProgressBanner.setVisibility(View.VISIBLE);
+        views.remoteProgressBanner.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(180L)
+                .start();
+    }
+
+    private void resolveRemoteProgressSuggestion(boolean jump) {
+        RemoteProgressSuggestion suggestion = pendingRemoteProgressSuggestion;
+        RemoteProgressComparison comparison = pendingRemoteProgressComparison;
+        if (suggestion == null) {
+            return;
+        }
+        pendingRemoteProgressSuggestion = null;
+        pendingRemoteProgressComparison = null;
+        hideRemoteProgressSuggestion();
+        if (jump && state.book != null) {
+            runtime.databaseHelper.updateProgressFromRemote(
+                    state.book.id,
+                    suggestion.chapterOrderIndex,
+                    suggestion.chapterOffset,
+                    suggestion.chapterTime
+            );
+            state.book.progressIndex = suggestion.chapterOrderIndex;
+            state.book.progressOffset = suggestion.chapterOffset;
+            state.book.lastReadAt = suggestion.chapterTime;
+            DeferredProgressUpload ignored = finishInitialRemoteProgressSync(comparison, true);
+            scheduleReflowAfterLayout(suggestion.chapterIndex, suggestion.chapterOffset);
+            return;
+        }
         DeferredProgressUpload upload = finishInitialRemoteProgressSync(comparison, false);
         if (upload != null) {
             uploadProgressSnapshot(upload.book, upload.chapter, upload.offset);
         }
+    }
+
+    private void hideRemoteProgressSuggestion() {
+        views.remoteProgressBanner.animate().cancel();
+        views.remoteProgressBanner.animate()
+                .alpha(0f)
+                .translationY(-ui.dp(12))
+                .setDuration(140L)
+                .withEndAction(() -> {
+                    if (pendingRemoteProgressSuggestion == null) {
+                        views.remoteProgressBanner.setVisibility(View.GONE);
+                    }
+                })
+                .start();
+    }
+
+    public void releasePendingRemoteProgressSuggestion() {
+        if (pendingRemoteProgressSuggestion == null) {
+            return;
+        }
+        resolveRemoteProgressSuggestion(false);
+        views.remoteProgressBanner.animate().cancel();
+        views.remoteProgressBanner.setVisibility(View.GONE);
     }
 
     private void prepareInitialRemoteProgressSync() {
@@ -726,6 +835,31 @@ public final class ReaderContentController {
             this.book = book;
             this.chapter = chapter;
             this.offset = offset;
+        }
+    }
+
+    private static final class RemoteProgressSuggestion {
+        final int chapterIndex;
+        final int chapterOrderIndex;
+        final int chapterOffset;
+        final long chapterTime;
+        final String chapterTitle;
+        final String excerpt;
+
+        RemoteProgressSuggestion(
+                int chapterIndex,
+                int chapterOrderIndex,
+                int chapterOffset,
+                long chapterTime,
+                String chapterTitle,
+                String excerpt
+        ) {
+            this.chapterIndex = chapterIndex;
+            this.chapterOrderIndex = chapterOrderIndex;
+            this.chapterOffset = chapterOffset;
+            this.chapterTime = chapterTime;
+            this.chapterTitle = chapterTitle;
+            this.excerpt = excerpt;
         }
     }
 
