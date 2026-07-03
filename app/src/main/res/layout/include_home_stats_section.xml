@@ -80,6 +80,18 @@
                 android:textColor="?attr/themeColorAppButtonOutlineText" />
 
             <Button
+                android:id="@+id/button_home_stats_month"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_app_outline_button"
+                android:text="本月"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonOutlineText" />
+
+            <Button
                 android:id="@+id/button_home_stats_year"
                 style="@style/AppChromeCompactToggleButton"
                 android:layout_width="0dp"
@@ -120,6 +132,70 @@
                 android:layout_weight="1"
                 android:background="@drawable/bg_app_outline_button"
                 android:text="过去七天"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonOutlineText" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/layout_home_month_range_mode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/button_home_month_natural"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_app_primary_button"
+                android:text="自然月"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonPrimaryText" />
+
+            <Button
+                android:id="@+id/button_home_month_rolling"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_app_outline_button"
+                android:text="过去30天"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonOutlineText" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/layout_home_year_range_mode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/button_home_year_natural"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_app_primary_button"
+                android:text="自然年"
+                android:textAllCaps="false"
+                android:textColor="?attr/themeColorAppButtonPrimaryText" />
+
+            <Button
+                android:id="@+id/button_home_year_rolling"
+                style="@style/AppChromeCompactToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_app_outline_button"
+                android:text="过去365天"
                 android:textAllCaps="false"
                 android:textColor="?attr/themeColorAppButtonOutlineText" />
         </LinearLayout>

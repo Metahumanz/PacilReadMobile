@@ -10,9 +10,14 @@ import java.util.Locale
 object ReadingStatsUtils {
     const val PERIOD_TODAY = "today"
     const val PERIOD_WEEK = "week"
+    const val PERIOD_MONTH = "month"
     const val PERIOD_YEAR = "year"
     const val WEEK_MODE_NATURAL = "natural"
     const val WEEK_MODE_ROLLING = "rolling"
+    const val MONTH_MODE_NATURAL = "natural"
+    const val MONTH_MODE_LAST_30_DAYS = "last30Days"
+    const val YEAR_MODE_NATURAL = "natural"
+    const val YEAR_MODE_LAST_365_DAYS = "last365Days"
     const val LEGACY_BOOK_IDENTITY = "__legacy_total__"
     const val LEGACY_DEVICE_ID = "__legacy_device__"
     const val LEGACY_BOOK_TITLE = "历史阅读总时长"
@@ -24,7 +29,17 @@ object ReadingStatsUtils {
     fun rangeForPeriod(periodKey: String?, zoneId: ZoneId): Range = rangeForPeriod(periodKey, zoneId, WEEK_MODE_NATURAL)
 
     @JvmStatic
-    fun rangeForPeriod(periodKey: String?, zoneId: ZoneId, weekMode: String?): Range {
+    fun rangeForPeriod(periodKey: String?, zoneId: ZoneId, weekMode: String?): Range =
+        rangeForPeriod(periodKey, zoneId, weekMode, MONTH_MODE_NATURAL, YEAR_MODE_NATURAL)
+
+    @JvmStatic
+    fun rangeForPeriod(
+        periodKey: String?,
+        zoneId: ZoneId,
+        weekMode: String?,
+        monthMode: String?,
+        yearMode: String?,
+    ): Range {
         val today = LocalDate.now(zoneId)
         if (periodKey == PERIOD_WEEK) {
             val start = if (normalizeWeekMode(weekMode) == WEEK_MODE_ROLLING) {
@@ -34,7 +49,16 @@ object ReadingStatsUtils {
             }
             return Range(PERIOD_WEEK, start, today)
         }
-        if (periodKey == PERIOD_YEAR) return Range(PERIOD_YEAR, today.withDayOfYear(1), today)
+        if (periodKey == PERIOD_MONTH) {
+            val start = if (normalizeMonthMode(monthMode) == MONTH_MODE_LAST_30_DAYS) today.minusDays(29)
+            else today.withDayOfMonth(1)
+            return Range(PERIOD_MONTH, start, today)
+        }
+        if (periodKey == PERIOD_YEAR) {
+            val start = if (normalizeYearMode(yearMode) == YEAR_MODE_LAST_365_DAYS) today.minusDays(364)
+            else today.withDayOfYear(1)
+            return Range(PERIOD_YEAR, start, today)
+        }
         return Range(PERIOD_TODAY, today, today)
     }
 
@@ -68,10 +92,18 @@ object ReadingStatsUtils {
         (value?.trim()?.lowercase(Locale.ROOT) ?: "").replace(Regex("\\s+"), " ")
 
     @JvmStatic
-    fun normalizePeriodKey(value: String?): String = if (value == PERIOD_WEEK || value == PERIOD_YEAR) value else PERIOD_TODAY
+    fun normalizePeriodKey(value: String?): String = if (value == PERIOD_WEEK || value == PERIOD_MONTH || value == PERIOD_YEAR) value else PERIOD_TODAY
 
     @JvmStatic
     fun normalizeWeekMode(value: String?): String = if (value == WEEK_MODE_ROLLING) WEEK_MODE_ROLLING else WEEK_MODE_NATURAL
+
+    @JvmStatic
+    fun normalizeMonthMode(value: String?): String =
+        if (value == MONTH_MODE_LAST_30_DAYS) MONTH_MODE_LAST_30_DAYS else MONTH_MODE_NATURAL
+
+    @JvmStatic
+    fun normalizeYearMode(value: String?): String =
+        if (value == YEAR_MODE_LAST_365_DAYS) YEAR_MODE_LAST_365_DAYS else YEAR_MODE_NATURAL
 
     @JvmStatic
     fun formatDuration(totalSeconds: Int): String {

@@ -71,6 +71,18 @@
                     android:textColor="?attr/themeColorAppButtonOutlineText" />
 
                 <Button
+                    android:id="@+id/button_stats_period_month"
+                    style="@style/AppChromeCompactToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_app_outline_button"
+                    android:text="本月"
+                    android:textAllCaps="false"
+                    android:textColor="?attr/themeColorAppButtonOutlineText" />
+
+                <Button
                     android:id="@+id/button_stats_period_year"
                     style="@style/AppChromeCompactToggleButton"
                     android:layout_width="0dp"

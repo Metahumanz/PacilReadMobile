@@ -55,7 +55,8 @@ enum class AnnualReportMetric(@JvmField val key: String) {
             TOP_TAG -> clean(report.topTag)
             TOP_SERIES -> clean(report.topSeries)
             PEAK_MONTH -> if (report.isYearReport()) {
-                if (report.peakMonth > 0) "${report.peakMonth} 月" else ""
+                if (report.isLast365DaysReport()) clean(report.peakRhythmLabel)
+                else if (report.peakMonth > 0) "${report.peakMonth} 月" else ""
             } else clean(report.peakRhythmLabel)
             ACTIVE_MONTHS -> {
                 val active = if (report.isYearReport()) report.activeMonths else report.activeRhythmSlots
@@ -91,7 +92,9 @@ enum class AnnualReportMetric(@JvmField val key: String) {
             TOP_AUTHOR -> hasText(if (report.isBookScope()) report.bookAuthor else report.topAuthor)
             TOP_TAG -> hasText(report.topTag)
             TOP_SERIES -> hasText(report.topSeries)
-            PEAK_MONTH -> if (report.isYearReport()) report.peakMonth > 0 else hasText(report.peakRhythmLabel)
+            PEAK_MONTH -> if (report.isYearReport()) {
+                if (report.isLast365DaysReport()) hasText(report.peakRhythmLabel) else report.peakMonth > 0
+            } else hasText(report.peakRhythmLabel)
             ACTIVE_MONTHS -> (if (report.isYearReport()) report.activeMonths else report.activeRhythmSlots) > 0
             DAILY_AVERAGE -> report.averageSecondsPerReadingDay() > 0
             BOOK_STATUS -> hasText(report.statusText)

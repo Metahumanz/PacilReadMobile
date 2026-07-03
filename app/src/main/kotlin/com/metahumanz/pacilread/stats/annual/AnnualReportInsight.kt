@@ -24,6 +24,13 @@ object AnnualReportInsight {
             return "${periodSubject(report)}你读了 ${report.readingDays} 天，累计 $durationText、$charsText；$focusText" +
                 if (hasText(streakText)) "，$streakText。" else "，$tasteText。"
         }
+        if (report.isMonthReport()) {
+            return "${periodSubject(report)}你读了 ${report.readingDays} 天，累计 $durationText、$charsText；$focusText" +
+                if (hasText(streakText)) "，$streakText。" else "，$tasteText。"
+        }
+        if (report.isLast365DaysReport()) {
+            return "过去365天你读了 ${report.readingDays} 天，累计 $durationText、$charsText；$focusText，$tasteText。"
+        }
         val finishedText = if (report.finishedBooks > 0) "，读完 ${report.finishedBooks} 本" else ""
         return "这一年你${rhythmText(report)}；$focusText，$tasteText$finishedText。"
     }
@@ -66,13 +73,21 @@ object AnnualReportInsight {
         report == null -> "这段时间"
         report.isDayReport() -> "今天"
         report.isWeekReport() -> report.periodTitle?.takeUnless { it.isBlank() } ?: "这一周"
+        report.isMonthReport() -> report.periodTitle?.takeUnless { it.isBlank() } ?: "这个月"
+        report.isLast365DaysReport() -> "过去365天"
         else -> "今年"
     }
 
     private fun rhythmText(report: AnnualReportData?): String {
         if (report == null) return "留下阅读记录"
         if (report.isYearReport()) {
-            val peak = if (report.peakMonth > 0) "${report.peakMonth} 月" else "全年"
+            val peak = if (hasText(report.peakRhythmLabel)) {
+                report.peakRhythmLabel
+            } else if (report.peakMonth > 0) {
+                "${report.peakMonth} 月"
+            } else {
+                "全年"
+            }
             return if (report.activeMonths > 1) "在 ${report.activeMonths} 个月留下阅读记录，${peak}最集中" else "阅读集中在 $peak"
         }
         if (hasText(report.peakRhythmLabel) && report.peakRhythmSeconds > 0 && !report.isDayReport()) {

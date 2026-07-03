@@ -68,15 +68,24 @@ class ReadingStatsActivity : ThemedActivity() {
     private var readingCalendarLayout: LinearLayout? = null
     private var annualReportLayout: LinearLayout? = null
     private var weekRangeModeLayout: LinearLayout? = null
+    private var monthRangeModeLayout: LinearLayout? = null
+    private var yearRangeModeLayout: LinearLayout? = null
     private var reportCardTitleText: TextView? = null
     private lateinit var periodTodayButton: Button
     private lateinit var periodWeekButton: Button
+    private lateinit var periodMonthButton: Button
     private lateinit var periodYearButton: Button
     private var weekNaturalButton: Button? = null
     private var weekRollingButton: Button? = null
+    private var monthNaturalButton: Button? = null
+    private var monthRollingButton: Button? = null
+    private var yearNaturalButton: Button? = null
+    private var yearRollingButton: Button? = null
     private var shareAnnualReportButton: Button? = null
     private var selectedPeriod = ReadingStatsUtils.PERIOD_TODAY
     private var selectedWeekMode = ReadingStatsUtils.WEEK_MODE_NATURAL
+    private var selectedMonthMode = ReadingStatsUtils.MONTH_MODE_NATURAL
+    private var selectedYearMode = ReadingStatsUtils.YEAR_MODE_NATURAL
     private var bookId = -1L
     private var launchSource: LaunchSourceTransition.Source? = null
     private var finishingWithSource = false
@@ -136,12 +145,19 @@ class ReadingStatsActivity : ThemedActivity() {
         readingCalendarLayout = findViewById(R.id.layout_reading_calendar)
         annualReportLayout = findViewById(R.id.layout_annual_report)
         weekRangeModeLayout = findViewById(R.id.layout_week_range_mode)
+        monthRangeModeLayout = findViewById(R.id.layout_month_range_mode)
+        yearRangeModeLayout = findViewById(R.id.layout_year_range_mode)
         reportCardTitleText = findViewById(R.id.text_report_card_title)
         periodTodayButton = findViewById(R.id.button_period_today)
         periodWeekButton = findViewById(R.id.button_period_week)
+        periodMonthButton = findViewById(R.id.button_period_month)
         periodYearButton = findViewById(R.id.button_period_year)
         weekNaturalButton = findViewById(R.id.button_week_natural)
         weekRollingButton = findViewById(R.id.button_week_rolling)
+        monthNaturalButton = findViewById(R.id.button_month_natural)
+        monthRollingButton = findViewById(R.id.button_month_rolling)
+        yearNaturalButton = findViewById(R.id.button_year_natural)
+        yearRollingButton = findViewById(R.id.button_year_rolling)
         shareAnnualReportButton = findViewById(R.id.button_share_annual_report)
     }
 
@@ -149,9 +165,14 @@ class ReadingStatsActivity : ThemedActivity() {
         findViewById<ImageButton>(R.id.button_back).setOnClickListener { onBackPressedDispatcher.onBackPressed() }
         periodTodayButton.setOnClickListener { selectPeriod(ReadingStatsUtils.PERIOD_TODAY) }
         periodWeekButton.setOnClickListener { selectPeriod(ReadingStatsUtils.PERIOD_WEEK) }
+        periodMonthButton.setOnClickListener { selectPeriod(ReadingStatsUtils.PERIOD_MONTH) }
         periodYearButton.setOnClickListener { selectPeriod(ReadingStatsUtils.PERIOD_YEAR) }
         weekNaturalButton?.setOnClickListener { selectWeekMode(ReadingStatsUtils.WEEK_MODE_NATURAL) }
         weekRollingButton?.setOnClickListener { selectWeekMode(ReadingStatsUtils.WEEK_MODE_ROLLING) }
+        monthNaturalButton?.setOnClickListener { selectMonthMode(ReadingStatsUtils.MONTH_MODE_NATURAL) }
+        monthRollingButton?.setOnClickListener { selectMonthMode(ReadingStatsUtils.MONTH_MODE_LAST_30_DAYS) }
+        yearNaturalButton?.setOnClickListener { selectYearMode(ReadingStatsUtils.YEAR_MODE_NATURAL) }
+        yearRollingButton?.setOnClickListener { selectYearMode(ReadingStatsUtils.YEAR_MODE_LAST_365_DAYS) }
         shareAnnualReportButton?.setOnClickListener { shareAnnualReport() }
     }
 
@@ -221,18 +242,39 @@ class ReadingStatsActivity : ThemedActivity() {
         if (selectedPeriod == ReadingStatsUtils.PERIOD_WEEK) loadStats(false)
     }
 
+    private fun selectMonthMode(monthMode: String) {
+        selectedMonthMode = ReadingStatsUtils.normalizeMonthMode(monthMode)
+        updatePeriodButtons()
+        if (selectedPeriod == ReadingStatsUtils.PERIOD_MONTH) loadStats(false)
+    }
+
+    private fun selectYearMode(yearMode: String) {
+        selectedYearMode = ReadingStatsUtils.normalizeYearMode(yearMode)
+        updatePeriodButtons()
+        if (selectedPeriod == ReadingStatsUtils.PERIOD_YEAR) loadStats(false)
+    }
+
     private fun updatePeriodButtons() {
         stylePeriodButton(periodTodayButton, selectedPeriod == ReadingStatsUtils.PERIOD_TODAY)
         stylePeriodButton(periodWeekButton, selectedPeriod == ReadingStatsUtils.PERIOD_WEEK)
+        stylePeriodButton(periodMonthButton, selectedPeriod == ReadingStatsUtils.PERIOD_MONTH)
         stylePeriodButton(periodYearButton, selectedPeriod == ReadingStatsUtils.PERIOD_YEAR)
-        updateWeekModeControls()
+        updateRangeModeControls()
     }
 
-    private fun updateWeekModeControls() {
+    private fun updateRangeModeControls() {
         val weekSelected = selectedPeriod == ReadingStatsUtils.PERIOD_WEEK
         weekRangeModeLayout?.visibility = if (weekSelected) View.VISIBLE else View.GONE
         stylePeriodButton(weekNaturalButton, selectedWeekMode == ReadingStatsUtils.WEEK_MODE_NATURAL)
         stylePeriodButton(weekRollingButton, selectedWeekMode == ReadingStatsUtils.WEEK_MODE_ROLLING)
+        val monthSelected = selectedPeriod == ReadingStatsUtils.PERIOD_MONTH
+        monthRangeModeLayout?.visibility = if (monthSelected) View.VISIBLE else View.GONE
+        stylePeriodButton(monthNaturalButton, selectedMonthMode == ReadingStatsUtils.MONTH_MODE_NATURAL)
+        stylePeriodButton(monthRollingButton, selectedMonthMode == ReadingStatsUtils.MONTH_MODE_LAST_30_DAYS)
+        val yearSelected = selectedPeriod == ReadingStatsUtils.PERIOD_YEAR
+        yearRangeModeLayout?.visibility = if (yearSelected) View.VISIBLE else View.GONE
+        stylePeriodButton(yearNaturalButton, selectedYearMode == ReadingStatsUtils.YEAR_MODE_NATURAL)
+        stylePeriodButton(yearRollingButton, selectedYearMode == ReadingStatsUtils.YEAR_MODE_LAST_365_DAYS)
     }
 
     private fun stylePeriodButton(button: Button?, selected: Boolean) {
@@ -245,11 +287,13 @@ class ReadingStatsActivity : ThemedActivity() {
         val requestId = loadGeneration.incrementAndGet()
         val period = selectedPeriod
         val weekMode = selectedWeekMode
+        val monthMode = selectedMonthMode
+        val yearMode = selectedYearMode
         val scopedBookId = bookId
         val shouldSync = syncFirst && settingsStore.isWebDavEnabled && settingsStore.isWebDavSyncReadingStatsEnabled
         syncStatusText.text = if (shouldSync) "正在同步云端阅读统计，本地数据已先显示" else "正在加载阅读统计..."
         executor.execute {
-            val local = buildStatsSnapshot(period, scopedBookId, weekMode,
+            val local = buildStatsSnapshot(period, scopedBookId, weekMode, monthMode, yearMode,
                 if (shouldSync) "正在同步云端阅读统计，本地数据已先显示" else "当前展示的是本地阅读统计")
             postStatsSnapshot(requestId, local)
             if (!shouldSync) return@execute
@@ -259,13 +303,20 @@ class ReadingStatsActivity : ThemedActivity() {
             } catch (error: Exception) {
                 "云端同步失败，当前展示本地统计：${readableError(error)}"
             }
-            postStatsSnapshot(requestId, buildStatsSnapshot(period, scopedBookId, weekMode, syncMessage))
+            postStatsSnapshot(requestId, buildStatsSnapshot(period, scopedBookId, weekMode, monthMode, yearMode, syncMessage))
         }
     }
 
-    private fun buildStatsSnapshot(period: String, scopedBookId: Long, weekMode: String, syncMessage: String): StatsSnapshot {
-        val range = ReadingStatsUtils.rangeForPeriod(period, ZoneId.systemDefault(), weekMode)
-        val snapshot = StatsSnapshot(period = period, weekMode = weekMode, bookId = scopedBookId, syncMessage = syncMessage)
+    private fun buildStatsSnapshot(
+        period: String,
+        scopedBookId: Long,
+        weekMode: String,
+        monthMode: String,
+        yearMode: String,
+        syncMessage: String,
+    ): StatsSnapshot {
+        val range = ReadingStatsUtils.rangeForPeriod(period, ZoneId.systemDefault(), weekMode, monthMode, yearMode)
+        val snapshot = StatsSnapshot(period = period, weekMode = weekMode, monthMode = monthMode, yearMode = yearMode, bookId = scopedBookId, syncMessage = syncMessage)
         snapshot.rangeRows = databaseHelper.getReadingStatsRows(range.startDateString(), range.endDateString())
         if (scopedBookId > 0L) {
             snapshot.book = databaseHelper.getBook(scopedBookId)
@@ -274,13 +325,13 @@ class ReadingStatsActivity : ThemedActivity() {
                 snapshot.totalSeconds = databaseHelper.getReadingDurationSecondsForBook(range.startDateString(), range.endDateString(), book.readingStatsKey, book.title, book.author)
                 snapshot.totalChars = databaseHelper.getReadingCharCountForBook(range.startDateString(), range.endDateString(), book.readingStatsKey, book.title, book.author)
                 snapshot.bookEta = buildBookEta(book, snapshot.chapters)
-                snapshot.annualReport = AnnualReportBuilder.buildBook(databaseHelper, book, ZoneId.systemDefault(), period, weekMode)
+                snapshot.annualReport = AnnualReportBuilder.buildBook(databaseHelper, book, ZoneId.systemDefault(), period, weekMode, monthMode, yearMode)
             }
         } else {
             snapshot.totalSeconds = databaseHelper.getReadingDurationSeconds(range.startDateString(), range.endDateString(), null)
             snapshot.totalChars = databaseHelper.getReadingCharCount(range.startDateString(), range.endDateString(), null)
             snapshot.bookStats = databaseHelper.getReadingBookStats(range.startDateString(), range.endDateString())
-            snapshot.annualReport = AnnualReportBuilder.buildGlobal(databaseHelper, ZoneId.systemDefault(), period, weekMode)
+            snapshot.annualReport = AnnualReportBuilder.buildGlobal(databaseHelper, ZoneId.systemDefault(), period, weekMode, monthMode, yearMode)
         }
         return snapshot
     }
@@ -289,10 +340,10 @@ class ReadingStatsActivity : ThemedActivity() {
         runOnUiThread {
             if (requestId != loadGeneration.get()) return@runOnUiThread
             syncStatusText.text = snapshot.syncMessage
-            scopeLabelText.text = "${periodLabelPrefix(snapshot.period, snapshot.weekMode)}阅读总时长"
+            scopeLabelText.text = "${periodLabelPrefix(snapshot.period, snapshot.weekMode, snapshot.monthMode, snapshot.yearMode)}阅读总时长"
             scopeTotalText.text = ReadingStatsUtils.formatDuration(snapshot.totalSeconds)
             scopeCharsText.text = formatStatsMeta(snapshot.totalChars, snapshot.annualReport)
-            renderCalendar(snapshot.rangeRows, snapshot.period, snapshot.weekMode)
+            renderCalendar(snapshot.rangeRows, snapshot.period, snapshot.weekMode, snapshot.monthMode, snapshot.yearMode)
             currentAnnualReport = snapshot.annualReport
             renderAnnualReport(snapshot.annualReport)
             if (snapshot.bookId > 0L) renderSingleBook(snapshot.book, snapshot.chapters, snapshot.totalSeconds, snapshot.bookEta)
@@ -303,6 +354,8 @@ class ReadingStatsActivity : ThemedActivity() {
     private class StatsSnapshot(
         var period: String,
         var weekMode: String,
+        var monthMode: String,
+        var yearMode: String,
         var bookId: Long,
         var totalSeconds: Int = 0,
         var totalChars: Int = 0,
@@ -369,7 +422,7 @@ class ReadingStatsActivity : ThemedActivity() {
         }
     }
 
-    private fun renderCalendar(rows: List<ReadingTimeEntryRecord>?, period: String, weekMode: String) {
+    private fun renderCalendar(rows: List<ReadingTimeEntryRecord>?, period: String, weekMode: String, monthMode: String, yearMode: String) {
         val calendar = readingCalendarLayout ?: return
         calendar.removeAllViews()
         val byDate = HashMap<String, IntArray>()
@@ -378,7 +431,7 @@ class ReadingStatsActivity : ThemedActivity() {
             values[0] += max(entry.durationSeconds, 0)
             values[1] += max(entry.charCount, 0)
         }
-        val range = ReadingStatsUtils.rangeForPeriod(period, ZoneId.systemDefault(), weekMode)
+        val range = ReadingStatsUtils.rangeForPeriod(period, ZoneId.systemDefault(), weekMode, monthMode, yearMode)
         var start = range.startDate
         val end = range.endDate
         if (period == ReadingStatsUtils.PERIOD_YEAR) start = end.minusDays(29)
@@ -534,14 +587,16 @@ class ReadingStatsActivity : ThemedActivity() {
 
     private fun bindCover(path: String?, title: String?) = BookCoverViewHelper.bindCover(coverImage, coverFallbackText, path, title)
 
-    private fun periodLabelPrefix(period: String, weekMode: String): String = when (period) {
+    private fun periodLabelPrefix(period: String, weekMode: String, monthMode: String, yearMode: String): String = when (period) {
         ReadingStatsUtils.PERIOD_WEEK -> if (weekMode == ReadingStatsUtils.WEEK_MODE_ROLLING) "过去七天" else "本周"
-        ReadingStatsUtils.PERIOD_YEAR -> "本年"
+        ReadingStatsUtils.PERIOD_MONTH -> if (monthMode == ReadingStatsUtils.MONTH_MODE_LAST_30_DAYS) "过去30天" else "自然月"
+        ReadingStatsUtils.PERIOD_YEAR -> if (yearMode == ReadingStatsUtils.YEAR_MODE_LAST_365_DAYS) "过去365天" else "本年"
         else -> "本日"
     }
 
     private fun reportCardTitleFor(period: String): String = when (period) {
         ReadingStatsUtils.PERIOD_WEEK -> "周报"
+        ReadingStatsUtils.PERIOD_MONTH -> "月报"
         ReadingStatsUtils.PERIOD_YEAR -> "年度报告"
         else -> "每日报告"
     }

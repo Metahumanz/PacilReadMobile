@@ -6,6 +6,8 @@ class AnnualReportData {
     @JvmField var scope: AnnualReportScope? = AnnualReportScope.GLOBAL
     @JvmField var periodKey: String? = ReadingStatsUtils.PERIOD_YEAR
     @JvmField var weekMode: String? = ReadingStatsUtils.WEEK_MODE_NATURAL
+    @JvmField var monthMode: String? = ReadingStatsUtils.MONTH_MODE_NATURAL
+    @JvmField var yearMode: String? = ReadingStatsUtils.YEAR_MODE_NATURAL
     @JvmField var year = 0
     @JvmField var totalSeconds = 0
     @JvmField var totalChars = 0
@@ -52,11 +54,14 @@ class AnnualReportData {
     fun isBookScope(): Boolean = scope == AnnualReportScope.BOOK
     fun isDayReport(): Boolean = periodKey == ReadingStatsUtils.PERIOD_TODAY
     fun isWeekReport(): Boolean = periodKey == ReadingStatsUtils.PERIOD_WEEK
+    fun isMonthReport(): Boolean = periodKey == ReadingStatsUtils.PERIOD_MONTH
     fun isYearReport(): Boolean = periodKey == ReadingStatsUtils.PERIOD_YEAR
+    fun isLast365DaysReport(): Boolean = isYearReport() && yearMode == ReadingStatsUtils.YEAR_MODE_LAST_365_DAYS
 
     fun reportKindLabel(): String = when {
         isDayReport() -> "每日报告"
         isWeekReport() -> "周报"
+        isMonthReport() -> "月报"
         else -> "年度报告"
     }
 

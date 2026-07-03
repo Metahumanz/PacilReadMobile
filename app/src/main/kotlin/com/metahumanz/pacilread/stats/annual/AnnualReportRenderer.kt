@@ -221,10 +221,12 @@ class AnnualReportRenderer {
         val labels = rhythmLabels(report, values.size)
         val count = max(1, values.size)
         val maximum = maxRhythmSeconds(values)
-        val gap = if (count <= 1) 0f else if (bold) 10f else 12f
+        val dense = count > 18
+        val gap = if (count <= 1) 0f else if (dense) 5f else if (bold) 10f else 12f
         val barWidth = if (count <= 1) min(160f, width * 0.36f) else (width - gap * (count - 1f)) / count
         val firstX = if (count <= 1) left + (width - barWidth) / 2f else left
-        val monthPaint = textPaint(palette.mutedText, 20f, bold)
+        val labelEvery = if (dense) max(1, Math.ceil(count / 6.0).toInt()) else 1
+        val monthPaint = textPaint(palette.mutedText, if (dense) 17f else 20f, bold)
         val baselinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.line; strokeWidth = 2f }
         canvas.drawLine(left, top + height + 1f, left + width, top + height + 1f, baselinePaint)
         for (i in 0 until count) {
@@ -234,7 +236,8 @@ class AnnualReportRenderer {
             val x = firstX + i * (barWidth + gap)
             val color = when (i % 3) { 0 -> palette.accent; 1 -> palette.accent2; else -> palette.accent3 }
             drawRoundRect(canvas, RectF(x, top + height - barHeight, x + barWidth, top + height), if (bold) 8f else 9f, color, Color.TRANSPARENT, 0f)
-            drawMultiline(canvas, labels[i], x - 8f, top + height + 24f, barWidth + 16f, monthPaint, 1)
+            val label = if (!dense || i % labelEvery == 0 || i == count - 1) labels[i] else ""
+            if (label.isNotEmpty()) drawMultiline(canvas, label, x - 12f, top + height + 24f, barWidth + 24f, monthPaint, 1)
         }
     }
 
@@ -352,17 +355,24 @@ class AnnualReportRenderer {
 
     private fun titleFor(report: AnnualReportData): String = report.reportTitle?.trim()?.takeIf { it.isNotEmpty() }
         ?: "${report.year}${if (report.isBookScope()) " 单书阅读报告" else " 年度阅读报告"}"
-    private fun summaryTitleFor(report: AnnualReportData?): String = when { report == null -> "阅读摘要"; report.isDayReport() -> "每日摘要"; report.isWeekReport() -> "周报摘要"; else -> "年度摘要" }
+    private fun summaryTitleFor(report: AnnualReportData?): String = when {
+        report == null -> "阅读摘要"
+        report.isDayReport() -> "每日摘要"
+        report.isWeekReport() -> "周报摘要"
+        report.isMonthReport() -> "月报摘要"
+        else -> "年度摘要"
+    }
     private fun infoTitleFor(report: AnnualReportData?, highlight: Boolean): String = when {
         report?.isBookScope() == true -> if (highlight) "本书高光" else "本书坐标"
         report?.isDayReport() == true -> if (highlight) "今日书单" else "今日阅读地图"
         report?.isWeekReport() == true -> if (highlight) "周报书单" else "本周阅读地图"
+        report?.isMonthReport() == true -> if (highlight) "月报书单" else "月报阅读地图"
         else -> if (highlight) "年度书单" else "年度阅读地图"
     }
     private fun rhythmTitleFor(report: AnnualReportData?, highlight: Boolean): String = when {
         report == null -> "阅读节奏"
-        report.isYearReport() -> if (highlight) "12 个月的节奏" else "月度节奏"
-        report.isWeekReport() -> "${report.periodTitle}阅读节奏"
+        report.isYearReport() -> if (report.isLast365DaysReport()) "月度节奏" else if (highlight) "12 个月的节奏" else "月度节奏"
+        report.isWeekReport() || report.isMonthReport() -> "${report.periodTitle}阅读节奏"
         else -> "今日阅读构成"
     }
 

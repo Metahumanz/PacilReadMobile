@@ -39,15 +39,24 @@ class HomeStatsPanelController(
     private val reportCardTitleText: TextView? = activity.findViewById(R.id.text_home_report_card_title)
     private val annualReportSummaryText: TextView? = activity.findViewById(R.id.text_home_annual_report_summary)
     private val weekRangeModeLayout: LinearLayout? = activity.findViewById(R.id.layout_home_week_range_mode)
+    private val monthRangeModeLayout: LinearLayout? = activity.findViewById(R.id.layout_home_month_range_mode)
+    private val yearRangeModeLayout: LinearLayout? = activity.findViewById(R.id.layout_home_year_range_mode)
     private val todayButton: Button? = activity.findViewById(R.id.button_home_stats_today)
     private val weekButton: Button? = activity.findViewById(R.id.button_home_stats_week)
+    private val monthButton: Button? = activity.findViewById(R.id.button_home_stats_month)
     private val yearButton: Button? = activity.findViewById(R.id.button_home_stats_year)
     private val weekNaturalButton: Button? = activity.findViewById(R.id.button_home_week_natural)
     private val weekRollingButton: Button? = activity.findViewById(R.id.button_home_week_rolling)
+    private val monthNaturalButton: Button? = activity.findViewById(R.id.button_home_month_natural)
+    private val monthRollingButton: Button? = activity.findViewById(R.id.button_home_month_rolling)
+    private val yearNaturalButton: Button? = activity.findViewById(R.id.button_home_year_natural)
+    private val yearRollingButton: Button? = activity.findViewById(R.id.button_home_year_rolling)
     private val annualReportButton: Button? = activity.findViewById(R.id.button_home_generate_annual_report)
     private val annualReportExportController = AnnualReportExportController(activity)
     private var selectedPeriod = ReadingStatsUtils.PERIOD_TODAY
     private var selectedWeekMode = ReadingStatsUtils.WEEK_MODE_NATURAL
+    private var selectedMonthMode = ReadingStatsUtils.MONTH_MODE_NATURAL
+    private var selectedYearMode = ReadingStatsUtils.YEAR_MODE_NATURAL
     private var currentAnnualReport: AnnualReportData? = null
     private val loadGeneration = AtomicInteger()
 
@@ -59,10 +68,12 @@ class HomeStatsPanelController(
         val requestId = loadGeneration.incrementAndGet()
         val period = selectedPeriod
         val weekMode = selectedWeekMode
+        val monthMode = selectedMonthMode
+        val yearMode = selectedYearMode
         val shouldSync = syncFirst && readingStatsSyncManager.canAutoSync()
         statusText?.text = if (shouldSync) "正在同步云端阅读统计，本地数据已先显示" else "正在刷新阅读统计..."
         executor.execute {
-            postSnapshot(requestId, buildSnapshot(period, weekMode,
+            postSnapshot(requestId, buildSnapshot(period, weekMode, monthMode, yearMode,
                 if (shouldSync) "正在同步云端阅读统计，本地数据已先显示" else "当前展示的是本地阅读统计"))
             if (!shouldSync) return@execute
             val syncMessage = try {
@@ -71,16 +82,16 @@ class HomeStatsPanelController(
             } catch (error: Exception) {
                 "云端同步失败，当前展示本地统计：${readableError(error)}"
             }
-            postSnapshot(requestId, buildSnapshot(period, weekMode, syncMessage))
+            postSnapshot(requestId, buildSnapshot(period, weekMode, monthMode, yearMode, syncMessage))
         }
     }
 
-    private fun buildSnapshot(period: String, weekMode: String, syncMessage: String): HomeStatsSnapshot {
-        val range = ReadingStatsUtils.rangeForPeriod(period, ZoneId.systemDefault(), weekMode)
+    private fun buildSnapshot(period: String, weekMode: String, monthMode: String, yearMode: String, syncMessage: String): HomeStatsSnapshot {
+        val range = ReadingStatsUtils.rangeForPeriod(period, ZoneId.systemDefault(), weekMode, monthMode, yearMode)
         return HomeStatsSnapshot(
             databaseHelper.getReadingDurationSeconds(range.startDateString(), range.endDateString(), null),
             databaseHelper.getReadingBookStats(range.startDateString(), range.endDateString()),
-            AnnualReportBuilder.buildGlobal(databaseHelper, ZoneId.systemDefault(), period, weekMode),
+            AnnualReportBuilder.buildGlobal(databaseHelper, ZoneId.systemDefault(), period, weekMode, monthMode, yearMode),
             syncMessage,
         )
     }
@@ -101,9 +112,14 @@ class HomeStatsPanelController(
     private fun setupControls() {
         todayButton?.setOnClickListener { selectPeriod(ReadingStatsUtils.PERIOD_TODAY) }
         weekButton?.setOnClickListener { selectPeriod(ReadingStatsUtils.PERIOD_WEEK) }
+        monthButton?.setOnClickListener { selectPeriod(ReadingStatsUtils.PERIOD_MONTH) }
         yearButton?.setOnClickListener { selectPeriod(ReadingStatsUtils.PERIOD_YEAR) }
         weekNaturalButton?.setOnClickListener { selectWeekMode(ReadingStatsUtils.WEEK_MODE_NATURAL) }
         weekRollingButton?.setOnClickListener { selectWeekMode(ReadingStatsUtils.WEEK_MODE_ROLLING) }
+        monthNaturalButton?.setOnClickListener { selectMonthMode(ReadingStatsUtils.MONTH_MODE_NATURAL) }
+        monthRollingButton?.setOnClickListener { selectMonthMode(ReadingStatsUtils.MONTH_MODE_LAST_30_DAYS) }
+        yearNaturalButton?.setOnClickListener { selectYearMode(ReadingStatsUtils.YEAR_MODE_NATURAL) }
+        yearRollingButton?.setOnClickListener { selectYearMode(ReadingStatsUtils.YEAR_MODE_LAST_365_DAYS) }
         annualReportButton?.setOnClickListener {
             val report = currentAnnualReport
             if (report == null || !report.hasReadingData()) {
@@ -125,13 +141,32 @@ class HomeStatsPanelController(
         if (selectedPeriod == ReadingStatsUtils.PERIOD_WEEK) refreshIfVisible(HomeNavigationController.PAGE_STATS, false)
     }
 
+    private fun selectMonthMode(monthMode: String) {
+        selectedMonthMode = ReadingStatsUtils.normalizeMonthMode(monthMode)
+        updatePeriodButtons()
+        if (selectedPeriod == ReadingStatsUtils.PERIOD_MONTH) refreshIfVisible(HomeNavigationController.PAGE_STATS, false)
+    }
+
+    private fun selectYearMode(yearMode: String) {
+        selectedYearMode = ReadingStatsUtils.normalizeYearMode(yearMode)
+        updatePeriodButtons()
+        if (selectedPeriod == ReadingStatsUtils.PERIOD_YEAR) refreshIfVisible(HomeNavigationController.PAGE_STATS, false)
+    }
+
     private fun updatePeriodButtons() {
         AppUiUtils.styleToggleButton(activity, todayButton, selectedPeriod == ReadingStatsUtils.PERIOD_TODAY)
         AppUiUtils.styleToggleButton(activity, weekButton, selectedPeriod == ReadingStatsUtils.PERIOD_WEEK)
+        AppUiUtils.styleToggleButton(activity, monthButton, selectedPeriod == ReadingStatsUtils.PERIOD_MONTH)
         AppUiUtils.styleToggleButton(activity, yearButton, selectedPeriod == ReadingStatsUtils.PERIOD_YEAR)
         weekRangeModeLayout?.visibility = if (selectedPeriod == ReadingStatsUtils.PERIOD_WEEK) View.VISIBLE else View.GONE
         AppUiUtils.styleToggleButton(activity, weekNaturalButton, selectedWeekMode == ReadingStatsUtils.WEEK_MODE_NATURAL)
         AppUiUtils.styleToggleButton(activity, weekRollingButton, selectedWeekMode == ReadingStatsUtils.WEEK_MODE_ROLLING)
+        monthRangeModeLayout?.visibility = if (selectedPeriod == ReadingStatsUtils.PERIOD_MONTH) View.VISIBLE else View.GONE
+        AppUiUtils.styleToggleButton(activity, monthNaturalButton, selectedMonthMode == ReadingStatsUtils.MONTH_MODE_NATURAL)
+        AppUiUtils.styleToggleButton(activity, monthRollingButton, selectedMonthMode == ReadingStatsUtils.MONTH_MODE_LAST_30_DAYS)
+        yearRangeModeLayout?.visibility = if (selectedPeriod == ReadingStatsUtils.PERIOD_YEAR) View.VISIBLE else View.GONE
+        AppUiUtils.styleToggleButton(activity, yearNaturalButton, selectedYearMode == ReadingStatsUtils.YEAR_MODE_NATURAL)
+        AppUiUtils.styleToggleButton(activity, yearRollingButton, selectedYearMode == ReadingStatsUtils.YEAR_MODE_LAST_365_DAYS)
     }
 
     fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean =
@@ -189,6 +224,7 @@ class HomeStatsPanelController(
 
     private fun reportCardTitleFor(period: String): String = when (period) {
         ReadingStatsUtils.PERIOD_WEEK -> "周报"
+        ReadingStatsUtils.PERIOD_MONTH -> "月报"
         ReadingStatsUtils.PERIOD_YEAR -> "年度报告"
         else -> "每日报告"
     }
