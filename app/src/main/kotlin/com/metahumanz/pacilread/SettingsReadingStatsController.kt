@@ -35,6 +35,7 @@ class SettingsReadingStatsController(
     private val readingTimeTrackingCheck: CheckBox? = activity.findViewById(R.id.check_reading_time_tracking)
     private val statsPeriodTodayButton: Button? = activity.findViewById(R.id.button_stats_period_today)
     private val statsPeriodWeekButton: Button? = activity.findViewById(R.id.button_stats_period_week)
+    private val statsPeriodMonthButton: Button? = activity.findViewById(R.id.button_stats_period_month)
     private val statsPeriodYearButton: Button? = activity.findViewById(R.id.button_stats_period_year)
     private val openReadingStatsButton: Button? = activity.findViewById(R.id.button_open_reading_stats)
     private val readingStatsContentLayout: View? = activity.findViewById(R.id.layout_reading_stats_content)
@@ -81,6 +82,7 @@ class SettingsReadingStatsController(
                 readingStatsHintText?.text = buildString {
                     append(when (selectedPeriod) {
                         ReadingStatsUtils.PERIOD_WEEK -> "本周阅读总时长"
+                        ReadingStatsUtils.PERIOD_MONTH -> "自然月阅读总时长"
                         ReadingStatsUtils.PERIOD_YEAR -> "本年阅读总时长"
                         else -> "本日阅读总时长"
                     })
@@ -99,6 +101,7 @@ class SettingsReadingStatsController(
     private fun setupControls() {
         statsPeriodTodayButton?.setOnClickListener { selectPeriod(ReadingStatsUtils.PERIOD_TODAY) }
         statsPeriodWeekButton?.setOnClickListener { selectPeriod(ReadingStatsUtils.PERIOD_WEEK) }
+        statsPeriodMonthButton?.setOnClickListener { selectPeriod(ReadingStatsUtils.PERIOD_MONTH) }
         statsPeriodYearButton?.setOnClickListener { selectPeriod(ReadingStatsUtils.PERIOD_YEAR) }
         openReadingStatsButton?.setOnClickListener { source ->
             val intent = Intent(activity, ReadingStatsActivity::class.java)
@@ -117,6 +120,7 @@ class SettingsReadingStatsController(
     private fun updatePeriodButtons() {
         AppUiUtils.styleToggleButton(activity, statsPeriodTodayButton, selectedPeriod == ReadingStatsUtils.PERIOD_TODAY)
         AppUiUtils.styleToggleButton(activity, statsPeriodWeekButton, selectedPeriod == ReadingStatsUtils.PERIOD_WEEK)
+        AppUiUtils.styleToggleButton(activity, statsPeriodMonthButton, selectedPeriod == ReadingStatsUtils.PERIOD_MONTH)
         AppUiUtils.styleToggleButton(activity, statsPeriodYearButton, selectedPeriod == ReadingStatsUtils.PERIOD_YEAR)
     }
 

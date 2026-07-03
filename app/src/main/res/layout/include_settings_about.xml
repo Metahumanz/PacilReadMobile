@@ -90,7 +90,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <!-- v1.4.0 Kotlin 架构迁移 -->
+                <!-- v1.4.1 阅读器响应与统计周期优化 -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -121,6 +121,66 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
+                            android:text="v1.4.1 — 阅读器响应与统计周期优化" />
+
+                        <TextView
+                            style="@style/AppChromeCaption"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="end"
+                            android:text="2026-07-03" />
+                    </LinearLayout>
+
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="阅读器" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  修复打开书本后可能自动回退章节的问题，后台预分页不再驱动真实翻页" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  优化点击与滑动翻页冷启动路径，避免文字选择、HUD 与 TTS 在翻页前同步完整分页" />
+
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="阅读统计" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  新增月报入口，支持自然月与过去30天统计视图" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  年度报告新增自然年与过去365天模式，分享图与节奏图适配更长时间范围" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="14dp"
+                        android:layout_marginBottom="10dp"
+                        android:background="?attr/themeColorAppBorder" />
+
+                </LinearLayout>
+
+                <!-- v1.4.0 Kotlin 架构迁移 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            style="@style/AppChromeBodyStrong"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
                             android:text="v1.4.0 — Kotlin 架构迁移" />
 
                         <TextView
@@ -327,7 +387,7 @@
 
                     <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  日报图片改为今日按书阅读构成，并用最近 7 天小柱提供阅读节奏上下文" />
                     <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  统计页总览补充阅读字数、阅读天数和最长连续，核心指标不用进入报告也能查看" />
-                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  报告入口下沉到按书统计之后，先看书籍分布，再生成日报、周报或年度报告" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  报告入口下沉到按书统计之后，先看书籍分布，再生成日报、周报、月报或年度报告" />
                     <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  修复统计页标题绑定错位，连续阅读日历、按书统计和报告卡标题各自保持正确" />
 
                     <View
@@ -376,7 +436,7 @@
                         android:layout_marginBottom="4dp"
                         android:text="阅读报告与周统计" />
 
-                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  每日、周度、年度统计会生成各自对应的阅读报告，不再固定生成年度报告" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  每日、周度、月度、年度统计会生成各自对应的阅读报告，不再固定生成年度报告" />
                     <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  周统计新增“自然周”和“过去七天”切换，总时长、书籍列表、日历和周报会同步切换范围" />
                     <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  报告摘要补齐 Top 书籍、作者、标签、系列和周期节奏分析，年度报告与桌面端数据口径保持一致" />
                     <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  报告预览、导出文件名、摘要指标和阅读节奏图会随日/周/年周期自动调整" />
@@ -1470,7 +1530,7 @@
                         android:text="阅读统计" />
 
                     <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  自动记录阅读时长与阅读字数，空闲检测自动分割时间段" />
-                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  本日/本周/本年 三维度统计视图，支持全局统计和单书统计" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  本日/本周/本月/本年 四维度统计视图，支持全局统计和单书统计" />
                     <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  WebDAV 跨设备合并：多设备阅读统计按 deviceId+date+bookIdentity 自动归并" />
                     <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  按书聚合展示：每本书的总阅读时长、最近阅读时间" />
 

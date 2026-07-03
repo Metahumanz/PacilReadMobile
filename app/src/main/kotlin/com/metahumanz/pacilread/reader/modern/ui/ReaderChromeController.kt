@@ -455,8 +455,8 @@ class ReaderChromeController(
         return content.bookProgressPercentFor(safeChapterIndex, chapterOffsetForPage(safeChapterIndex, pageIndex)).roundToInt()
     }
     private fun chapterOffsetForPage(chapterIndex: Int, pageIndex: Int): Int {
-        val pages = content.getPagesForChapter(chapterIndex)
-        if (pages.isNullOrEmpty()) return 0
+        val pages = content.getNavigationPagesForPage(chapterIndex, pageIndex, "hud_progress_offset").pages
+        if (pages.isEmpty()) return 0
         return max(0, pages[ui.clamp(pageIndex, 0, pages.size - 1)].start)
     }
     private fun joinHudSegments(first: String?, second: String?, divider: String): String = if (first.isNullOrEmpty()) second ?: "" else if (second.isNullOrEmpty()) first else first + divider + second

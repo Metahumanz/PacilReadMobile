@@ -5,6 +5,7 @@ import com.metahumanz.pacilread.model.ReadingTimeEntryRecord
 import com.metahumanz.pacilread.stats.ReadingStatsUtils
 import com.metahumanz.pacilread.storage.JsonDatabase
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import java.util.Locale
@@ -14,15 +15,47 @@ import kotlin.math.roundToInt
 object AnnualReportBuilder {
     @JvmStatic
     fun buildGlobal(database: JsonDatabase, zoneId: ZoneId?): AnnualReportData =
-        buildGlobal(database, zoneId, ReadingStatsUtils.PERIOD_YEAR, ReadingStatsUtils.WEEK_MODE_NATURAL)
+        buildGlobal(
+            database,
+            zoneId,
+            ReadingStatsUtils.PERIOD_YEAR,
+            ReadingStatsUtils.WEEK_MODE_NATURAL,
+            ReadingStatsUtils.MONTH_MODE_NATURAL,
+            ReadingStatsUtils.YEAR_MODE_NATURAL,
+        )
 
     @JvmStatic
     fun buildGlobal(database: JsonDatabase, zoneId: ZoneId?, periodKey: String?, weekMode: String?): AnnualReportData =
-        build(database, null, zoneId, periodKey, weekMode)
+        buildGlobal(
+            database,
+            zoneId,
+            periodKey,
+            weekMode,
+            ReadingStatsUtils.MONTH_MODE_NATURAL,
+            ReadingStatsUtils.YEAR_MODE_NATURAL,
+        )
+
+    @JvmStatic
+    fun buildGlobal(
+        database: JsonDatabase,
+        zoneId: ZoneId?,
+        periodKey: String?,
+        weekMode: String?,
+        monthMode: String?,
+        yearMode: String?,
+    ): AnnualReportData = build(database, null, zoneId, periodKey, weekMode, monthMode, yearMode)
 
     @JvmStatic
     fun buildBook(database: JsonDatabase, book: BookRecord?, zoneId: ZoneId?): AnnualReportData =
-        buildBook(database, book, zoneId, ReadingStatsUtils.PERIOD_YEAR, ReadingStatsUtils.WEEK_MODE_NATURAL)
+        buildBook(
+            database,
+            book,
+            zoneId,
+            ReadingStatsUtils.PERIOD_YEAR,
+            ReadingStatsUtils.WEEK_MODE_NATURAL,
+            ReadingStatsUtils.MONTH_MODE_NATURAL,
+            ReadingStatsUtils.YEAR_MODE_NATURAL,
+        )
 
     @JvmStatic
     fun buildBook(
@@ -31,7 +64,26 @@ object AnnualReportBuilder {
         zoneId: ZoneId?,
         periodKey: String?,
         weekMode: String?,
-    ): AnnualReportData = build(database, book, zoneId, periodKey, weekMode)
+    ): AnnualReportData = buildBook(
+        database,
+        book,
+        zoneId,
+        periodKey,
+        weekMode,
+        ReadingStatsUtils.MONTH_MODE_NATURAL,
+        ReadingStatsUtils.YEAR_MODE_NATURAL,
+    )
+
+    @JvmStatic
+    fun buildBook(
+        database: JsonDatabase,
+        book: BookRecord?,
+        zoneId: ZoneId?,
+        periodKey: String?,
+        weekMode: String?,
+        monthMode: String?,
+        yearMode: String?,
+    ): AnnualReportData = build(database, book, zoneId, periodKey, weekMode, monthMode, yearMode)
 
     private fun build(
         database: JsonDatabase,
@@ -39,11 +91,15 @@ object AnnualReportBuilder {
         zoneId: ZoneId?,
         periodKey: String?,
         weekMode: String?,
+        monthMode: String?,
+        yearMode: String?,
     ): AnnualReportData {
         val safeZone = zoneId ?: ZoneId.systemDefault()
         val safePeriod = ReadingStatsUtils.normalizePeriodKey(periodKey)
         val safeWeekMode = ReadingStatsUtils.normalizeWeekMode(weekMode)
-        val range = ReadingStatsUtils.rangeForPeriod(safePeriod, safeZone, safeWeekMode)
+        val safeMonthMode = ReadingStatsUtils.normalizeMonthMode(monthMode)
+        val safeYearMode = ReadingStatsUtils.normalizeYearMode(yearMode)
+        val range = ReadingStatsUtils.rangeForPeriod(safePeriod, safeZone, safeWeekMode, safeMonthMode, safeYearMode)
         val rows = database.getReadingStatsRows(range.startDateString(), range.endDateString())
         var dailyContextRows: List<ReadingTimeEntryRecord> = emptyList()
         var dailyContextStartDate: LocalDate? = null
@@ -56,7 +112,7 @@ object AnnualReportBuilder {
         }
         val books = database.books
         val report = AnnualReportData()
-        configureReportShell(report, scopedBook, range, safeWeekMode)
+        configureReportShell(report, scopedBook, range, safeWeekMode, safeMonthMode, safeYearMode)
         if (scopedBook != null) {
             report.bookTitle = safeBookTitle(scopedBook.title)
             report.bookAuthor = safeAuthorForDisplay(scopedBook.author)
@@ -129,7 +185,11 @@ object AnnualReportBuilder {
 
         if (scopedBook == null) {
             if (report.isYearReport()) {
-                for (book in books) if (book.readingStatus == BookRecord.STATUS_FINISHED) report.finishedBooks++
+                for (book in books) {
+                    if (book.readingStatus == BookRecord.STATUS_FINISHED && readingBookKeys.contains(bookKey(null, book))) {
+                        report.finishedBooks++
+                    }
+                }
             }
             report.topBook = firstBookTitle(report)
             report.topAuthor = firstStatName(report.topAuthors)
@@ -149,14 +209,18 @@ object AnnualReportBuilder {
         scopedBook: BookRecord?,
         range: ReadingStatsUtils.Range,
         weekMode: String,
+        monthMode: String,
+        yearMode: String,
     ) {
         report.scope = if (scopedBook == null) AnnualReportScope.GLOBAL else AnnualReportScope.BOOK
         report.periodKey = range.periodKey
         report.weekMode = weekMode
+        report.monthMode = monthMode
+        report.yearMode = yearMode
         report.year = range.endDate.year
         report.startDate = range.startDateString()
         report.endDate = range.endDateString()
-        report.periodTitle = periodTitle(range, weekMode)
+        report.periodTitle = periodTitle(range, weekMode, monthMode, yearMode)
         report.periodRangeText = if (range.startDate == range.endDate) {
             range.startDateString()
         } else {
@@ -170,11 +234,21 @@ object AnnualReportBuilder {
 
     private fun configureRhythmSlots(report: AnnualReportData, range: ReadingStatsUtils.Range) {
         if (report.isYearReport()) {
-            report.monthlySeconds = IntArray(12)
-            report.monthlyChars = IntArray(12)
+            val startMonth = YearMonth.from(range.startDate)
+            val monthCount = if (report.isLast365DaysReport()) {
+                max(1L, ChronoUnit.MONTHS.between(startMonth.atDay(1), YearMonth.from(range.endDate).atDay(1)) + 1).toInt()
+            } else {
+                12
+            }
+            report.monthlySeconds = IntArray(monthCount)
+            report.monthlyChars = IntArray(monthCount)
             report.rhythmSeconds = report.monthlySeconds
             report.rhythmChars = report.monthlyChars
-            report.rhythmLabels = arrayOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12")
+            report.rhythmLabels = if (report.isLast365DaysReport()) {
+                Array(monthCount) { i -> monthLabel(startMonth.plusMonths(i.toLong())) }
+            } else {
+                arrayOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12")
+            }
             report.activeRhythmUnit = "个月"
             return
         }
@@ -202,7 +276,13 @@ object AnnualReportBuilder {
 
     private fun rhythmDayIndex(report: AnnualReportData, range: ReadingStatsUtils.Range): Map<LocalDate, Int> {
         val values = HashMap<LocalDate, Int>()
-        if (report.isYearReport()) return values
+        if (report.isYearReport()) {
+            if (report.isLast365DaysReport()) {
+                val startMonth = YearMonth.from(range.startDate)
+                for (i in report.rhythmSeconds.indices) values[startMonth.plusMonths(i.toLong()).atDay(1)] = i
+            }
+            return values
+        }
         for (i in report.rhythmSeconds.indices) values[range.startDate.plusDays(i.toLong())] = i
         return values
     }
@@ -215,8 +295,8 @@ object AnnualReportBuilder {
     ) {
         if (seconds <= 0) return
         if (report.isYearReport()) {
-            val month = date.monthValue
-            if (month in 1..12) report.monthlySeconds[month - 1] += seconds
+            val index = if (report.isLast365DaysReport()) rhythmDayIndex[YearMonth.from(date).atDay(1)] else date.monthValue - 1
+            if (index != null && index >= 0 && index < report.monthlySeconds.size) report.monthlySeconds[index] += seconds
             return
         }
         val index = rhythmDayIndex[date]
@@ -231,8 +311,8 @@ object AnnualReportBuilder {
     ) {
         if (chars <= 0) return
         if (report.isYearReport()) {
-            val month = date.monthValue
-            if (month in 1..12) report.monthlyChars[month - 1] += chars
+            val index = if (report.isLast365DaysReport()) rhythmDayIndex[YearMonth.from(date).atDay(1)] else date.monthValue - 1
+            if (index != null && index >= 0 && index < report.monthlyChars.size) report.monthlyChars[index] += chars
             return
         }
         val index = rhythmDayIndex[date]
@@ -256,7 +336,7 @@ object AnnualReportBuilder {
         report.peakRhythmLabel = if (peakIndex >= 0 && peakIndex < report.rhythmLabels.size) report.rhythmLabels[peakIndex] else ""
         if (report.isYearReport()) {
             report.activeMonths = active
-            report.peakMonth = if (peakIndex >= 0) peakIndex + 1 else 0
+            report.peakMonth = if (!report.isLast365DaysReport() && peakIndex >= 0) peakIndex + 1 else 0
             report.peakMonthSeconds = peakSeconds
         }
     }
@@ -278,16 +358,28 @@ object AnnualReportBuilder {
         }
     }
 
-    private fun periodTitle(range: ReadingStatsUtils.Range, weekMode: String?): String = when (range.periodKey) {
+    private fun periodTitle(
+        range: ReadingStatsUtils.Range,
+        weekMode: String?,
+        monthMode: String?,
+        yearMode: String?,
+    ): String = when (range.periodKey) {
         ReadingStatsUtils.PERIOD_WEEK -> if (weekMode == ReadingStatsUtils.WEEK_MODE_ROLLING) "过去七天" else "本周"
-        ReadingStatsUtils.PERIOD_YEAR -> "${range.endDate.year} 年"
+        ReadingStatsUtils.PERIOD_MONTH -> if (monthMode == ReadingStatsUtils.MONTH_MODE_LAST_30_DAYS) "过去30天" else "自然月"
+        ReadingStatsUtils.PERIOD_YEAR -> if (yearMode == ReadingStatsUtils.YEAR_MODE_LAST_365_DAYS) "过去365天" else "${range.endDate.year} 年"
         else -> "今日"
     }
 
-    private fun reportTitle(report: AnnualReportData, bookScope: Boolean): String = if (report.isYearReport()) {
-        "${report.year}${if (bookScope) " 单书阅读报告" else " 年度阅读报告"}"
-    } else {
-        "${report.periodTitle}${if (bookScope) "单书阅读报告" else "阅读报告"}"
+    private fun reportTitle(report: AnnualReportData, bookScope: Boolean): String = when {
+        report.isYearReport() && report.isLast365DaysReport() ->
+            "${report.periodTitle}${if (bookScope) "单书阅读年报" else "阅读年报"}"
+        report.isYearReport() ->
+            "${report.year}${if (bookScope) " 单书阅读报告" else " 年度阅读报告"}"
+        report.isWeekReport() ->
+            "${report.periodTitle}${if (bookScope) "单书周报" else "阅读周报"}"
+        report.isMonthReport() ->
+            "${report.periodTitle}${if (bookScope) "单书月报" else "阅读月报"}"
+        else -> "${report.periodTitle}${if (bookScope) "单书阅读报告" else "阅读报告"}"
     }
 
     private fun parseDate(value: String?): LocalDate? = try {
@@ -298,6 +390,9 @@ object AnnualReportBuilder {
 
     private fun shortDate(date: LocalDate): String =
         String.format(Locale.SIMPLIFIED_CHINESE, "%d/%d", date.monthValue, date.dayOfMonth)
+
+    private fun monthLabel(month: YearMonth): String =
+        String.format(Locale.SIMPLIFIED_CHINESE, "%02d/%d", month.year % 100, month.monthValue)
 
     private fun addDuration(values: MutableMap<String, Int>, key: String?, seconds: Int) {
         val safeKey = key?.trim().orEmpty()

@@ -440,6 +440,7 @@ class AnnualReportExportController(private val activity: Activity) {
         pendingReport == null -> "阅读摘要"
         pendingReport!!.isDayReport() -> "每日摘要"
         pendingReport!!.isWeekReport() -> "周报摘要"
+        pendingReport!!.isMonthReport() -> "月报摘要"
         else -> "年度摘要"
     }
 
@@ -452,7 +453,13 @@ class AnnualReportExportController(private val activity: Activity) {
         } else {
             "weekly-natural"
         }
-        else -> "annual"
+        report.isMonthReport() -> if (ReadingStatsUtils.MONTH_MODE_LAST_30_DAYS == report.monthMode) {
+            "monthly-last30"
+        } else {
+            "monthly-natural"
+        }
+        report.isLast365DaysReport() -> "annual-last365"
+        else -> "annual-natural"
     }
 
     companion object {

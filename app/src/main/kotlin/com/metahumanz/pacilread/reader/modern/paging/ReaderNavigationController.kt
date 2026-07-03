@@ -35,31 +35,64 @@ class ReaderNavigationController(
         val paging = requireNotNull(pagingController)
         if (!paging.ensurePageAreaReady(Runnable { openChapter(chapterIndex, charOffset, animate, direction) })) return
         val safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size - 1)
-        val pages = requireNotNull(contentController).getPagesForChapter(safeChapterIndex)
-        showPage(safeChapterIndex, ReaderPaginator.findPageForOffset(pages, Math.max(charOffset, 0)), animate, direction)
+        val content = requireNotNull(contentController)
+        val safeOffset = Math.max(charOffset, 0)
+        val navigationPages = if (!animate && direction == 0) {
+            ReaderContentController.NavigationPages(content.getPagesForChapter(safeChapterIndex), true, "blocking_reflow")
+        } else {
+            content.getNavigationPagesForOffset(safeChapterIndex, safeOffset, "open_chapter", true)
+        }
+        showPageWithPages(
+            safeChapterIndex,
+            ReaderPaginator.findPageForOffset(navigationPages.pages, safeOffset),
+            navigationPages,
+            animate,
+            direction,
+        )
     }
 
     fun openChapterFromStart(chapterIndex: Int, animate: Boolean, direction: Int) {
         if (state.chapters.isEmpty()) return
         val paging = requireNotNull(pagingController)
         if (!paging.ensurePageAreaReady(Runnable { openChapterFromStart(chapterIndex, animate, direction) })) return
-        showPage(ui.clamp(chapterIndex, 0, state.chapters.size - 1), 0, animate, direction)
+        val safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size - 1)
+        val content = requireNotNull(contentController)
+        val navigationPages = content.getNavigationPagesForPage(safeChapterIndex, 0, "open_chapter_start", animate)
+        showPageWithPages(safeChapterIndex, 0, navigationPages, animate, direction)
     }
 
     fun showPage(chapterIndex: Int, pageIndex: Int, animate: Boolean, direction: Int) {
         if (state.chapters.isEmpty()) return
         val paging = requireNotNull(pagingController)
         val content = requireNotNull(contentController)
-        val chrome = requireNotNull(chromeController)
         if (!paging.ensurePageAreaReady(Runnable { showPage(chapterIndex, pageIndex, animate, direction) })) return
-        activity.clearTextSelection()
         val safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size - 1)
-        val pages = content.getPagesForChapter(safeChapterIndex)
+        val navigationPages = if (!animate && direction == 0) {
+            ReaderContentController.NavigationPages(content.getPagesForChapter(safeChapterIndex), true, "blocking_reflow")
+        } else {
+            content.getNavigationPagesForPage(safeChapterIndex, pageIndex, "show_page", animate)
+        }
+        showPageWithPages(safeChapterIndex, pageIndex, navigationPages, animate, direction)
+    }
+
+    private fun showPageWithPages(
+        safeChapterIndex: Int,
+        pageIndex: Int,
+        navigationPages: ReaderContentController.NavigationPages,
+        animate: Boolean,
+        direction: Int,
+    ) {
+        val paging = requireNotNull(pagingController)
+        val content = requireNotNull(contentController)
+        val chrome = requireNotNull(chromeController)
+        val pages = navigationPages.pages
+        if (pages.isEmpty()) return
+        activity.clearTextSelection()
         val safePageIndex = ui.clamp(pageIndex, 0, pages.size - 1)
         if (!animate || state.isAnimating || state.book == null) {
             state.pendingTapPagingDelta = 0
             paging.invalidatePreparedPagingSnapshots()
-            bindCurrentSpread(safeChapterIndex, safePageIndex)
+            bindCurrentSpreadFromPages(safeChapterIndex, safePageIndex, pages, navigationPages.complete)
             state.currentChapterIndex = safeChapterIndex
             state.currentPageIndex = safePageIndex
             content.rememberCurrentPageAnchor()
@@ -72,10 +105,11 @@ class ReaderNavigationController(
             content.scheduleProgressSave()
             chrome.scheduleAutoHide()
             paging.schedulePagingSnapshotWarmup()
+            content.prewarmNavigationAroundCurrentPage("show_page")
             views.pageCurrent.post { activity.onReaderPageReadyForLaunchPreview() }
             return
         }
-        bindIncomingSpread(safeChapterIndex, safePageIndex)
+        bindIncomingSpreadFromPages(safeChapterIndex, safePageIndex, pages, navigationPages.complete)
         views.pageIncoming.visibility = if (runtime.settingsStore.flipMode == "simulation") View.GONE else View.VISIBLE
         paging.animateTransition(safeChapterIndex, safePageIndex, if (direction == 0) 1 else direction)
     }
@@ -112,18 +146,29 @@ class ReaderNavigationController(
         chrome.updateUiAfterPageChange()
         content.scheduleProgressSave()
         chrome.scheduleAutoHide()
+        paging.schedulePagingSnapshotWarmup()
+        content.prewarmNavigationAroundCurrentPage("partial_page")
         views.pageCurrent.post { activity.onReaderPageReadyForLaunchPreview() }
     }
 
     fun pageDown(): Boolean {
         if (state.chapters.isEmpty() || state.isAnimating) return false
-        val pages = requireNotNull(contentController).getPagesForChapter(state.currentChapterIndex)
+        val content = requireNotNull(contentController)
+        val navigationPages = content.getNavigationPagesForPage(state.currentChapterIndex, state.currentPageIndex, "page_down")
+        val pages = navigationPages.pages
         val nextPageIndex = state.currentPageIndex + pageStep()
         if (nextPageIndex < pages.size) {
-            showPage(state.currentChapterIndex, nextPageIndex, true, 1)
+            pagingController?.notePageTurnRequestStarted("page_down")
+            showPageWithPages(state.currentChapterIndex, nextPageIndex, navigationPages, true, 1)
             return true
         }
+        if (!navigationPages.complete) {
+            content.requestBackgroundPaginationForChapter(state.currentChapterIndex, "page_down_partial_gap")
+            return false
+        }
         if (state.currentChapterIndex < state.chapters.size - 1) {
+            content.requestBackgroundPaginationForChapter(state.currentChapterIndex + 1, "page_down_next_chapter")
+            pagingController?.notePageTurnRequestStarted("page_down_next_chapter")
             openChapterFromStart(state.currentChapterIndex + 1, true, 1)
             return true
         }
@@ -136,44 +181,50 @@ class ReaderNavigationController(
         return if (direction > 0) pageDown() else pageUp()
     }
 
-    fun consumePendingTapPageTurn() {
-        if (state.pendingTapPagingDelta == 0 || state.controlsVisible || state.isAnimating || state.interactivePaging) return
-        val moved = if (state.pendingTapPagingDelta > 0) {
-            pageDown().also { if (it) state.pendingTapPagingDelta-- }
-        } else {
-            pageUp().also { if (it) state.pendingTapPagingDelta++ }
-        }
-        if (!moved) state.pendingTapPagingDelta = 0
-    }
-
     fun pageUp(): Boolean {
         if (state.chapters.isEmpty() || state.isAnimating) return false
+        val content = requireNotNull(contentController)
         if (state.currentPageIndex > 0) {
-            showPage(state.currentChapterIndex, Math.max(0, state.currentPageIndex - pageStep()), true, -1)
+            val targetPageIndex = Math.max(0, state.currentPageIndex - pageStep())
+            val navigationPages = content.getNavigationPagesForPage(state.currentChapterIndex, targetPageIndex, "page_up")
+            pagingController?.notePageTurnRequestStarted("page_up")
+            showPageWithPages(state.currentChapterIndex, targetPageIndex, navigationPages, true, -1)
             return true
         }
         if (state.currentChapterIndex > 0) {
-            val pages = requireNotNull(contentController).getPagesForChapter(state.currentChapterIndex - 1)
-            showPage(state.currentChapterIndex - 1, lastSpreadStart(pages), true, -1)
+            val previousChapterIndex = state.currentChapterIndex - 1
+            val navigationPages = content.getNavigationPagesForPage(previousChapterIndex, Int.MAX_VALUE, "page_up_previous")
+            if (!navigationPages.complete) {
+                content.requestBackgroundPaginationForChapter(previousChapterIndex, "page_up_previous_wait")
+                return false
+            }
+            pagingController?.notePageTurnRequestStarted("page_up_previous_chapter")
+            showPageWithPages(previousChapterIndex, lastSpreadStart(navigationPages.pages), navigationPages, true, -1)
             return true
         }
         return false
     }
 
-    fun bindCurrentSpread(chapterIndex: Int, pageIndex: Int) = bindSpread(
-        views.pageTitleCurrent, views.pageBodyCurrent, views.pageTitleCurrentRight, views.pageBodyCurrentRight,
-        views.pageCurrentRightPane, views.pageCurrentGutter, chapterIndex, pageIndex,
-    )
+    fun bindCurrentSpread(chapterIndex: Int, pageIndex: Int) {
+        val navigationPages = requireNotNull(contentController).getNavigationPagesForPage(chapterIndex, pageIndex, "bind_current")
+        bindCurrentSpreadFromPages(chapterIndex, pageIndex, navigationPages.pages, navigationPages.complete)
+    }
 
-    fun bindIncomingSpread(chapterIndex: Int, pageIndex: Int) = bindSpread(
-        views.pageTitleIncoming, views.pageBodyIncoming, views.pageTitleIncomingRight, views.pageBodyIncomingRight,
-        views.pageIncomingRightPane, views.pageIncomingGutter, chapterIndex, pageIndex,
-    )
+    fun bindIncomingSpread(chapterIndex: Int, pageIndex: Int) {
+        val navigationPages = requireNotNull(contentController).getNavigationPagesForPage(chapterIndex, pageIndex, "bind_incoming")
+        bindIncomingSpreadFromPages(chapterIndex, pageIndex, navigationPages.pages, navigationPages.complete)
+    }
 
     private fun bindCurrentSpreadFromPages(chapterIndex: Int, pageIndex: Int, pages: List<PageSlice>, complete: Boolean) =
         bindSpreadFromPages(
             views.pageTitleCurrent, views.pageBodyCurrent, views.pageTitleCurrentRight, views.pageBodyCurrentRight,
             views.pageCurrentRightPane, views.pageCurrentGutter, chapterIndex, pageIndex, pages, complete,
+        )
+
+    private fun bindIncomingSpreadFromPages(chapterIndex: Int, pageIndex: Int, pages: List<PageSlice>, complete: Boolean) =
+        bindSpreadFromPages(
+            views.pageTitleIncoming, views.pageBodyIncoming, views.pageTitleIncomingRight, views.pageBodyIncomingRight,
+            views.pageIncomingRightPane, views.pageIncomingGutter, chapterIndex, pageIndex, pages, complete,
         )
 
     fun pageStep(): Int {
@@ -185,8 +236,10 @@ class ReaderNavigationController(
     fun lastSpreadStart(pages: List<PageSlice>?): Int = Math.max(0, (pages?.size ?: 0) - pageStep())
 
     fun bindPage(titleView: TextView, bodyView: JustifiedPageTextView, chapterIndex: Int, pageIndex: Int) {
-        val pages = requireNotNull(contentController).getPagesForChapter(chapterIndex)
-        bindPageFromPages(titleView, bodyView, pages, ui.clamp(pageIndex, 0, pages.size - 1), true)
+        val navigationPages = requireNotNull(contentController).getNavigationPagesForPage(chapterIndex, pageIndex, "bind_page")
+        val pages = navigationPages.pages
+        if (pages.isEmpty()) return
+        bindPageFromPages(titleView, bodyView, pages, ui.clamp(pageIndex, 0, pages.size - 1), navigationPages.complete)
     }
 
     private fun bindPageFromPages(
@@ -200,27 +253,6 @@ class ReaderNavigationController(
         bodyView.setTreatFinalLineAsParagraphEnd(complete && safePageIndex >= pages.size - 1)
         bodyView.setBottomJustifyEnabled(slice.hasBodyText() && safePageIndex < pages.size - 1)
         bodyView.text = slice.text
-    }
-
-    private fun bindSpread(
-        leftTitleView: TextView, leftBodyView: JustifiedPageTextView, rightTitleView: TextView,
-        rightBodyView: JustifiedPageTextView, rightPane: View, gutter: View, chapterIndex: Int, pageIndex: Int,
-    ) {
-        bindPage(leftTitleView, leftBodyView, chapterIndex, pageIndex)
-        val content = requireNotNull(contentController)
-        if (!content.isDoublePageActive()) {
-            clearRightPane(rightTitleView, rightBodyView, rightPane, gutter, false)
-            return
-        }
-        val pages = content.getPagesForChapter(chapterIndex)
-        val rightPageIndex = pageIndex + 1
-        if (rightPageIndex >= pages.size) {
-            clearRightPane(rightTitleView, rightBodyView, rightPane, gutter, true)
-            return
-        }
-        rightPane.visibility = View.VISIBLE
-        gutter.visibility = if (shouldShowDoublePageGutter()) View.VISIBLE else View.GONE
-        bindPage(rightTitleView, rightBodyView, chapterIndex, rightPageIndex)
     }
 
     private fun bindSpreadFromPages(

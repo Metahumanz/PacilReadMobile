@@ -1075,7 +1075,11 @@ open class ModernReaderActivity : ThemedReaderActivity() {
         val localY = e.rawY - loc[1]
         val viewOffset = views.pageBodyCurrent.offsetForTouch(localX, localY)
         if (viewOffset < 0) return -1
-        val pages: List<PageSlice> = content.getPagesForChapter(state.currentChapterIndex)
+        val pages: List<PageSlice> = content.getNavigationPagesForPage(
+            state.currentChapterIndex,
+            state.currentPageIndex,
+            "tts_touch_offset",
+        ).pages
         if (pages.isEmpty()) return -1
         val slice = pages[ui.clamp(state.currentPageIndex, 0, pages.size - 1)]
         val bodyStartInSlice = Math.max(slice.bodyStartInSlice, 0)
@@ -1087,7 +1091,11 @@ open class ModernReaderActivity : ThemedReaderActivity() {
         val delayMs = paging.readerFlipDurationMs() + 60L
         runtime.mainHandler.postDelayed({
             if (!state.ttsActive || state.isAnimating || state.interactivePaging) return@postDelayed
-            val pages: List<PageSlice> = content.getPagesForChapter(state.currentChapterIndex)
+            val pages: List<PageSlice> = content.getNavigationPagesForPage(
+                state.currentChapterIndex,
+                state.currentPageIndex,
+                "tts_resume_after_page_turn",
+            ).pages
             if (pages.isEmpty()) return@postDelayed
             val firstVisibleOffset = pages[ui.clamp(state.currentPageIndex, 0, pages.size - 1)].start
             tts.startTtsFrom(state.currentChapterIndex, firstVisibleOffset)
