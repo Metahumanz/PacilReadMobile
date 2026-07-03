@@ -182,11 +182,21 @@ class ReaderTtsController(
             if (retry < 3) runtime.mainHandler.postDelayed({ syncServiceHighlight(playback, retry + 1) }, paging.readerFlipDurationMs() + 40L)
             return
         }
-        val pages = content.getPagesForChapter(playback.chapterIndex)
-        if (pages.isNullOrEmpty()) return
+        val navigationPages = content.getNavigationPagesForOffset(
+            playback.chapterIndex,
+            playback.sentenceStart,
+            "tts_service_highlight",
+        )
+        val pages = navigationPages.pages
+        if (pages.isEmpty()) return
         var pageIndex = -1
         for (i in pages.indices) if (playback.sentenceStart >= pages[i].start && playback.sentenceStart < pages[i].end) { pageIndex = i; break }
-        if (pageIndex < 0) return
+        if (pageIndex < 0) {
+            if (!navigationPages.complete && retry < 3) {
+                runtime.mainHandler.postDelayed({ syncServiceHighlight(playback, retry + 1) }, paging.readerFlipDurationMs() + 40L)
+            }
+            return
+        }
         val lastVisible = state.currentPageIndex + content.pagesPerScreen() - 1
         if ((pageIndex < state.currentPageIndex || pageIndex > lastVisible) && retry < 3) {
             navigation.openChapter(playback.chapterIndex, playback.sentenceStart, true, if (pageIndex >= state.currentPageIndex) 1 else -1)
@@ -302,14 +312,19 @@ class ReaderTtsController(
             navigation.openChapter(state.ttsChapterIndex, pendingUnit.start, true, if (state.ttsChapterIndex >= state.currentChapterIndex) 1 else -1)
             scheduleTtsPlayback(paging.readerFlipDurationMs() + 60L); return
         }
-        val pages = content.getPagesForChapter(state.ttsChapterIndex)
-        if (pages.isNullOrEmpty()) { advanceToNextTtsChapter(); return }
+        val navigationPages = content.getNavigationPagesForPage(state.ttsChapterIndex, state.currentPageIndex, "tts_play_current")
+        val pages = navigationPages.pages
+        if (pages.isEmpty()) {
+            if (!navigationPages.complete) scheduleTtsPlayback(160L) else advanceToNextTtsChapter()
+            return
+        }
         val firstVisibleSlice = pages[ui.clamp(state.currentPageIndex, 0, pages.size - 1)]
         while (state.currentTtsUnitIndex < ttsUnits.size && ttsUnits[state.currentTtsUnitIndex].end <= firstVisibleSlice.start) state.currentTtsUnitIndex++
         if (state.currentTtsUnitIndex >= ttsUnits.size) { advanceToNextTtsChapter(); return }
         val groupCount = computeGroupUnitCount(); val unit = ttsUnits[state.currentTtsUnitIndex]
         val visiblePage = findVisiblePageForUnit(pages, unit)
         if (visiblePage == null) {
+            if (!navigationPages.complete) { scheduleTtsPlayback(160L); return }
             val lastVisibleSlice = pages[ui.clamp(state.currentPageIndex + content.pagesPerScreen() - 1, 0, pages.size - 1)]
             if (unit.start >= lastVisibleSlice.end) { if (navigation.pageDown()) scheduleTtsPlayback(paging.readerFlipDurationMs() + 60L) else advanceToNextTtsChapter(); return }
             navigation.openChapter(state.ttsChapterIndex, unit.start, true, -1); scheduleTtsPlayback(paging.readerFlipDurationMs() + 60L); return
@@ -394,14 +409,19 @@ class ReaderTtsController(
         override fun run() {
             if (!state.ttsActive || sessionId != state.ttsSessionId) return
             if (state.isAnimating || state.interactivePaging) { if (retries++ < 30) runtime.mainHandler.postDelayed(this, paging.readerFlipDurationMs() + 20L); return }
-            val pages = content.getPagesForChapter(state.ttsChapterIndex)
-            if (pages.isNullOrEmpty()) return
+            val navigationPages = content.getNavigationPagesForPage(state.ttsChapterIndex, state.currentPageIndex, "tts_highlight_task")
+            val pages = navigationPages.pages
+            if (pages.isEmpty()) return
             val visible = findVisiblePageForUnit(pages, unit)
             if (visible != null) {
                 state.ttsHighlightPageIndex = visible.pageIndex
                 val body = max(visible.slice.bodyStartInSlice, 0); val start = max(textStartWithoutLeadingSymbols(unit), visible.slice.start); val end = min(textEndWithoutTrailingPunctuation(unit), visible.slice.end)
                 state.ttsHighlightStart = body + start - visible.slice.start; state.ttsHighlightEnd = body + end - visible.slice.start
                 if (state.ttsHighlightEnd > state.ttsHighlightStart) updateTtsHighlight(); return
+            }
+            if (!navigationPages.complete) {
+                if (retries++ < 30) runtime.mainHandler.postDelayed(this, 160L)
+                return
             }
             val firstVisible = ui.clamp(state.currentPageIndex, 0, pages.size - 1)
             if (unit.start >= pages[firstVisible].end && navigation.pageDown() && retries++ < 30) runtime.mainHandler.postDelayed(this, paging.readerFlipDurationMs() + 20L)
@@ -410,9 +430,12 @@ class ReaderTtsController(
 
     private fun highlightUnit(unitIndex: Int) {
         if (unitIndex !in ttsUnits.indices) return
-        val pages = content.getPagesForChapter(state.ttsChapterIndex); if (pages.isNullOrEmpty()) return
+        val navigationPages = content.getNavigationPagesForPage(state.ttsChapterIndex, state.currentPageIndex, "tts_highlight_unit")
+        val pages = navigationPages.pages
+        if (pages.isEmpty()) return
         val unit = ttsUnits[unitIndex]; val visible = findVisiblePageForUnit(pages, unit)
         if (visible == null) {
+            if (!navigationPages.complete) { scheduleTtsPlayback(160L); return }
             val lastSlice = pages[ui.clamp(state.currentPageIndex + content.pagesPerScreen() - 1, 0, pages.size - 1)]
             if (unit.start >= lastSlice.end && navigation.pageDown()) scheduleTtsPlayback(paging.readerFlipDurationMs() + 60L)
             return

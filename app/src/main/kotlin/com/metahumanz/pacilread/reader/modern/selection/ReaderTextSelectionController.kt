@@ -228,8 +228,13 @@ class ReaderTextSelectionController(
 
     private fun findTextTarget(event: MotionEvent?): Target? {
         if (event == null || state.currentChapterIndex !in state.chapters.indices) return null
-        val pages = content.getPagesForChapter(state.currentChapterIndex)
-        if (pages.isNullOrEmpty()) return null
+        val navigationPages = content.getNavigationPagesForPage(
+            state.currentChapterIndex,
+            state.currentPageIndex,
+            "selection_find_text_target",
+        )
+        val pages = navigationPages.pages
+        if (pages.isEmpty()) return null
         if (isInsideView(event, views.pageBodyCurrent)) {
             val pageIndex = ui.clamp(state.currentPageIndex, 0, pages.size - 1)
             val slice = pages[pageIndex]

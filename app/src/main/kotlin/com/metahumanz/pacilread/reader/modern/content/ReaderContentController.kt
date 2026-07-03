@@ -76,6 +76,8 @@ class ReaderContentController(
     private var forceInitialFullPagination = false
     private var initialVisiblePageBound = false
     private var activePartialPagination: PartialPagination? = null
+    private val backgroundPaginationLock = Object()
+    private val backgroundPaginationChapters: MutableSet<Int> = HashSet()
     private var runningProgressiveSignature: ReaderLayoutSignature? = null
     private var runningProgressiveSource: String? = null
     private val progressSyncLock = Object()
@@ -154,31 +156,58 @@ class ReaderContentController(
         runtime.mainHandler.post(scheduledReflowRunnable)
     }
 
-    private fun startBackgroundPagination(chapterIndex: Int) {
-        if (!activity.isReaderActive) return
-        val anchor = views.pageCurrent ?: views.pageBodyCurrent
-        anchor.post { startBackgroundPaginationAfterLayout(chapterIndex) }
+    fun requestBackgroundPaginationForChapter(chapterIndex: Int, reason: String) {
+        if (!activity.isReaderActive || state.chapters.isEmpty()) return
+        val safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size - 1)
+        Log.d(TAG, "[翻页诊断] 请求后台分页 - chapter=$safeChapterIndex reason=$reason")
+        startBackgroundPagination(safeChapterIndex, reason)
     }
 
-    private fun startBackgroundPaginationAfterLayout(chapterIndex: Int) {
+    fun requestBackgroundPaginationForNavigationGap(chapterIndex: Int, anchorOffset: Int, reason: String) {
+        if (!activity.isReaderActive || state.chapters.isEmpty()) return
+        val safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size - 1)
+        pendingReflowChapterIndex = safeChapterIndex
+        pendingReflowAnchorOffset = Math.max(anchorOffset, 0)
+        waitingForPaginationChapterIndex = safeChapterIndex
+        Log.d(
+            TAG,
+            "[翻页诊断] 导航等待后台分页 - chapter=$safeChapterIndex offset=$pendingReflowAnchorOffset reason=$reason",
+        )
+        startBackgroundPagination(safeChapterIndex, reason)
+    }
+
+    fun prewarmNavigationAroundCurrentPage(reason: String) {
+        if (!activity.isReaderActive || state.book == null || state.chapters.isEmpty()) return
+        val chapterIndex = ui.clamp(state.currentChapterIndex, 0, state.chapters.size - 1)
+        requestBackgroundPaginationForChapter(chapterIndex, "$reason:current")
+        prewarmAdjacentChapters(chapterIndex)
+    }
+
+    private fun startBackgroundPagination(chapterIndex: Int, reason: String = "background") {
+        if (!activity.isReaderActive) return
+        val anchor = views.pageCurrent ?: views.pageBodyCurrent
+        anchor.post { startBackgroundPaginationAfterLayout(chapterIndex, reason) }
+    }
+
+    private fun startBackgroundPaginationAfterLayout(chapterIndex: Int, reason: String) {
         if (!activity.isReaderActive) return
         val pageWidth = getReaderPageTextWidth()
         val pageHeight = getRegularReaderPageHeight()
         if (pageWidth <= 0 || pageHeight <= 0) {
             Log.d(TAG, "[时序] 后台分页尺寸无效 w=$pageWidth h=$pageHeight - 重试")
             val anchor = views.pageCurrent ?: views.pageBodyCurrent
-            anchor.post { startBackgroundPaginationAfterLayoutRetry(chapterIndex) }
+            anchor.post { startBackgroundPaginationAfterLayoutRetry(chapterIndex, reason) }
             return
         }
-        Log.d(TAG, "[时序] 后台分页尺寸就绪 w=$pageWidth h=$pageHeight - 启动")
+        Log.d(TAG, "[时序] 后台分页尺寸就绪 w=$pageWidth h=$pageHeight - 启动 reason=$reason")
         val sig = captureCurrentLayoutSignature()
         if (sig != null) {
             activateLayoutSignature(sig)
         }
-        launchBackgroundPagination(chapterIndex, pageWidth, pageHeight)
+        launchBackgroundPagination(chapterIndex, pageWidth, pageHeight, reason)
     }
 
-    private fun startBackgroundPaginationAfterLayoutRetry(chapterIndex: Int) {
+    private fun startBackgroundPaginationAfterLayoutRetry(chapterIndex: Int, reason: String) {
         if (!activity.isReaderActive) return
         val pageWidth = getReaderPageTextWidth()
         val pageHeight = getRegularReaderPageHeight()
@@ -187,13 +216,17 @@ class ReaderContentController(
         if (sig != null) {
             activateLayoutSignature(sig)
         }
-        launchBackgroundPagination(chapterIndex, pageWidth, pageHeight)
+        launchBackgroundPagination(chapterIndex, pageWidth, pageHeight, reason)
     }
 
-    private fun launchBackgroundPagination(chapterIndex: Int, pageWidth: Int, pageHeight: Int) {
+    private fun launchBackgroundPagination(chapterIndex: Int, pageWidth: Int, pageHeight: Int, reason: String) {
         if (!activity.isReaderActive) return
         if (PAGE_CACHE.contains(chapterIndex)) return
-        Log.d(TAG, "[时序] 后台分页开始执行 - chapter=$chapterIndex w=$pageWidth h=$pageHeight")
+        if (!markBackgroundPaginationRequested(chapterIndex)) {
+            Log.d(TAG, "[翻页诊断] 后台分页已在队列中 - chapter=$chapterIndex reason=$reason")
+            return
+        }
+        Log.d(TAG, "[时序] 后台分页开始执行 - chapter=$chapterIndex w=$pageWidth h=$pageHeight reason=$reason")
         val startTime = System.currentTimeMillis()
         val lineSpacing = views.pageBodyCurrent.lineSpacingExtra
         val basePaint = TextPaint(views.pageBodyCurrent.paint)
@@ -203,72 +236,209 @@ class ReaderContentController(
         val titleMargin = getChapterTitleBodyMarginPx()
         val sig = captureCurrentLayoutSignature()
 
-        runtime.safeExecutePagination(Runnable {
+        val enqueued = runtime.safeExecutePagination(Runnable {
             if (!activity.isReaderActive) return@Runnable
-            if (PAGE_CACHE.contains(chapterIndex)) return@Runnable
-            val snapshot = PaginationSnapshot(
-                pageWidth,
-                pageHeight,
-                lineSpacing,
-                basePaint,
-                sig,
-                titleTypeface,
-                titleTextSize,
-                titleMargin,
-                indentPx,
-            )
-            val processed = getProcessedChapterText(chapterIndex)
-            if (processed.isEmpty()) return@Runnable
-            val display = buildDisplayChapterTextForBackground(chapterIndex, snapshot)
-            val paint = TextPaint(snapshot.basePaint)
-            val pages = sanitizePageSlices(
-                ReaderPaginator.paginate(
-                    display.text,
-                    paint,
-                    snapshot.pageWidth,
-                    snapshot.regularPageHeight,
-                    snapshot.regularPageHeight,
-                    snapshot.lineSpacingExtra,
-                    display.bodyStartIndex,
-                ),
-            )
-            val elapsed = System.currentTimeMillis() - startTime
-            Log.d(TAG, "[时序] 后台分页完成 - chapter=$chapterIndex 页数=${pages.size} 耗时=${elapsed}ms")
-            val capturedSig = sig
-            activity.runOnReaderUiThread {
-                val currentSig = captureCurrentLayoutSignature()
-                if (capturedSig != null && currentSig != null &&
-                    !capturedSig.isPaginationCompatibleWith(currentSig)
-                ) {
-                    Log.d(TAG, "[时序] 后台分页结果丢弃 - layout签名已变化 chapter=$chapterIndex")
-                    return@runOnReaderUiThread
-                }
-                activateLayoutSignature(currentSig)
-                putPagesForActiveLayout(chapterIndex, pages)
-                val partial = activePartialPagination
-                val hadPartial = partial != null && partial.chapterIndex == chapterIndex
-                clearPartialPaginationForChapter(chapterIndex)
-                if (hadPartial && state.currentChapterIndex == chapterIndex) {
-                    Log.d(TAG, "[时序] 完整分页替换首屏partial - chapter=$chapterIndex")
-                    chrome?.updateUiAfterPageChange()
-                    paging?.schedulePagingSnapshotWarmup()
-                    prewarmAdjacentChapters(chapterIndex)
-                }
-                val isInitialLoad = initialReflowDeferred
-                val isWaiting = waitingForPaginationChapterIndex == chapterIndex
-                if (isInitialLoad || isWaiting) {
-                    Log.d(
-                        TAG,
-                        "[时序] 后台分页触发reflow - chapter=$chapterIndex deferred=$isInitialLoad waiting=$isWaiting",
-                    )
+            try {
+                if (PAGE_CACHE.contains(chapterIndex)) return@Runnable
+                val snapshot = PaginationSnapshot(
+                    pageWidth,
+                    pageHeight,
+                    lineSpacing,
+                    basePaint,
+                    sig,
+                    titleTypeface,
+                    titleTextSize,
+                    titleMargin,
+                    indentPx,
+                )
+                val processed = getProcessedChapterText(chapterIndex)
+                if (processed.isEmpty()) return@Runnable
+                val display = buildDisplayChapterTextForBackground(chapterIndex, snapshot)
+                val paint = TextPaint(snapshot.basePaint)
+                val pages = sanitizePageSlices(
+                    ReaderPaginator.paginate(
+                        display.text,
+                        paint,
+                        snapshot.pageWidth,
+                        snapshot.regularPageHeight,
+                        snapshot.regularPageHeight,
+                        snapshot.lineSpacingExtra,
+                        display.bodyStartIndex,
+                    ),
+                )
+                val elapsed = System.currentTimeMillis() - startTime
+                Log.d(TAG, "[时序] 后台分页完成 - chapter=$chapterIndex 页数=${pages.size} 耗时=${elapsed}ms reason=$reason")
+                val capturedSig = sig
+                activity.runOnReaderUiThread {
+                    clearBackgroundPaginationRequested(chapterIndex)
+                    val currentSig = captureCurrentLayoutSignature()
+                    if (capturedSig != null && currentSig != null &&
+                        !capturedSig.isPaginationCompatibleWith(currentSig)
+                    ) {
+                        Log.d(TAG, "[时序] 后台分页结果丢弃 - layout签名已变化 chapter=$chapterIndex")
+                        return@runOnReaderUiThread
+                    }
+                    activateLayoutSignature(currentSig)
+                    putPagesForActiveLayout(chapterIndex, pages)
+                    val partial = activePartialPagination
+                    val hadPartial = partial != null && partial.chapterIndex == chapterIndex
+                    clearPartialPaginationForChapter(chapterIndex)
+                    if (hadPartial && state.currentChapterIndex == chapterIndex) {
+                        Log.d(TAG, "[时序] 完整分页替换首屏partial - chapter=$chapterIndex")
+                        chrome?.updateUiAfterPageChange()
+                        paging?.schedulePagingSnapshotWarmup()
+                        prewarmAdjacentChapters(chapterIndex)
+                    }
+                    val isWaiting = waitingForPaginationChapterIndex == chapterIndex
                     if (isWaiting) {
+                        Log.d(
+                            TAG,
+                            "[时序] 后台分页触发reflow - chapter=$chapterIndex waiting=$isWaiting",
+                        )
                         waitingForPaginationChapterIndex = -1
                         runtime.mainHandler.removeCallbacks(scheduledReflowRunnable)
+                        runtime.mainHandler.post(scheduledReflowRunnable)
                     }
-                    runtime.mainHandler.post(scheduledReflowRunnable)
                 }
+            } finally {
+                clearBackgroundPaginationRequested(chapterIndex)
             }
         }, "background pagination")
+        if (!enqueued) {
+            clearBackgroundPaginationRequested(chapterIndex)
+        }
+    }
+
+    private fun markBackgroundPaginationRequested(chapterIndex: Int): Boolean = synchronized(backgroundPaginationLock) {
+        backgroundPaginationChapters.add(chapterIndex)
+    }
+
+    private fun clearBackgroundPaginationRequested(chapterIndex: Int) {
+        synchronized(backgroundPaginationLock) {
+            backgroundPaginationChapters.remove(chapterIndex)
+        }
+    }
+
+    fun getNavigationPagesForPage(
+        chapterIndex: Int,
+        pageIndex: Int,
+        reason: String,
+        waitForExact: Boolean = false,
+    ): NavigationPages {
+        val safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size - 1)
+        val known = getKnownNavigationPages(safeChapterIndex, pageIndex, null, reason)
+        if (known != null) return known
+        val previewOffset = fallbackChapterOffset(safeChapterIndex)
+        if (waitForExact) {
+            requestBackgroundPaginationForNavigationGap(safeChapterIndex, previewOffset, "$reason:preview_page")
+        } else {
+            requestBackgroundPaginationForChapter(safeChapterIndex, "$reason:preview_page")
+        }
+        return buildPreviewNavigationPages(safeChapterIndex, previewOffset, reason)
+    }
+
+    fun getNavigationPagesForOffset(
+        chapterIndex: Int,
+        charOffset: Int,
+        reason: String,
+        waitForExact: Boolean = false,
+    ): NavigationPages {
+        val safeChapterIndex = ui.clamp(chapterIndex, 0, state.chapters.size - 1)
+        val safeOffset = Math.max(charOffset, 0)
+        val known = getKnownNavigationPages(safeChapterIndex, null, safeOffset, reason)
+        if (known != null) return known
+        if (waitForExact) {
+            requestBackgroundPaginationForNavigationGap(safeChapterIndex, safeOffset, "$reason:preview_offset")
+        } else {
+            requestBackgroundPaginationForChapter(safeChapterIndex, "$reason:preview_offset")
+        }
+        return buildPreviewNavigationPages(safeChapterIndex, safeOffset, reason)
+    }
+
+    private fun getKnownNavigationPages(
+        chapterIndex: Int,
+        pageIndex: Int?,
+        charOffset: Int?,
+        reason: String,
+    ): NavigationPages? {
+        ensurePaginationCacheMatchesLayout()
+        val cached = PAGE_CACHE.get(chapterIndex)
+        if (!cached.isNullOrEmpty()) {
+            Log.d(TAG, "[翻页诊断] 导航分页命中完整缓存 - chapter=$chapterIndex reason=$reason")
+            return NavigationPages(cached, true, "full_cache")
+        }
+        val partial = activePartialPaginationForChapter(chapterIndex)
+        if (partial != null && partial.pages.isNotEmpty()) {
+            val coversPage = pageIndex == null || pageIndex in partial.pages.indices
+            val coversOffset = charOffset == null || partialCoversOffset(partial.pages, charOffset)
+            if (coversPage && coversOffset) {
+                Log.d(
+                    TAG,
+                    "[翻页诊断] 导航分页命中partial - chapter=$chapterIndex known=${partial.pages.size} reason=$reason",
+                )
+                requestBackgroundPaginationForChapter(chapterIndex, "$reason:complete_partial")
+                return NavigationPages(partial.pages, false, "partial")
+            }
+            Log.d(
+                TAG,
+                "[翻页诊断] partial未覆盖导航目标 - chapter=$chapterIndex known=${partial.pages.size} page=$pageIndex offset=$charOffset reason=$reason",
+            )
+            requestBackgroundPaginationForChapter(chapterIndex, "$reason:extend_partial")
+        }
+        return null
+    }
+
+    private fun activePartialPaginationForChapter(chapterIndex: Int): PartialPagination? {
+        val partial = activePartialPagination ?: return null
+        if (partial.chapterIndex != chapterIndex || partial.pages.isEmpty()) return null
+        val currentSignature = captureCurrentLayoutSignature()
+        if (partial.layoutSignature != null && currentSignature != null &&
+            !partial.layoutSignature.isPaginationCompatibleWith(currentSignature)
+        ) {
+            clearPartialPaginationForChapter(chapterIndex)
+            return null
+        }
+        return partial
+    }
+
+    private fun partialCoversOffset(pages: List<PageSlice>, charOffset: Int): Boolean {
+        if (pages.isNullOrEmpty()) return false
+        val safeOffset = Math.max(charOffset, 0)
+        for (page in pages) {
+            if (!page.hasBodyText()) continue
+            if (safeOffset >= page.start && safeOffset < page.end) return true
+        }
+        return safeOffset == 0 && pages.any { it.hasBodyText() }
+    }
+
+    private fun buildPreviewNavigationPages(chapterIndex: Int, charOffset: Int, reason: String): NavigationPages {
+        val slice = buildPreviewPageSlice(chapterIndex, charOffset)
+        Log.d(
+            TAG,
+            "[翻页诊断] 使用preview分页兜底 - chapter=$chapterIndex offset=${slice.start} chars=${slice.end - slice.start} reason=$reason",
+        )
+        return NavigationPages(listOf(slice), false, "preview")
+    }
+
+    private fun buildPreviewPageSlice(chapterIndex: Int, charOffset: Int): PageSlice {
+        val previewText = getPreviewChapterText(chapterIndex)
+        if (previewText.isNullOrEmpty()) {
+            val safeOffset = Math.max(charOffset, 0)
+            return PageSlice(safeOffset, safeOffset, -1, -1, "")
+        }
+        val start = ui.clamp(charOffset, 0, previewText.length)
+        val end = Math.min(previewText.length, start + NAVIGATION_PREVIEW_CHAR_LIMIT)
+        if (end <= start) return PageSlice(start, start, -1, -1, "")
+        return PageSlice(start, end, 0, end - start, previewText.subSequence(start, end))
+    }
+
+    private fun getPreviewChapterText(chapterIndex: Int): CharSequence? {
+        synchronized(processedChapterLruCache) {
+            processedChapterLruCache.get(chapterIndex)?.let { return it }
+        }
+        val chapter = if (chapterIndex in state.chapters.indices) state.chapters[chapterIndex] else null
+        val body = chapter?.bodyText ?: return null
+        return if (isVolumeHeadingWithoutBody(chapter, body)) "" else body
     }
 
     fun isCacheHit(): Boolean = cacheHit
@@ -758,6 +928,18 @@ class ReaderContentController(
             Log.d(TAG, "[时序] getPagesForChapter 缓存命中 - chapter=$chapterIndex")
             return cached
         }
+        if (state.isAnimating || state.interactivePaging || state.pagingSnapshotsVisible) {
+            val navigationPages = getNavigationPagesForPage(
+                ui.clamp(chapterIndex, 0, state.chapters.size - 1),
+                state.currentPageIndex,
+                "animation_guard_getPages",
+            )
+            Log.d(
+                TAG,
+                "[翻页诊断] 动画期阻止主线程完整分页 - chapter=$chapterIndex source=${navigationPages.source}",
+            )
+            return navigationPages.pages
+        }
         Log.w(TAG, "[时序] getPagesForChapter 缓存未命中! 主线程分页 - chapter=$chapterIndex")
         val t0 = System.currentTimeMillis()
         val display = buildDisplayChapterText(chapterIndex)
@@ -911,8 +1093,10 @@ class ReaderContentController(
     }
 
     private fun prewarmAdjacentChapters(currentChapterIndex: Int) {
+        requestBackgroundPaginationForChapter(currentChapterIndex, "prewarm_adjacent_current")
         val nextIndex = currentChapterIndex + 1
         if (nextIndex < 0 || nextIndex >= state.chapters.size) return
+        requestBackgroundPaginationForChapter(nextIndex, "prewarm_adjacent_next")
         runtime.safeExecute(Runnable {
             if (!activity.isReaderActive) return@Runnable
             synchronized(processedChapterLruCache) {
@@ -1081,7 +1265,8 @@ class ReaderContentController(
     fun currentVisibleBodyCharCount(): Int {
         if (state.chapters.isEmpty()) return 0
         val chapterIndex = ui.clamp(state.currentChapterIndex, 0, state.chapters.size - 1)
-        val pages = getPagesForChapter(chapterIndex)
+        val navigationPages = getNavigationPagesForPage(chapterIndex, state.currentPageIndex, "visible_char_count")
+        val pages = navigationPages.pages
         if (pages.isEmpty()) return 0
         val startPage = ui.clamp(state.currentPageIndex, 0, pages.size - 1)
         val endPage = Math.min(pages.size - 1, startPage + pagesPerScreen() - 1)
@@ -1128,8 +1313,8 @@ class ReaderContentController(
 
     private fun isAtBookEnd(chapterIndex: Int, pageIndex: Int): Boolean {
         if (state.chapters.isEmpty() || chapterIndex < state.chapters.size - 1) return false
-        val pages = getPagesForChapter(chapterIndex)
-        if (pages.isEmpty()) return false
+        val pages = PAGE_CACHE.get(chapterIndex)
+        if (pages.isNullOrEmpty()) return false
         return Math.max(pageIndex, 0) >= requireNavigation().lastSpreadStart(pages)
     }
 
@@ -2183,6 +2368,12 @@ class ReaderContentController(
         val bodyStartIndex: Int = Math.max(0, Math.min(bodyStartIndex, this.text.length))
     }
 
+    class NavigationPages(
+        @JvmField val pages: List<PageSlice>,
+        @JvmField val complete: Boolean,
+        @JvmField val source: String,
+    )
+
     private class PartialPagination(
         val chapterIndex: Int,
         pages: List<PageSlice>?,
@@ -2220,6 +2411,7 @@ class ReaderContentController(
         private const val PROGRESSIVE_WAIT_LOG_MS = 800L
         private const val PROGRESSIVE_HARD_FALLBACK_MS = 5000L
         private const val MAX_LAYOUT_PAGE_CACHE_SIGNATURES = 4
+        private const val NAVIGATION_PREVIEW_CHAR_LIMIT = 1600
         private const val SIMILAR_PROGRESS_MAX_OFFSET_DELTA = 800
         private const val EMPTY_CHAPTER_TEXT_PLACEHOLDER = "章节正文为空或外置正文文件缺失。"
         private val VOLUME_CHAPTER_TITLE_PATTERN: Pattern = Pattern.compile(

@@ -9,6 +9,8 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Rect
+import android.os.SystemClock
+import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -44,6 +46,8 @@ class ReaderPagingAnimator(
     private lateinit var chrome: ReaderChromeController
     private var pagingSnapshotWarmupRequestId = 0
     private var lowRamDevice: Boolean? = null
+    private var pendingPageTurnRequestStartedAt = 0L
+    private var pendingPageTurnRequestReason: String? = null
 
     fun attachControllers(
         navigation: ReaderNavigationController,
@@ -143,7 +147,13 @@ class ReaderPagingAnimator(
         return event.action == KeyEvent.ACTION_UP
     }
 
+    fun notePageTurnRequestStarted(reason: String) {
+        pendingPageTurnRequestStartedAt = SystemClock.uptimeMillis()
+        pendingPageTurnRequestReason = reason
+    }
+
     fun animateTransition(targetChapterIndex: Int, targetPageIndex: Int, direction: Int) {
+        val prepareStartedAt = SystemClock.uptimeMillis()
         val token = ++state.animationToken
         state.isAnimating = true
         rememberAnimationTarget(targetChapterIndex, targetPageIndex)
@@ -158,6 +168,7 @@ class ReaderPagingAnimator(
         resetShadowView()
         views.pageIncoming.visibility = View.GONE
         if (mode == "none") {
+            logPageTurnAnimationStart(mode, targetChapterIndex, targetPageIndex, prepareStartedAt)
             finishAnimation(targetChapterIndex, targetPageIndex, direction, token)
             return
         }
@@ -205,6 +216,7 @@ class ReaderPagingAnimator(
             }
         })
         animator.start()
+        logPageTurnAnimationStart(mode, targetChapterIndex, targetPageIndex, prepareStartedAt)
     }
 
     fun readerFlipDurationMs(): Long {
@@ -216,6 +228,17 @@ class ReaderPagingAnimator(
         if (speed == "fast") return (baseDuration * 0.6f).toLong()
         if (speed == "slow") return (baseDuration * 1.5f).toLong()
         return baseDuration
+    }
+
+    private fun logPageTurnAnimationStart(mode: String, targetChapterIndex: Int, targetPageIndex: Int, prepareStartedAt: Long) {
+        val now = SystemClock.uptimeMillis()
+        val requestDelay = if (pendingPageTurnRequestStartedAt > 0L) now - pendingPageTurnRequestStartedAt else -1L
+        Log.d(
+            TAG,
+            "[翻页诊断] 动画启动 - mode=$mode target=$targetChapterIndex/$targetPageIndex requestToStart=${requestDelay}ms prepare=${now - prepareStartedAt}ms reason=${pendingPageTurnRequestReason ?: "unknown"}",
+        )
+        pendingPageTurnRequestStartedAt = 0L
+        pendingPageTurnRequestReason = null
     }
 
     fun ensurePageAreaReady(action: Runnable): Boolean {
@@ -398,7 +421,8 @@ class ReaderPagingAnimator(
 
     private fun settleOnPage(targetChapterIndex: Int, targetPageIndex: Int) {
         val safeChapterIndex = ui.clamp(targetChapterIndex, 0, state.chapters.size - 1)
-        val pages = content.getPagesForChapter(safeChapterIndex)
+        val navigationPages = content.getNavigationPagesForPage(safeChapterIndex, targetPageIndex, "settle_on_page", true)
+        val pages = navigationPages.pages
         if (pages.isEmpty()) {
             cancelInteractivePaging()
             return
@@ -434,6 +458,7 @@ class ReaderPagingAnimator(
         content.scheduleProgressSave()
         chrome.scheduleAutoHide()
         schedulePagingSnapshotWarmup()
+        content.prewarmNavigationAroundCurrentPage("page_change")
     }
 
     private fun updatePagingVelocity(event: MotionEvent) {
@@ -478,16 +503,26 @@ class ReaderPagingAnimator(
 
     private fun resolveInteractiveTarget(direction: Int): PageTarget? {
         if (direction > 0) {
-            val pages: List<PageSlice> = content.getPagesForChapter(state.currentChapterIndex)
+            val navigationPages = content.getNavigationPagesForPage(state.currentChapterIndex, state.currentPageIndex, "interactive_target_next")
+            val pages: List<PageSlice> = navigationPages.pages
             val nextPageIndex = state.currentPageIndex + navigation.pageStep()
             if (nextPageIndex < pages.size) return PageTarget(state.currentChapterIndex, nextPageIndex)
+            if (!navigationPages.complete) {
+                content.requestBackgroundPaginationForChapter(state.currentChapterIndex, "interactive_next_partial_gap")
+                return null
+            }
             if (state.currentChapterIndex < state.chapters.size - 1) return PageTarget(state.currentChapterIndex + 1, 0)
             return null
         }
         if (state.currentPageIndex > 0) return PageTarget(state.currentChapterIndex, Math.max(0, state.currentPageIndex - navigation.pageStep()))
         if (state.currentChapterIndex > 0) {
-            val previousPages = content.getPagesForChapter(state.currentChapterIndex - 1)
-            return PageTarget(state.currentChapterIndex - 1, navigation.lastSpreadStart(previousPages))
+            val previousChapterIndex = state.currentChapterIndex - 1
+            val previousPages = content.getNavigationPagesForPage(previousChapterIndex, Int.MAX_VALUE, "interactive_target_previous")
+            if (!previousPages.complete) {
+                content.requestBackgroundPaginationForChapter(previousChapterIndex, "interactive_previous_wait")
+                return null
+            }
+            return PageTarget(previousChapterIndex, navigation.lastSpreadStart(previousPages.pages))
         }
         return null
     }
@@ -776,6 +811,7 @@ class ReaderPagingAnimator(
         content.scheduleProgressSave()
         chrome.scheduleAutoHide()
         schedulePagingSnapshotWarmup()
+        content.prewarmNavigationAroundCurrentPage("page_change")
     }
 
     private fun showPromotedCurrentSnapshotCover(): Boolean {
@@ -959,17 +995,34 @@ class ReaderPagingAnimator(
     }
 
     private fun preparePagingSnapshots(targetChapterIndex: Int, targetPageIndex: Int, direction: Int) {
+        val startedAt = SystemClock.uptimeMillis()
         val simulationMode = runtime.settingsStore.flipMode == "simulation"
         val bridgeStableCover = simulationMode && state.simulationStableCoverVisible
         if (!bridgeStableCover) clearStableSimulationCover(false)
         state.simulationFinishCoverVisible = false
         clearSimulationPagingLayer()
+        val currentHit = hasPreparedCurrentSnapshot(state.currentChapterIndex, state.currentPageIndex)
+        val preparedTarget = preparedTargetSnapshot(targetChapterIndex, targetPageIndex)
+        val targetHitBeforeCapture = preparedTarget != null && !preparedTarget.isRecycled
+        if (!simulationMode && (!currentHit || !targetHitBeforeCapture)) {
+            Log.d(
+                TAG,
+                "[翻页诊断] snapshot未预热，非仿真动效改用live图层 - currentHit=$currentHit targetHit=$targetHitBeforeCapture target=$targetChapterIndex/$targetPageIndex",
+            )
+            restoreLivePageLayers(true)
+            return
+        }
         ensurePreparedCurrentSnapshot()
-        var targetSnapshot = preparedTargetSnapshot(targetChapterIndex, targetPageIndex)
+        var targetSnapshot = preparedTarget
+        val targetHit = targetHitBeforeCapture
         if (targetSnapshot == null) {
             targetSnapshot = captureDirectionalPreparedSnapshot(direction, targetChapterIndex, targetPageIndex)
         }
         setActiveIncomingSnapshot(targetSnapshot, targetChapterIndex, targetPageIndex)
+        Log.d(
+            TAG,
+            "[翻页诊断] snapshot准备 - currentHit=$currentHit targetHit=$targetHit target=$targetChapterIndex/$targetPageIndex elapsed=${SystemClock.uptimeMillis() - startedAt}ms",
+        )
         if (state.currentPageSnapshotBitmap == null || state.incomingPageSnapshotBitmap == null) {
             restoreLivePageLayers(true)
             return
@@ -1772,6 +1825,7 @@ class ReaderPagingAnimator(
     )
 
     companion object {
+        private const val TAG = "PacilReadReader"
         private val PAGE_SLIDE_INTERPOLATOR = DecelerateInterpolator(1.35f)
         private val PAGE_TURN_INTERPOLATOR = DecelerateInterpolator(0.95f)
         private const val PHONE_SIMULATION_DIAGONAL_RATIO = 1.35f
