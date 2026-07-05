@@ -63,6 +63,7 @@ class ReaderTtsController(
     private var playbackBound = false
     private var playbackBindingRequested = false
     private var stagedSleepDurationMillis = 0L
+    @Volatile private var oneShotSpeechSessionId = 0
     private val playbackListener = TtsPlaybackService.Listener(::applyPlaybackSnapshot)
     private val playbackConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -109,6 +110,7 @@ class ReaderTtsController(
 
     fun startTtsFrom(chapterIndex: Int, charOffset: Int) {
         if (runtime.settingsStore.ttsEngine == "mimo" && runtime.settingsStore.ttsMimoApiKey.isBlank()) { ui.showToast("请先在设置页填写 MiMo API Key"); return }
+        cancelOneShotSpeech()
         val timerDuration = currentSleepTimerDuration()
         stagedSleepDurationMillis = timerDuration
         state.ttsActive = true; state.ttsPaused = false; state.ttsSessionId++
@@ -124,6 +126,7 @@ class ReaderTtsController(
     }
 
     fun stopTts() {
+        cancelOneShotSpeech()
         state.ttsActive = false; state.ttsPaused = false; state.ttsSessionId++
         activity.startService(Intent(activity, TtsPlaybackService::class.java).setAction(TtsPlaybackService.ACTION_STOP))
         cancelHighlightProgression()
@@ -145,6 +148,94 @@ class ReaderTtsController(
         if (!state.ttsActive || !state.ttsPaused) return
         state.ttsPaused = false
         activity.startService(Intent(activity, TtsPlaybackService::class.java).setAction(TtsPlaybackService.ACTION_RESUME))
+    }
+
+    fun speakTextOnce(text: String?) {
+        val speechText = text?.trim()?.takeIf { it.isNotEmpty() } ?: run {
+            ui.showToast("没有可朗读的文字")
+            return
+        }
+        if (state.ttsActive || state.ttsPaused) stopTts() else cancelOneShotSpeech()
+        val sessionId = ++oneShotSpeechSessionId
+        if (runtime.settingsStore.ttsEngine == "mimo") {
+            speakMimoTextOnce(speechText, sessionId)
+        } else {
+            speakSystemTextOnce(speechText, sessionId)
+        }
+    }
+
+    private fun cancelOneShotSpeech() {
+        oneShotSpeechSessionId++
+        try { runtime.systemTtsClient.stop() } catch (_: Exception) {}
+        try { runtime.mimoTtsClient.cancel() } catch (_: Exception) {}
+    }
+
+    private fun speakSystemTextOnce(text: String, sessionId: Int) {
+        runtime.systemTtsClient.setEngine(runtime.settingsStore.ttsSystemEnginePackage)
+        speakSystemTextWhenReady(text, sessionId, 0)
+    }
+
+    private fun speakSystemTextWhenReady(text: String, sessionId: Int, retry: Int) {
+        if (sessionId != oneShotSpeechSessionId) return
+        if (!runtime.systemTtsClient.isInitSuccess()) {
+            if (retry < SYSTEM_TTS_READY_RETRIES) {
+                runtime.mainHandler.postDelayed({ speakSystemTextWhenReady(text, sessionId, retry + 1) }, SYSTEM_TTS_READY_RETRY_MS)
+            } else {
+                ui.showToast("系统 TTS 未就绪")
+            }
+            return
+        }
+        if (!runtime.systemTtsClient.requestAudioFocus()) {
+            ui.showToast("未获取到音频焦点")
+            return
+        }
+        runtime.systemTtsClient.speak(text, runtime.settingsStore.ttsRate, object : SystemTtsClient.SpeakCallback {
+            override fun onStart() = Unit
+            override fun onDone() {
+                activity.runOnReaderUiThread {
+                    if (sessionId == oneShotSpeechSessionId) runtime.systemTtsClient.abandonAudioFocus()
+                }
+            }
+            override fun onError(message: String) {
+                activity.runOnReaderUiThread {
+                    if (sessionId != oneShotSpeechSessionId) return@runOnReaderUiThread
+                    runtime.systemTtsClient.abandonAudioFocus()
+                    ui.showToast("选区朗读失败: $message")
+                }
+            }
+        })
+    }
+
+    private fun speakMimoTextOnce(text: String, sessionId: Int) {
+        if (runtime.settingsStore.ttsMimoApiKey.isBlank()) {
+            ui.showToast("请先在设置页填写 MiMo API Key")
+            return
+        }
+        if (!runtime.systemTtsClient.requestAudioFocus()) {
+            ui.showToast("未获取到音频焦点")
+            return
+        }
+        val queued = runtime.safeExecuteTts(Runnable {
+            try {
+                if (sessionId != oneShotSpeechSessionId) return@Runnable
+                runtime.mimoTtsClient.speak(
+                    text,
+                    runtime.settingsStore.ttsMimoApiKey,
+                    runtime.settingsStore.ttsMimoVoice,
+                    runtime.settingsStore.ttsRate,
+                )
+                activity.runOnReaderUiThread {
+                    if (sessionId == oneShotSpeechSessionId) runtime.systemTtsClient.abandonAudioFocus()
+                }
+            } catch (error: Exception) {
+                activity.runOnReaderUiThread {
+                    if (sessionId != oneShotSpeechSessionId) return@runOnReaderUiThread
+                    runtime.systemTtsClient.abandonAudioFocus()
+                    ui.showToast("MiMo 选区朗读失败: ${error.message}")
+                }
+            }
+        }, "speak selected text")
+        if (!queued) runtime.systemTtsClient.abandonAudioFocus()
     }
 
     fun updateTtsHighlight() {
@@ -564,5 +655,7 @@ class ReaderTtsController(
         private val TTS_MIMO_VOICE_KEYS = arrayOf("冰糖", "茉莉", "苏打", "白桦")
         private val TTS_MIMO_VOICE_LABELS = arrayOf("冰糖（女声）", "茉莉（女声）", "苏打（男声）", "白桦（男声）")
         private const val MIMO_PRECACHE_AHEAD = 2
+        private const val SYSTEM_TTS_READY_RETRIES = 40
+        private const val SYSTEM_TTS_READY_RETRY_MS = 150L
     }
 }

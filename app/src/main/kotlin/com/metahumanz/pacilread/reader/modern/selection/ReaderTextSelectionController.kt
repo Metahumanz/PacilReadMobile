@@ -7,19 +7,24 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Build
+import android.text.InputType
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.view.animation.AccelerateInterpolator
 import android.view.animation.DecelerateInterpolator
+import android.view.inputmethod.InputMethodManager
 import android.widget.Button
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -307,16 +312,44 @@ class ReaderTextSelectionController(
         popupContent.measure(View.MeasureSpec.makeMeasureSpec(root.width, View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(root.height, View.MeasureSpec.AT_MOST))
         val popupWidth = popupContent.measuredWidth; val popupHeight = popupContent.measuredHeight
         val rootLocation = IntArray(2); root.getLocationOnScreen(rootLocation)
+        val margin = ui.dp(8)
+        val avoidanceRect = selectionAvoidanceRect(rootLocation)
         var x = (lastRawX - rootLocation[0] - popupWidth / 2f).roundToInt()
         var y = (lastRawY - rootLocation[1] - popupHeight - ui.dp(18)).roundToInt()
-        x = ui.clamp(x, ui.dp(8), max(ui.dp(8), root.width - popupWidth - ui.dp(8)))
-        y = ui.clamp(y, ui.dp(8), max(ui.dp(8), root.height - popupHeight - ui.dp(8)))
+        if (avoidanceRect != null) {
+            x = (avoidanceRect.centerX() - popupWidth / 2f).roundToInt()
+            val gap = ui.dp(12)
+            val topY = (avoidanceRect.top - popupHeight - gap).roundToInt()
+            val bottomY = (avoidanceRect.bottom + gap).roundToInt()
+            val topFits = topY >= margin
+            val bottomFits = bottomY + popupHeight <= root.height - margin
+            val topSpace = avoidanceRect.top - margin - gap
+            val bottomSpace = root.height - margin - avoidanceRect.bottom - gap
+            y = when {
+                topFits -> topY
+                bottomFits -> bottomY
+                topSpace >= bottomSpace -> margin
+                else -> root.height - popupHeight - margin
+            }
+        }
+        x = ui.clamp(x, margin, max(margin, root.width - popupWidth - margin))
+        y = ui.clamp(y, margin, max(margin, root.height - popupHeight - margin))
         popup.update(x, y, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         if (shouldAnimateOpen) {
             popupContent.pivotX = popupWidth / 2f; popupContent.pivotY = popupHeight / 2f
             popupContent.scaleX = PredictiveBackScaleController.READER_MIN_SCALE; popupContent.scaleY = PredictiveBackScaleController.READER_MIN_SCALE; popupContent.alpha = 0f
             popupContent.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(180).setInterpolator(DecelerateInterpolator()).start()
         }
+    }
+
+    private fun selectionAvoidanceRect(rootLocation: IntArray): RectF? {
+        val target = activeTarget ?: return null
+        val rect = target.textView.getSelectionHighlightScreenBounds() ?: return null
+        target.textView.getSelectionHandleScreenBounds(selectionStart)?.let(rect::union)
+        target.textView.getSelectionHandleScreenBounds(selectionEnd)?.let(rect::union)
+        rect.inset(-ui.dp(10).toFloat(), -ui.dp(10).toFloat())
+        rect.offset(-rootLocation[0].toFloat(), -rootLocation[1].toFloat())
+        return rect
     }
 
     private fun ensurePopupWindow() {
@@ -331,7 +364,7 @@ class ReaderTextSelectionController(
         container.addView(row1)
         val row2 = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
-            addView(createActionButton("搜索", ::searchSelection, true)); addView(createActionButton("朗读", ::speakSelection, false))
+            addView(createActionButton("搜索", ::searchSelection, true)); addView(createActionButton("朗读", ::speakSelection, true)); addView(createActionButton("编辑", ::editSelection, false))
         }
         container.addView(row2, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = ui.dp(4) })
         popupWindow = PopupWindow(container, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, false).apply {
@@ -359,23 +392,113 @@ class ReaderTextSelectionController(
     }
 
     private fun shareSelection() {
-        val text = selectedText(); val target = activeTarget ?: return
-        if (text.isEmpty()) return
+        val snapshot = selectionSnapshot() ?: return
+        clearSelection()
+        shareSelectionSnapshot(snapshot)
+    }
+
+    private fun editSelection() {
+        val snapshot = selectionSnapshot() ?: return
+        clearSelection()
+        showEditSelectionDialog(snapshot)
+    }
+
+    private fun selectionSnapshot(): SelectionSnapshot? {
+        val text = selectedText(); val target = activeTarget ?: return null
+        if (text.isEmpty()) return null
         val chapterIndex = target.chapterIndex; val chapterStart = selectedChapterOffset()
         val excerpt = QuoteShareCard.contextExcerpt(content.getProcessedChapterText(chapterIndex), chapterStart, chapterStart + text.length)
-        val title = state.book?.title ?: ""; val author = state.book?.author ?: ""
-        val chapter = state.chapters.getOrNull(chapterIndex)?.title ?: ""
-        clearSelection()
+        return SelectionSnapshot(
+            text = text,
+            contextBefore = excerpt.before,
+            contextAfter = excerpt.after,
+            title = state.book?.title ?: "",
+            author = state.book?.author ?: "",
+            chapter = state.chapters.getOrNull(chapterIndex)?.title ?: "",
+        )
+    }
+
+    private fun shareSelectionSnapshot(snapshot: SelectionSnapshot) {
         val progressDialog = showShareGenerationDialog()
         runtime.safeExecute(Runnable {
             try {
-                val card = QuoteShareCard.generate(activity, text, excerpt.before, excerpt.after, title, author, chapter)
+                val card = QuoteShareCard.generate(activity, snapshot.text, snapshot.contextBefore, snapshot.contextAfter, snapshot.title, snapshot.author, snapshot.chapter)
                 if (!activity.isReaderActive) { card.recyclePreview(); return@Runnable }
                 activity.runOnReaderUiThread { progressDialog.dismiss(); showSharePreview(card) }
             } catch (error: Exception) {
                 activity.runOnReaderUiThread { progressDialog.dismiss(); ui.showToast("生成分享卡失败: ${error.message}") }
             }
         }, "render quote share card")
+    }
+
+    private fun showEditSelectionDialog(snapshot: SelectionSnapshot) {
+        val contentView = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL; setBackgroundResource(R.drawable.bg_app_dialog)
+            val padding = ui.dp(18); setPadding(padding, padding, padding, padding)
+        }
+        val headerRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val titleColumn = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        titleColumn.addView(TextView(activity).apply {
+            text = "文字提取与复制"; setTextColor(ThemeModeHelper.resolveColor(activity, R.color.app_text_primary)); textSize = 22f; setTypeface(null, Typeface.BOLD)
+        })
+        titleColumn.addView(TextView(activity).apply {
+            text = "可先调整选中文字，再复制或生成分享图"; setTextColor(ThemeModeHelper.resolveColor(activity, R.color.app_text_muted)); textSize = 13f
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(0, ui.dp(4), 0, 0) })
+        headerRow.addView(titleColumn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        val closeButton = Button(activity).apply {
+            text = "×"; isAllCaps = false; minWidth = 0; minHeight = ui.dp(42); minimumHeight = ui.dp(42); textSize = 20f; gravity = Gravity.CENTER
+            setPadding(0, 0, 0, ui.dp(2)); setBackgroundResource(R.drawable.bg_app_outline_button)
+            setTextColor(ThemeModeHelper.resolveColor(activity, R.color.app_button_outline_text))
+        }
+        headerRow.addView(closeButton, LinearLayout.LayoutParams(ui.dp(42), ui.dp(42)).apply { marginStart = ui.dp(12) })
+        contentView.addView(headerRow)
+
+        val editText = EditText(activity).apply {
+            setText(snapshot.text); setSelection(text?.length ?: 0)
+            setTextColor(ThemeModeHelper.resolveColor(activity, R.color.app_text_primary))
+            setHintTextColor(ThemeModeHelper.resolveColor(activity, R.color.app_text_muted))
+            textSize = 15f; gravity = Gravity.START or Gravity.TOP
+            setSingleLine(false); setHorizontallyScrolling(false); minLines = 8; maxLines = 14
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            setPadding(ui.dp(14), ui.dp(12), ui.dp(14), ui.dp(12)); setBackgroundResource(R.drawable.bg_app_input)
+        }
+        contentView.addView(editText, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(260)).apply { setMargins(0, ui.dp(16), 0, 0) })
+
+        val actionRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
+        val cancelButton = previewActionButton("取消", false)
+        val copyButton = previewActionButton("复制全文", false)
+        val shareButton = previewActionButton("分享", true)
+        actionRow.addView(cancelButton, weightedPreviewButtonParams(0))
+        actionRow.addView(copyButton, weightedPreviewButtonParams(ui.dp(8)))
+        actionRow.addView(shareButton, weightedPreviewButtonParams(ui.dp(8)))
+        contentView.addView(actionRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(0, ui.dp(16), 0, 0) })
+
+        val dialog = AlertDialog.Builder(activity).setView(contentView).create()
+        closeButton.setOnClickListener { dialog.dismiss() }
+        cancelButton.setOnClickListener { dialog.dismiss() }
+        copyButton.setOnClickListener {
+            val editedText = editText.text?.toString().orEmpty()
+            if (editedText.isEmpty()) { ui.showToast("没有可复制的文字"); return@setOnClickListener }
+            (activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.setPrimaryClip(ClipData.newPlainText("选中文字", editedText))
+            ui.showToast("已复制"); dialog.dismiss()
+        }
+        shareButton.setOnClickListener {
+            val editedText = editText.text?.toString().orEmpty()
+            if (editedText.trim().isEmpty()) { ui.showToast("没有可分享的文字"); return@setOnClickListener }
+            dialog.dismiss(); shareSelectionSnapshot(snapshot.copy(text = editedText))
+        }
+        dialog.show()
+        val window = dialog.window
+        window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT)); window?.setWindowAnimations(R.style.AppPopDialogAnimation)
+        window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        val dialogWidth = min(activity.resources.displayMetrics.widthPixels - ui.dp(32), ui.dp(620))
+        window?.setLayout(max(ui.dp(280), dialogWidth), ViewGroup.LayoutParams.WRAP_CONTENT)
+        val backRegistration = PredictiveDialogDismissController.install(dialog, window, TransitionMotionModeHelper.isFluidMode(runtime.settingsStore), null)
+        dialog.setOnDismissListener { backRegistration.unregister() }
+        editText.post {
+            editText.requestFocus()
+            (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)?.showSoftInput(editText, InputMethodManager.SHOW_IMPLICIT)
+        }
     }
 
     private fun showShareGenerationDialog(): AlertDialog {
@@ -457,9 +580,9 @@ class ReaderTextSelectionController(
         clearSelection(); dialogs.showSearchDialog(text, true)
     }
     private fun speakSelection() {
-        val target = activeTarget ?: return; val ttsController = tts ?: return
-        val offset = selectedChapterOffset(); val chapterIndex = target.chapterIndex
-        clearSelection(); ttsController.startTtsFrom(chapterIndex, offset)
+        val text = selectedText(); val ttsController = tts ?: return
+        if (text.isEmpty()) return
+        clearSelection(); ttsController.speakTextOnce(text)
     }
     private fun selectedText(): String {
         val target = activeTarget
@@ -493,6 +616,14 @@ class ReaderTextSelectionController(
 
     private class Target(val textView: JustifiedPageTextView, val chapterIndex: Int, val pageIndex: Int, val slice: PageSlice)
     private class WordRange(val start: Int, val end: Int)
+    private data class SelectionSnapshot(
+        val text: String,
+        val contextBefore: String,
+        val contextAfter: String,
+        val title: String,
+        val author: String,
+        val chapter: String,
+    )
 
     companion object {
         private const val LONG_PRESS_TIMEOUT_MS = 600L
