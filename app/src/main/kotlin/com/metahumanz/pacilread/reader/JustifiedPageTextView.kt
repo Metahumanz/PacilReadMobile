@@ -486,6 +486,38 @@ open class JustifiedPageTextView : AppCompatTextView {
         else -> null
     }
 
+    fun getSelectionHighlightScreenBounds(): RectF? {
+        if (!hasSelectionHighlight()) return null
+        val layout = layout ?: return null
+        val text = text ?: return null
+        val screenPos = IntArray(2)
+        getLocationOnScreen(screenPos)
+        val result = RectF()
+        val adjustments = verticalAdjustments(layout, text)
+        val padLeft = totalPaddingLeft.toFloat()
+        val padTop = contentTopPadding().toFloat()
+        for (lineIndex in 0 until layout.lineCount) {
+            val lineStart = layout.getLineStart(lineIndex)
+            val visibleEnd = layout.getLineVisibleEnd(lineIndex)
+            if (lineStart >= visibleEnd) continue
+            val start = max(selectionHighlightStart, lineStart)
+            val end = min(selectionHighlightEnd, visibleEnd)
+            if (start >= end) continue
+            val startX = canvasXForOffset(layout, text, start)
+            val endX = canvasXForOffset(layout, text, end)
+            val top = layout.getLineTop(lineIndex) + adjustments.offsetForLine(lineIndex)
+            val bottom = layout.getLineBottom(lineIndex) + adjustments.offsetForLine(lineIndex)
+            val lineRect = RectF(
+                screenPos[0] + padLeft + min(startX, endX),
+                screenPos[1] + padTop + top,
+                screenPos[0] + padLeft + max(startX, endX),
+                screenPos[1] + padTop + bottom,
+            )
+            if (result.isEmpty) result.set(lineRect) else result.union(lineRect)
+        }
+        return if (result.isEmpty) null else result
+    }
+
     internal fun adjustedLineTopForTest(lineIndex: Int): Float {
         val layout = layout
         val text = text
