@@ -10,7 +10,6 @@ import com.metahumanz.pacilread.model.ReadingTimeEntryRecord
 import com.metahumanz.pacilread.model.ReplacementRuleRecord
 import com.metahumanz.pacilread.storage.JsonDatabase
 import com.metahumanz.pacilread.storage.SettingsStore
-import com.metahumanz.pacilread.storage.SnapshotManager
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -23,6 +22,8 @@ import java.security.MessageDigest
 import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
+import java.util.zip.GZIPInputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -53,8 +54,6 @@ open class WebDavBackupManager(
         } else {
             RESOLUTION_MERGE
         }
-        listener.onStatus("创建差异决议前本地恢复点...")
-        SnapshotManager(context, databaseHelper, settingsStore).createSnapshot("webdav-diff-resolution")
         if (RESOLUTION_LOCAL == safeResolution) {
             listener.onStatus("保留本地数据并回写 sync/...")
             uploadResolvedSyncSnapshot(listener)
@@ -74,12 +73,19 @@ open class WebDavBackupManager(
         ensureRestoreScopeSelected()
         listener.onStatus("下载云端清单...")
         val preview = SyncDiffPreview(mode)
-        preview.remoteManifest = downloadManifestIfExists(baseUrl + MANIFEST_FILE)
+        val manifestUrl = baseUrl + MANIFEST_FILE
+        if (webDavClient.head(manifestUrl).code != 200) throw IllegalStateException("云端 manifest 不存在")
+        val manifestText = webDavClient.downloadText(manifestUrl)
+        if (manifestText.isBlank()) throw IllegalStateException("云端 manifest 为空")
+        val remoteManifest = JSONObject(manifestText)
+        if (SyncDiffPreview.MODE_FULL == mode) validateSnapshotCommit(baseUrl, remoteManifest, manifestText)
+        preview.remoteManifest = remoteManifest
         val dataDir = databaseHelper.getDataDir()
-        for (fileName in SYNC_JSON_FILES) {
-            listener.onStatus("预览 " + fileName + "...")
+        for ((index, fileName) in SYNC_JSON_FILES.withIndex()) {
+            listener.onStatus("预览 ${index + 1}/${SYNC_JSON_FILES.size} · $fileName...")
+            listener.onProgress(index + 1, SYNC_JSON_FILES.size)
             val localArray = readLocalEntityArray(dataDir, fileName)
-            val remoteArray = downloadRemoteEntityArray(baseUrl, fileName)
+            val remoteArray = downloadRemoteEntityArray(baseUrl, fileName, remoteManifest)
             preview.remoteEntities[fileName] = remoteArray
             appendDiffItems(preview, entityTypeForFile(fileName), localArray, remoteArray)
         }
@@ -107,7 +113,7 @@ open class WebDavBackupManager(
                 }
                 "rules.json" -> mergeRules(array, restoredBookIdMap, forceRemote)
                 "themes.json" -> mergeThemes(array, forceRemote)
-                "bookmarks.json" -> mergeBookmarks(array, forceRemote)
+                "bookmarks.json" -> mergeBookmarks(array, restoredBookIdMap, forceRemote)
                 READING_STATS_CANONICAL_FILE -> mergeReadingStats(array)
             }
         }
@@ -161,22 +167,20 @@ open class WebDavBackupManager(
     private fun readLocalEntityArray(dataDir: File, fileName: String): JSONArray {
         val file = localJsonFile(dataDir, fileName)
         if (!file.exists()) return JSONArray()
-        return try {
-            val content = readFileString(file)
-            if (content == null || content.trim().isEmpty()) JSONArray() else readEntityArray(fileName, content)
-        } catch (_: Exception) {
-            JSONArray()
-        }
+        val content = readFileString(file) ?: throw IllegalStateException("读取本地 $fileName 失败")
+        if (content.isBlank()) throw IllegalStateException("本地 $fileName 为空")
+        return readEntityArray(fileName, content)
     }
 
-    private fun downloadRemoteEntityArray(baseUrl: String, fileName: String): JSONArray {
+    private fun downloadRemoteEntityArray(baseUrl: String, fileName: String, manifest: JSONObject): JSONArray {
         val tempFile = File(context.cacheDir, "preview_" + fileName)
-        return try {
-            downloadJsonWithAliases(baseUrl, fileName, tempFile)
-            val content = readFileString(tempFile)
-            if (content == null || content.trim().isEmpty()) JSONArray() else readEntityArray(fileName, content)
-        } catch (_: Exception) {
-            JSONArray()
+        try {
+            val remoteFileName = downloadJsonWithAliases(baseUrl, fileName, tempFile)
+            val entry = getManifestFileEntry(manifest.optJSONObject("files"), remoteFileName)
+                ?: throw IllegalStateException("manifest 缺少 $fileName 校验信息")
+            validateFileAgainstManifest(tempFile, entry, fileName)
+            val content = readFileString(tempFile) ?: throw IllegalStateException("读取云端 $fileName 失败")
+            return readEntityArray(fileName, content)
         } finally {
             tempFile.delete()
         }
@@ -306,32 +310,45 @@ open class WebDavBackupManager(
         if (shouldSyncSettingsSnapshot()) webDavClient.ensureAndroidSettingsDirectory()
         if (includeChapterText) webDavClient.ensureChapterTextDirectory()
 
+        var fullManifest: JSONObject? = null
         if (shouldSyncDatabaseSnapshot()) {
             listener.onStatus("上传 JSON 数据文件...")
             val dataDir = databaseHelper.getDataDir()
             val manifest = JSONObject()
             manifest.put("schemaVersion", 1)
             manifest.put("generatedAt", System.currentTimeMillis())
+            manifest.put("generationId", System.currentTimeMillis().toString() + "-" + UUID.randomUUID())
             val filesEntry = JSONObject()
 
-            for (fileName in SYNC_JSON_FILES) {
+            for ((index, fileName) in SYNC_JSON_FILES.withIndex()) {
                 val jsonFile = localJsonFile(dataDir, fileName)
-                if (!jsonFile.exists()) continue
+                if (!jsonFile.exists()) throw IllegalStateException("本地缺少完整快照文件: $fileName")
                 val sha256 = computeFileSha256(jsonFile)
+                if (sha256.isBlank()) throw IllegalStateException("计算 $fileName SHA-256 失败")
                 manifestAppendFile(filesEntry, fileName, sha256, jsonFile.length())
-                listener.onStatus("上传 " + fileName + "...")
+                listener.onStatus("上传 JSON ${index + 1}/${SYNC_JSON_FILES.size} · $fileName...")
+                listener.onProgress(index + 1, SYNC_JSON_FILES.size)
                 webDavClient.uploadFile(jsonFile, webDavClient.backupBaseUrl() + "database/" + fileName)
                 uploadReadingStatsLegacyCopyIfNeeded(jsonFile, webDavClient.backupBaseUrl() + "database/", fileName)
             }
 
             manifest.put("files", filesEntry)
-            manifest.put("assets", JSONObject())
-            uploadManifest(webDavClient.backupBaseUrl() + "database/" + MANIFEST_FILE, manifest)
+            fullManifest = manifest
         }
 
         if (shouldSyncSettingsSnapshot()) uploadSettingsSnapshot(listener)
 
         uploadLocalAssets(listener, includeChapterText, includeFiles, includeBackgrounds)
+        if (fullManifest != null) {
+            fullManifest.put("assets", collectFullAssetManifest(includeChapterText, includeFiles))
+            val scopes = JSONObject()
+            scopes.put("chapterText", includeChapterText)
+            scopes.put("covers", includeFiles)
+            scopes.put("sourceFiles", includeFiles)
+            fullManifest.put("scopes", scopes)
+            uploadManifest(webDavClient.backupBaseUrl() + "database/" + MANIFEST_FILE, fullManifest)
+            uploadSnapshotCommit(webDavClient.backupBaseUrl() + "database/" + COMMIT_FILE, fullManifest)
+        }
         cleanupRemoteUnreferencedAssetsIfEnabled(listener, includeChapterText, includeFiles, includeBackgrounds)
         settingsStore.webDavLastFullBackupAt = System.currentTimeMillis()
         cleanupLocalTempCache()
@@ -358,6 +375,10 @@ open class WebDavBackupManager(
         if (shouldSyncDatabaseSnapshot()) {
             val dataDir = databaseHelper.getDataDir()
             val manifestUrl = webDavClient.syncBaseUrl() + MANIFEST_FILE
+            val remoteManifest = downloadManifestIfExists(manifestUrl)
+            if (remoteManifest != null) {
+                ensureIncrementalBackupKeepsRemoteOnlyData(dataDir, remoteManifest, listener)
+            }
 
             val localManifest = JSONObject()
             localManifest.put("schemaVersion", 1)
@@ -371,15 +392,15 @@ open class WebDavBackupManager(
             }
             localManifest.put("files", localFiles)
 
-            val remoteManifest = downloadManifestIfExists(manifestUrl)
             var uploadedFiles = 0
-            for (fileName in SYNC_JSON_FILES) {
+            for ((index, fileName) in SYNC_JSON_FILES.withIndex()) {
                 val jsonFile = localJsonFile(dataDir, fileName)
                 if (!jsonFile.exists()) continue
                 val localHash = getManifestFileHash(localFiles, fileName)
                 val remoteHash = getManifestFileHash(remoteManifest?.optJSONObject("files"), fileName)
                 if (remoteHash != null && remoteHash == localHash) continue
-                listener.onStatus("上传 " + fileName + "...")
+                listener.onStatus("上传变化 JSON ${index + 1}/${SYNC_JSON_FILES.size} · $fileName...")
+                listener.onProgress(index + 1, SYNC_JSON_FILES.size)
                 webDavClient.uploadFile(jsonFile, webDavClient.syncBaseUrl() + fileName)
                 uploadReadingStatsLegacyCopyIfNeeded(jsonFile, webDavClient.syncBaseUrl(), fileName)
                 uploadedFiles++
@@ -408,7 +429,6 @@ open class WebDavBackupManager(
 
         if (shouldSyncSettingsSnapshot()) uploadSettingsSnapshot(listener)
 
-        cleanupRemoteUnreferencedAssetsIfEnabled(listener, includeChapterText, includeFiles, includeBackgrounds)
         settingsStore.webDavLastLiteBackupAt = System.currentTimeMillis()
         cleanupLocalTempCache()
         listener.onStatus("增量备份完成")
@@ -418,48 +438,57 @@ open class WebDavBackupManager(
     fun fullRestore(listener: StatusListener) {
         cleanupLocalTempCache()
         ensureRestoreScopeSelected()
-        listener.onStatus("创建恢复前本地恢复点...")
-        SnapshotManager(context, databaseHelper, settingsStore).createSnapshot("webdav-full-restore")
-
         if (shouldSyncDatabaseSnapshot()) {
             val databaseUrl = webDavClient.backupBaseUrl() + "database/"
             val manifestUrl = databaseUrl + MANIFEST_FILE
-            if (webDavClient.head(databaseUrl + "books.json").code == 404) {
-                throw IllegalStateException("云端没有全量备份，请先执行全量备份")
-            }
+            if (webDavClient.head(manifestUrl).code != 200) throw IllegalStateException("云端没有完整 manifest，请先执行全量备份")
+            val manifestText = webDavClient.downloadText(manifestUrl)
+            if (manifestText.isBlank()) throw IllegalStateException("云端 manifest 为空")
+            val manifest = JSONObject(manifestText)
+            val filesEntry = manifest.optJSONObject("files") ?: throw IllegalStateException("云端 manifest 缺少文件清单")
+            validateSnapshotCommit(databaseUrl, manifest, manifestText)
 
-            listener.onStatus("下载 JSON 数据文件...")
+            listener.onStatus("下载并校验 JSON 数据文件...")
             val dataDir = databaseHelper.getDataDir()
             if (!dataDir.exists()) dataDir.mkdirs()
+            val stagingDir = File(context.cacheDir, "backup_restore/json")
+            if (!stagingDir.exists() && !stagingDir.mkdirs()) throw IllegalStateException("无法创建恢复缓存目录")
+            for ((index, fileName) in SYNC_JSON_FILES.withIndex()) {
+                val target = File(stagingDir, canonicalJsonFileName(fileName))
+                listener.onStatus("校验 JSON ${index + 1}/${SYNC_JSON_FILES.size} · $fileName...")
+                listener.onProgress(index + 1, SYNC_JSON_FILES.size)
+                val remoteFileName = downloadJsonWithAliases(databaseUrl, fileName, target)
+                val entry = getManifestFileEntry(filesEntry, remoteFileName)
+                    ?: throw IllegalStateException("manifest 缺少 $fileName 校验信息")
+                validateFileAgainstManifest(target, entry, fileName)
+                val content = readFileString(target) ?: throw IllegalStateException("读取 $fileName 失败")
+                readEntityArray(fileName, content)
+            }
 
-            val manifest = downloadManifestIfExists(manifestUrl)
             for (fileName in SYNC_JSON_FILES) {
-                val target = localJsonFile(dataDir, fileName)
-                listener.onStatus("下载 " + fileName + "...")
-                try {
-                    val remoteFileName = downloadJsonWithAliases(databaseUrl, fileName, target)
-                    if (manifest != null) {
-                        val expectedHash = getManifestFileHash(manifest.optJSONObject("files"), remoteFileName)
-                        if (expectedHash != null) {
-                            val actualHash = computeFileSha256(target)
-                            if (expectedHash != actualHash) {
-                                Log.w(TAG, fileName + " SHA-256 校验不匹配，继续使用")
-                            }
-                        }
-                    }
-                } catch (error: Exception) {
-                    Log.w(TAG, "下载 " + fileName + " 失败: " + error.message)
-                }
+                File(stagingDir, canonicalJsonFileName(fileName)).copyTo(localJsonFile(dataDir, fileName), overwrite = true)
             }
             databaseHelper.reloadFromDisk()
             normalizeReplacementRules(databaseHelper.getRulesMutable())
             databaseHelper.flush()
             databaseHelper.rebaseLocalAssetPaths()
 
+            val assets = manifest.optJSONObject("assets") ?: JSONObject()
+            val strictSnapshot = manifest.optString("generationId", "").isNotBlank()
+            val scopes = manifest.optJSONObject("scopes")
             listener.onStatus("恢复书籍资源文件...")
-            restoreBookAssetFiles(listener, settingsStore.isWebDavSyncFilesEnabled)
-            listener.onStatus("恢复章节正文...")
-            restoreChapterTextFiles(listener)
+            restoreBookAssetFiles(
+                listener = listener,
+                includeSourceFiles = settingsStore.isWebDavSyncFilesEnabled && scopes?.optBoolean("sourceFiles", true) != false,
+                assets = assets,
+                strictCovers = strictSnapshot && scopes?.optBoolean("covers", false) == true,
+                strictSourceFiles = strictSnapshot && scopes?.optBoolean("sourceFiles", false) == true,
+                includeCovers = scopes?.optBoolean("covers", true) != false,
+            )
+            if (scopes?.optBoolean("chapterText", true) != false) {
+                listener.onStatus("恢复章节正文...")
+                restoreChapterTextFiles(listener, assets, strictSnapshot && scopes?.optBoolean("chapterText", false) == true)
+            }
         }
 
         restoreSettingsJsonIfPresent(listener)
@@ -471,8 +500,6 @@ open class WebDavBackupManager(
     fun incrementalRestore(listener: StatusListener) {
         cleanupLocalTempCache()
         ensureRestoreScopeSelected()
-        listener.onStatus("创建恢复前本地恢复点...")
-        SnapshotManager(context, databaseHelper, settingsStore).createSnapshot("webdav-incremental-restore")
 
         if (shouldSyncDatabaseSnapshot()) {
             val manifestUrl = webDavClient.syncBaseUrl() + MANIFEST_FILE
@@ -497,22 +524,17 @@ open class WebDavBackupManager(
             var mergedChapters = false
             val restoredBookIdMap: MutableMap<Long, Long> = HashMap()
 
-            for (fileName in SYNC_JSON_FILES) {
+            val changedJsonFiles = SYNC_JSON_FILES.filter(changedFiles::contains)
+            for ((index, fileName) in changedJsonFiles.withIndex()) {
                 if (!changedFiles.contains(fileName)) continue
                 val tempFile = File(context.cacheDir, "restore_" + fileName)
-                listener.onStatus("下载 " + fileName + "...")
+                listener.onStatus("下载变化 JSON ${index + 1}/${changedJsonFiles.size} · $fileName...")
+                listener.onProgress(index + 1, changedJsonFiles.size)
                 val remoteFileName = downloadJsonWithAliases(webDavClient.syncBaseUrl(), fileName, tempFile)
-
-                val expectedHash = getManifestFileHash(remoteManifest.optJSONObject("files"), remoteFileName)
-                if (expectedHash != null) {
-                    val actualHash = computeFileSha256(tempFile)
-                    if (expectedHash != actualHash) {
-                        throw IllegalStateException(fileName + " 校验失败，传输可能不完整")
-                    }
-                }
-
-                val content = readFileString(tempFile)
-                if (content == null || content.trim().isEmpty()) continue
+                val entry = getManifestFileEntry(remoteManifest.optJSONObject("files"), remoteFileName)
+                    ?: throw IllegalStateException("manifest 缺少 $fileName 校验信息")
+                validateFileAgainstManifest(tempFile, entry, fileName)
+                val content = readFileString(tempFile) ?: throw IllegalStateException("读取 $fileName 失败")
                 val array = readEntityArray(fileName, content)
 
                 when (fileName) {
@@ -526,7 +548,7 @@ open class WebDavBackupManager(
                     }
                     "rules.json" -> mergeRules(array, restoredBookIdMap)
                     "themes.json" -> mergeThemes(array)
-                    "bookmarks.json" -> mergeBookmarks(array)
+                    "bookmarks.json" -> mergeBookmarks(array, restoredBookIdMap)
                     READING_STATS_CANONICAL_FILE -> mergeReadingStats(array)
                 }
                 tempFile.delete()
@@ -601,39 +623,73 @@ open class WebDavBackupManager(
         }
     }
 
-    private fun restoreBookAssetFiles(listener: StatusListener, includeSourceFiles: Boolean) {
+    private fun restoreBookAssetFiles(
+        listener: StatusListener,
+        includeSourceFiles: Boolean,
+        assets: JSONObject? = null,
+        strictCovers: Boolean = false,
+        strictSourceFiles: Boolean = false,
+        includeCovers: Boolean = true,
+    ) {
         val books = databaseHelper.getBooks()
         val total = Math.max(books.size, 1)
         for (i in books.indices) {
             val book = books[i]
-            if (!book.coverPath.isNullOrBlank()) {
+            if (includeCovers && !book.coverPath.isNullOrBlank()) {
                 val coverFile = File(book.coverPath!!)
                 val remotePath = webDavClient.backupBaseUrl() + "covers/" + coverFile.name
-                restoreRemoteFileIfPresent(remotePath, coverFile, "恢复封面 " + (i + 1) + "/" + total + "...", listener)
+                restoreRemoteFileIfPresent(
+                    remotePath,
+                    coverFile,
+                    "恢复封面 " + (i + 1) + "/" + total + "...",
+                    listener,
+                    assets?.optJSONObject("covers/" + coverFile.name),
+                    strictCovers,
+                )
             }
             if (includeSourceFiles && !book.localPath.isNullOrBlank()) {
                 val sourceFile = File(book.localPath!!)
                 val remotePath = webDavClient.backupBaseUrl() + "books/" + sourceFile.name
-                restoreRemoteFileIfPresent(remotePath, sourceFile, "恢复书籍源文件 " + (i + 1) + "/" + total + "...", listener)
+                restoreRemoteFileIfPresent(
+                    remotePath,
+                    sourceFile,
+                    "恢复书籍源文件 " + (i + 1) + "/" + total + "...",
+                    listener,
+                    assets?.optJSONObject("books/" + sourceFile.name),
+                    strictSourceFiles,
+                )
             }
         }
     }
 
-    private fun restoreRemoteFileIfPresent(remotePath: String, destination: File, status: String, listener: StatusListener) {
+    private fun restoreRemoteFileIfPresent(
+        remotePath: String,
+        destination: File,
+        status: String,
+        listener: StatusListener,
+        expected: JSONObject? = null,
+        strict: Boolean = false,
+    ) {
         try {
+            if (strict && expected == null) throw IllegalStateException("资源清单缺少: $remotePath")
             val head = webDavClient.head(remotePath)
-            if (head.code == 404 || head.code < 200 || head.code >= 300) return
+            if (head.code == 404 || head.code < 200 || head.code >= 300) {
+                if (strict) throw IllegalStateException("云端资源缺失: $remotePath")
+                return
+            }
             var remoteLength = -1L
             try {
                 remoteLength = webDavClient.remoteContentLength(remotePath)
             } catch (_: Exception) {
             }
-            if (destination.exists() && remoteLength >= 0 && destination.length() == remoteLength) return
+            if (!strict && destination.exists() && remoteLength >= 0 && destination.length() == remoteLength) return
             val parent = destination.parentFile
             if (parent != null && !parent.exists()) parent.mkdirs()
             listener.onStatus(status)
             webDavClient.downloadBinaryFile(remotePath, destination)
+            if (expected != null) validateFileAgainstManifest(destination, expected, destination.name)
         } catch (error: Exception) {
+            if (strict) throw error
             Log.w(TAG, "恢复资源文件失败: " + remotePath, error)
         }
     }
@@ -788,28 +844,117 @@ open class WebDavBackupManager(
     }
 
     @Throws(Exception::class)
+    private fun ensureIncrementalBackupKeepsRemoteOnlyData(
+        dataDir: File,
+        remoteManifest: JSONObject,
+        listener: StatusListener,
+    ) {
+        val tempDir = File(context.cacheDir, "incremental_guard")
+        if (!tempDir.exists() && !tempDir.mkdirs()) throw IllegalStateException("无法创建增量校验缓存目录")
+        val remoteBookIdMap: MutableMap<Long, Long> = HashMap()
+        for ((index, fileName) in SYNC_JSON_FILES.withIndex()) {
+            listener.onStatus("检查云端独有数据 ${index + 1}/${SYNC_JSON_FILES.size} · $fileName...")
+            val localArray = readLocalEntityArray(dataDir, fileName)
+            val remoteFile = File(tempDir, canonicalJsonFileName(fileName))
+            val remoteFileName = downloadJsonWithAliases(webDavClient.syncBaseUrl(), fileName, remoteFile)
+            val entry = getManifestFileEntry(remoteManifest.optJSONObject("files"), remoteFileName)
+                ?: throw IllegalStateException("manifest 缺少 $fileName 校验信息")
+            validateFileAgainstManifest(remoteFile, entry, fileName)
+            val remoteContent = readFileString(remoteFile) ?: throw IllegalStateException("读取云端 $fileName 失败")
+            val remoteArray = readEntityArray(fileName, remoteContent)
+            val entityType = entityTypeForFile(fileName)
+            val localByKey = indexEntityArray(entityType, localArray)
+            if ("books" == entityType) {
+                for (i in 0 until remoteArray.length()) {
+                    val remoteBook = remoteArray.optJSONObject(i) ?: continue
+                    val remoteId = remoteBook.optLong("id", 0L)
+                    val localId = localByKey[entityKey(entityType, remoteBook)]?.optLong("id", 0L) ?: 0L
+                    if (remoteId > 0L && localId > 0L) remoteBookIdMap[remoteId] = localId
+                }
+            }
+            val remoteKeys = HashSet<String>()
+            for (i in 0 until remoteArray.length()) {
+                val raw = remoteArray.optJSONObject(i) ?: continue
+                val remapped = remapBookIdForGuard(entityType, raw, remoteBookIdMap)
+                remoteKeys.add(entityKey(entityType, remapped).ifBlank { "$entityType#$i" })
+            }
+            val remoteOnly = remoteKeys.firstOrNull { !localByKey.containsKey(it) }
+            if (remoteOnly != null) {
+                throw IllegalStateException("云端存在本机没有的 $entityType 数据，请先执行差异预览并合并后再增量备份")
+            }
+        }
+    }
+
+    private fun remapBookIdForGuard(
+        entityType: String,
+        source: JSONObject,
+        remoteBookIdMap: Map<Long, Long>,
+    ): JSONObject {
+        if ("chapters" != entityType && "rules" != entityType) return source
+        val remoteBookId = source.optLong("bookId", 0L)
+        val localBookId = remoteBookIdMap[remoteBookId] ?: return source
+        return JSONObject(source.toString()).put("bookId", localBookId)
+    }
+
+    @Throws(Exception::class)
+    private fun collectFullAssetManifest(includeChapterText: Boolean, includeFiles: Boolean): JSONObject {
+        val assets = JSONObject()
+        val books = databaseHelper.getBooks()
+        val backupDir = File(context.cacheDir, "backup")
+        for (book in books) {
+            if (includeChapterText) {
+                val expected = databaseHelper.getChaptersWithExternalStorage(book.id)
+                if (expected.isNotEmpty()) {
+                    val archive = File(backupDir, chapterTextArchiveFileName(book.id))
+                    if (!archive.exists()) throw IllegalStateException("章节正文包未生成: ${book.title}")
+                    manifestAppendAsset(assets, "chapter_text/" + archive.name, archive)
+                }
+            }
+            if (includeFiles) {
+                if (!book.coverPath.isNullOrBlank()) {
+                    val cover = File(book.coverPath!!)
+                    if (!cover.exists() || !cover.isFile) throw IllegalStateException("封面文件缺失: ${book.title}")
+                    manifestAppendAsset(assets, "covers/" + cover.name, cover)
+                }
+                if (!book.localPath.isNullOrBlank()) {
+                    val source = File(book.localPath!!)
+                    if (!source.exists() || !source.isFile) throw IllegalStateException("书籍源文件缺失: ${book.title}")
+                    manifestAppendAsset(assets, "books/" + source.name, source)
+                }
+            }
+        }
+        return assets
+    }
+
+    @Throws(Exception::class)
+    private fun manifestAppendAsset(assets: JSONObject, key: String, file: File) {
+        val sha256 = computeFileSha256(file)
+        if (sha256.isBlank()) throw IllegalStateException("计算资源 SHA-256 失败: $key")
+        val entry = JSONObject()
+        entry.put("size", file.length())
+        entry.put("sha256", sha256)
+        assets.put(key, entry)
+    }
+
+    @Throws(Exception::class)
     private fun uploadChapterTextArchives(books: List<BookRecord>, listener: StatusListener) {
         val tempDir = File(context.cacheDir, "backup")
         if (!tempDir.exists() && !tempDir.mkdirs()) throw IllegalStateException("无法创建备份缓存目录")
         val total = Math.max(books.size, 1)
-        var uploaded = 0
-        var skipped = 0
         for (i in books.indices) {
             val book = books[i]
+            listener.onProgress(i + 1, total)
             val files = collectChapterTextFiles(book)
-            if (files.isEmpty()) continue
+            val expectedCount = databaseHelper.getChaptersWithExternalStorage(book.id).size
+            if (expectedCount == 0) continue
+            if (files.size != expectedCount) throw IllegalStateException("章节正文文件不完整: ${book.title}")
+            for (file in files) validateGzipFile(file.file, "章节正文损坏: ${book.title}")
             val archive = File(tempDir, chapterTextArchiveFileName(book.id))
             writeChapterTextArchive(archive, files, i + 1, total, listener)
             val remotePath = chapterTextArchiveRemotePath(book.id)
-            if (shouldUploadFile(remotePath, archive)) {
-                uploaded++
-                listener.onStatus("上传章节正文包 " + (i + 1) + "/" + total + " · " + formatFileSize(archive.length()) + "...")
-                webDavClient.uploadFile(archive, remotePath)
-            } else {
-                skipped++
-            }
+            listener.onStatus("上传章节正文包 " + (i + 1) + "/" + total + " · " + formatFileSize(archive.length()) + "...")
+            webDavClient.uploadFile(archive, remotePath)
         }
-        if (uploaded == 0 && skipped > 0) listener.onStatus("章节正文包未变化，跳过上传")
     }
 
     @Throws(Exception::class)
@@ -821,7 +966,9 @@ open class WebDavBackupManager(
     ) {
         val tempDir = File(context.cacheDir, "backup")
         if (!tempDir.exists() && !tempDir.mkdirs()) throw IllegalStateException("无法创建备份缓存目录")
-        for (book in books) {
+        val total = Math.max(books.size, 1)
+        for ((index, book) in books.withIndex()) {
+            listener.onProgress(index + 1, total)
             val files = collectChapterTextFiles(book)
             if (files.isEmpty()) continue
             val archiveName = "book_" + book.id + ".zip"
@@ -841,20 +988,21 @@ open class WebDavBackupManager(
         val total = Math.max(books.size, 1)
         for (i in books.indices) {
             val book = books[i]
+            listener.onProgress(i + 1, total)
             if (book.coverPath.isNullOrBlank()) continue
             val coverFile = File(book.coverPath!!)
-            if (!coverFile.exists() || !coverFile.isFile) continue
+            if (!coverFile.exists() || !coverFile.isFile) throw IllegalStateException("封面文件缺失: ${book.title}")
             val remotePath = webDavClient.backupBaseUrl() + "covers/" + coverFile.name
-            if (shouldUploadFile(remotePath, coverFile)) {
-                listener.onStatus("上传封面 " + (i + 1) + "/" + total + " · " + formatFileSize(coverFile.length()) + "...")
-                webDavClient.uploadFile(coverFile, remotePath)
-            }
+            listener.onStatus("上传封面 " + (i + 1) + "/" + total + " · " + formatFileSize(coverFile.length()) + "...")
+            webDavClient.uploadFile(coverFile, remotePath)
         }
     }
 
     @Throws(Exception::class)
     private fun uploadChangedCoverFiles(books: List<BookRecord>, listener: StatusListener, remoteAssets: JSONObject?, localAssets: JSONObject?) {
-        for (book in books) {
+        val total = Math.max(books.size, 1)
+        for ((index, book) in books.withIndex()) {
+            listener.onProgress(index + 1, total)
             if (book.coverPath.isNullOrBlank()) continue
             val coverFile = File(book.coverPath!!)
             if (!coverFile.exists()) continue
@@ -871,20 +1019,21 @@ open class WebDavBackupManager(
         val total = Math.max(books.size, 1)
         for (i in books.indices) {
             val book = books[i]
+            listener.onProgress(i + 1, total)
             if (book.localPath.isNullOrBlank()) continue
             val localFile = File(book.localPath!!)
-            if (!localFile.exists() || !localFile.isFile) continue
+            if (!localFile.exists() || !localFile.isFile) throw IllegalStateException("书籍源文件缺失: ${book.title}")
             val remotePath = webDavClient.backupBaseUrl() + "books/" + localFile.name
-            if (shouldUploadFile(remotePath, localFile)) {
-                listener.onStatus("上传书籍源文件 " + (i + 1) + "/" + total + " · " + formatFileSize(localFile.length()) + "...")
-                webDavClient.uploadFile(localFile, remotePath)
-            }
+            listener.onStatus("上传书籍源文件 " + (i + 1) + "/" + total + " · " + formatFileSize(localFile.length()) + "...")
+            webDavClient.uploadFile(localFile, remotePath)
         }
     }
 
     @Throws(Exception::class)
     private fun uploadChangedSourceFiles(books: List<BookRecord>, listener: StatusListener, remoteAssets: JSONObject?, localAssets: JSONObject?) {
-        for (book in books) {
+        val total = Math.max(books.size, 1)
+        for ((index, book) in books.withIndex()) {
+            listener.onProgress(index + 1, total)
             if (book.localPath.isNullOrBlank()) continue
             val localFile = File(book.localPath!!)
             if (!localFile.exists()) continue
@@ -896,30 +1045,49 @@ open class WebDavBackupManager(
         }
     }
 
-    private fun restoreChapterTextFiles(listener: StatusListener) {
+    private fun restoreChapterTextFiles(listener: StatusListener, assets: JSONObject? = null, strict: Boolean = false) {
         val books = databaseHelper.getBooks()
         val total = Math.max(books.size, 1)
         for (i in books.indices) {
             val book = books[i]
-            if (restoreBookChapterTextArchiveIfPresent(book, i + 1, total, listener)) continue
+            listener.onProgress(i + 1, total)
+            if (restoreBookChapterTextArchiveIfPresent(book, i + 1, total, listener, assets, strict)) continue
+            if (strict && databaseHelper.getChaptersWithExternalStorage(book.id).isNotEmpty()) {
+                throw IllegalStateException("章节正文包恢复失败: ${book.title}")
+            }
             restoreChapterTextFilesForBook(book, i + 1, total, listener)
         }
     }
 
-    private fun restoreBookChapterTextArchiveIfPresent(book: BookRecord, bookIndex: Int, totalBooks: Int, listener: StatusListener): Boolean {
+    private fun restoreBookChapterTextArchiveIfPresent(
+        book: BookRecord,
+        bookIndex: Int,
+        totalBooks: Int,
+        listener: StatusListener,
+        assets: JSONObject? = null,
+        strict: Boolean = false,
+    ): Boolean {
         val remotePath = chapterTextArchiveRemotePath(book.id)
+        val expected = assets?.optJSONObject("chapter_text/" + chapterTextArchiveFileName(book.id))
         return try {
-            if (webDavClient.head(remotePath).code != 200) return false
+            if (strict && expected == null) throw IllegalStateException("正文资源清单缺少: ${book.title}")
+            if (webDavClient.head(remotePath).code != 200) {
+                if (strict) throw IllegalStateException("云端正文包缺失: ${book.title}")
+                return false
+            }
             val tempDir = File(context.cacheDir, "backup_restore")
             if (!tempDir.exists() && !tempDir.mkdirs()) return false
             val archive = File(tempDir, chapterTextArchiveFileName(book.id))
             listener.onStatus("下载章节正文包 " + bookIndex + "/" + totalBooks + "...")
             webDavClient.downloadBinaryFile(remotePath, archive)
+            if (expected != null) validateFileAgainstManifest(archive, expected, "章节正文包 ${book.title}")
             listener.onStatus("解包章节正文 " + bookIndex + "/" + totalBooks + "...")
-            val restored = extractChapterTextArchive(archive)
+            val restored = extractChapterTextArchive(archive, book)
+            if (!validateBookChapterTextFiles(book)) throw IllegalStateException("章节正文文件验收失败: ${book.title}")
             listener.onStatus("章节正文包已恢复 " + bookIndex + "/" + totalBooks + " · " + restored + " 个文件")
             restored > 0
         } catch (error: Exception) {
+            if (strict) throw error
             Log.w(TAG, "恢复章节正文包失败 book " + book.id + "，回退逐文件恢复", error)
             false
         }
@@ -1093,9 +1261,10 @@ open class WebDavBackupManager(
         }
     }
 
-    private fun mergeBookmarks(remoteBookmarks: JSONArray) = mergeBookmarks(remoteBookmarks, false)
+    private fun mergeBookmarks(remoteBookmarks: JSONArray, restoredBookIdMap: Map<Long, Long>) =
+        mergeBookmarks(remoteBookmarks, restoredBookIdMap, false)
 
-    private fun mergeBookmarks(remoteBookmarks: JSONArray, forceRemote: Boolean) {
+    private fun mergeBookmarks(remoteBookmarks: JSONArray, restoredBookIdMap: Map<Long, Long>, forceRemote: Boolean) {
         val localBookmarks = databaseHelper.getBookmarksMutable()
         val localByUuid: MutableMap<String, BookmarkRecord> = HashMap()
         for (bookmark in localBookmarks) bookmark.uuid?.let { localByUuid[it] = bookmark }
@@ -1103,6 +1272,9 @@ open class WebDavBackupManager(
         for (i in 0 until remoteBookmarks.length()) {
             val remoteJson = remoteBookmarks.optJSONObject(i) ?: continue
             val remoteBookmark = BookmarkRecord.fromJson(remoteJson)
+            if (remoteBookmark.bookId > 0L) {
+                remoteBookmark.bookId = restoredBookIdMap[remoteBookmark.bookId] ?: remoteBookmark.bookId
+            }
             val localMatch = localByUuid[remoteBookmark.uuid]
             if (localMatch == null) {
                 remoteBookmark.id = 0
@@ -1180,11 +1352,17 @@ open class WebDavBackupManager(
     @Throws(Exception::class)
     private fun readEntityArray(fileName: String, content: String?): JSONArray {
         val trimmed = content?.trim() ?: ""
-        if (trimmed.startsWith("{")) {
+        val array = if (READING_STATS_CANONICAL_FILE == canonicalJsonFileName(fileName) && trimmed.startsWith("{")) {
             val rows = JSONObject(trimmed).optJSONArray("rows")
-            if (rows != null) return rows
+                ?: throw IllegalStateException("$fileName 缺少 rows 数组")
+            rows
+        } else {
+            JSONArray(trimmed)
         }
-        return JSONArray(trimmed)
+        for (i in 0 until array.length()) {
+            if (array.optJSONObject(i) == null) throw IllegalStateException("$fileName 第 ${i + 1} 项不是对象")
+        }
+        return array
     }
 
     @Throws(Exception::class)
@@ -1195,6 +1373,48 @@ open class WebDavBackupManager(
         FileWriter(manifestFile).use { writer -> writer.write(manifest.toString(2)) }
         webDavClient.uploadFile(manifestFile, url)
         manifestFile.delete()
+    }
+
+    @Throws(Exception::class)
+    private fun uploadSnapshotCommit(url: String, manifest: JSONObject) {
+        val generationId = manifest.optString("generationId", "")
+        if (generationId.isBlank()) throw IllegalStateException("完整快照缺少 generationId")
+        val manifestText = manifest.toString(2)
+        val commit = JSONObject()
+        commit.put("schemaVersion", 1)
+        commit.put("generationId", generationId)
+        commit.put("manifestSha256", computeTextSha256(manifestText))
+        commit.put("committedAt", System.currentTimeMillis())
+        val tempDir = File(context.cacheDir, "backup")
+        if (!tempDir.exists() && !tempDir.mkdirs()) throw IllegalStateException("无法创建备份缓存目录")
+        val commitFile = File(tempDir, COMMIT_FILE)
+        FileWriter(commitFile).use { writer -> writer.write(commit.toString(2)) }
+        webDavClient.uploadFile(commitFile, url)
+        commitFile.delete()
+    }
+
+    @Throws(Exception::class)
+    private fun validateSnapshotCommit(databaseUrl: String, manifest: JSONObject, manifestText: String) {
+        val generationId = manifest.optString("generationId", "")
+        if (generationId.isBlank()) return
+        val commitUrl = databaseUrl + COMMIT_FILE
+        if (webDavClient.head(commitUrl).code != 200) throw IllegalStateException("完整快照尚未提交完成")
+        val commit = JSONObject(webDavClient.downloadText(commitUrl))
+        if (!snapshotCommitMatches(
+                manifestText,
+                generationId,
+                commit.optString("generationId", ""),
+                commit.optString("manifestSha256", ""),
+            )) {
+            throw IllegalStateException("完整快照 manifest 校验失败")
+        }
+    }
+
+    private fun computeTextSha256(text: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(StandardCharsets.UTF_8))
+        val builder = StringBuilder()
+        for (b in digest) builder.append(String.format(Locale.ROOT, "%02x", b))
+        return builder.toString()
     }
 
     private fun downloadManifestIfExists(url: String): JSONObject? {
@@ -1218,14 +1438,28 @@ open class WebDavBackupManager(
     }
 
     private fun getManifestFileHash(filesEntry: JSONObject?, fileName: String): String? {
+        val entry = getManifestFileEntry(filesEntry, fileName)
+        if (entry == null) return null
+        return if (entry.has("sha256")) entry.optString("sha256", "") else null
+    }
+
+    private fun getManifestFileEntry(filesEntry: JSONObject?, fileName: String): JSONObject? {
         if (filesEntry == null) return null
         val canonical = canonicalJsonFileName(fileName)
         var entry = filesEntry.optJSONObject(canonical)
         if (entry == null && READING_STATS_CANONICAL_FILE == canonical) {
             entry = filesEntry.optJSONObject(READING_STATS_LEGACY_FILE)
         }
-        if (entry == null) return null
-        return if (entry.has("sha256")) entry.optString("sha256", "") else null
+        return entry
+    }
+
+    @Throws(Exception::class)
+    private fun validateFileAgainstManifest(file: File, entry: JSONObject, label: String) {
+        val expectedSize = entry.optLong("size", -1L)
+        val expectedHash = entry.optString("sha256", "")
+        if (expectedSize < 0 || expectedHash.isBlank()) throw IllegalStateException("$label 缺少完整校验信息")
+        if (file.length() != expectedSize) throw IllegalStateException("$label 大小校验失败")
+        if (computeFileSha256(file) != expectedHash) throw IllegalStateException("$label SHA-256 校验失败")
     }
 
     private fun compareManifests(remoteFiles: JSONObject?, localFiles: JSONObject?): Set<String> {
@@ -1406,12 +1640,27 @@ open class WebDavBackupManager(
     }
 
     @Throws(Exception::class)
-    private fun extractChapterTextArchive(archive: File): Int {
+    private fun extractChapterTextArchive(archive: File, book: BookRecord? = null): Int {
         val baseDir = databaseHelper.resolveChapterTextFile("chapter_text/__base__")
             ?: throw IllegalStateException("无法定位章节正文目录")
         val realBase = baseDir.parentFile ?: throw IllegalStateException("无法定位章节正文目录")
         if (!realBase.exists() && !realBase.mkdirs()) throw IllegalStateException("无法创建章节正文目录")
         val basePath = realBase.canonicalPath + File.separator
+        val expectedPaths = if (book == null) null else databaseHelper.getChaptersWithExternalStorage(book.id)
+            .mapNotNull { sanitizeChapterTextArchiveEntryName(it.bodyTextPath) }
+            .toSet()
+        if (expectedPaths != null) {
+            val archivePaths: MutableSet<String> = HashSet()
+            ZipInputStream(FileInputStream(archive)).use { input ->
+                while (true) {
+                    val entry = input.nextEntry ?: break
+                    if (!entry.isDirectory) sanitizeChapterTextArchiveEntryName(entry.name)?.let(archivePaths::add)
+                    input.closeEntry()
+                }
+            }
+            val missing = expectedPaths.filterNot(archivePaths::contains)
+            if (missing.isNotEmpty()) throw IllegalStateException("章节正文 ZIP 缺少 ${missing.size} 个预期文件")
+        }
         val buffer = ByteArray(8192)
         var restored = 0
         ZipInputStream(FileInputStream(archive)).use { zipInputStream ->
@@ -1423,6 +1672,10 @@ open class WebDavBackupManager(
                 }
                 val entryName = sanitizeChapterTextArchiveEntryName(entry.name)
                 if (entryName == null) {
+                    zipInputStream.closeEntry()
+                    continue
+                }
+                if (expectedPaths != null && !expectedPaths.contains(entryName)) {
                     zipInputStream.closeEntry()
                     continue
                 }
@@ -1453,6 +1706,35 @@ open class WebDavBackupManager(
             }
         }
         return restored
+    }
+
+    @Throws(Exception::class)
+    private fun validateGzipFile(file: File, message: String) {
+        try {
+            GZIPInputStream(FileInputStream(file)).use { input ->
+                val buffer = ByteArray(8192)
+                while (input.read(buffer) != -1) {
+                    // 完整读取以触发 gzip CRC 与尾部校验。
+                }
+            }
+        } catch (error: Exception) {
+            throw IllegalStateException(message, error)
+        }
+    }
+
+    private fun validateBookChapterTextFiles(book: BookRecord): Boolean {
+        return try {
+            val chapters = databaseHelper.getChaptersWithExternalStorage(book.id)
+            for (chapter in chapters) {
+                val entryName = sanitizeChapterTextArchiveEntryName(chapter.bodyTextPath) ?: return false
+                val file = databaseHelper.resolveChapterTextFile(entryName) ?: return false
+                if (!file.exists() || !file.isFile) return false
+                validateGzipFile(file, "章节正文损坏: ${book.title}")
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun collectChapterTextFiles(book: BookRecord): List<ChapterTextFile> {
@@ -1581,11 +1863,7 @@ open class WebDavBackupManager(
     }
 
     private fun sanitizeChapterTextArchiveEntryName(value: String?): String? {
-        if (value.isNullOrBlank() || value.startsWith("/") || value.contains("\\") || value.contains(":")) return null
-        for (segment in value.split("/")) {
-            if (segment.isBlank() || "." == segment || ".." == segment) return null
-        }
-        return value
+        return canonicalChapterTextArchiveEntryName(value)
     }
 
     private fun formatFileSize(bytes: Long): String {
@@ -1669,6 +1947,7 @@ open class WebDavBackupManager(
             READING_STATS_CANONICAL_FILE,
         )
         private const val MANIFEST_FILE = "manifest.json"
+        private const val COMMIT_FILE = "commit.json"
 
         @JvmStatic
         fun computeFileSha256(file: File): String {
@@ -1690,6 +1969,31 @@ open class WebDavBackupManager(
             } catch (_: Exception) {
                 ""
             }
+        }
+
+        @JvmStatic
+        fun snapshotCommitMatches(
+            manifestText: String,
+            generationId: String,
+            commitGenerationId: String,
+            expectedHash: String,
+        ): Boolean {
+            if (generationId.isBlank() || generationId != commitGenerationId) return false
+            if (expectedHash.isBlank()) return false
+            val digest = MessageDigest.getInstance("SHA-256").digest(manifestText.toByteArray(StandardCharsets.UTF_8))
+            val builder = StringBuilder()
+            for (b in digest) builder.append(String.format(Locale.ROOT, "%02x", b))
+            return expectedHash.equals(builder.toString(), ignoreCase = true)
+        }
+
+        @JvmStatic
+        fun canonicalChapterTextArchiveEntryName(value: String?): String? {
+            if (value.isNullOrBlank() || value.startsWith("/") || value.contains("\\") || value.contains(":")) return null
+            val normalized = if (value.startsWith("chapter_text/")) value.substring("chapter_text/".length) else value
+            for (segment in normalized.split("/")) {
+                if (segment.isBlank() || "." == segment || ".." == segment) return null
+            }
+            return normalized
         }
     }
 }
