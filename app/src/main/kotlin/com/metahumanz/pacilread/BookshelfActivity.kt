@@ -33,7 +33,6 @@ import com.metahumanz.pacilread.model.BookRecord
 import com.metahumanz.pacilread.reader.search.BookSearchIndex
 import com.metahumanz.pacilread.storage.JsonDatabase
 import com.metahumanz.pacilread.storage.SettingsStore
-import com.metahumanz.pacilread.storage.SnapshotManager
 import com.metahumanz.pacilread.sync.WebDavClient
 import com.metahumanz.pacilread.sync.WebDavProgressSyncCoordinator
 import com.metahumanz.pacilread.theme.ThemeModeHelper
@@ -1415,11 +1414,6 @@ class BookshelfActivity : ThemedActivity() {
             .setNegativeButton("取消", null)
             .setPositiveButton("删除") { _, _ ->
                 safeExecute({
-                    try {
-                        SnapshotManager(this, databaseHelper, settingsStore).createSnapshot("delete-book")
-                    } catch (error: Exception) {
-                        Log.w(TAG, "Create snapshot before delete failed", error)
-                    }
                     databaseHelper.deleteBook(book.id)
                     BookSearchIndex.delete(this, book.id)
                     runOnBookshelfUiThread {
@@ -1454,11 +1448,6 @@ class BookshelfActivity : ThemedActivity() {
                 val ids: Set<Long> = HashSet(selectedBookIds)
                 showLoading("正在删除 " + ids.size + " 本书籍...")
                 safeExecute({
-                    try {
-                        SnapshotManager(this, databaseHelper, settingsStore).createSnapshot("delete-books")
-                    } catch (error: Exception) {
-                        Log.w(TAG, "Create snapshot before batch delete failed", error)
-                    }
                     databaseHelper.deleteBooks(ids)
                     for (id in ids) BookSearchIndex.delete(this, id)
                     runOnBookshelfUiThread {

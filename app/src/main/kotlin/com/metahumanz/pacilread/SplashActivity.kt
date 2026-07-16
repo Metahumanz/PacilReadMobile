@@ -8,16 +8,18 @@ import android.util.Log
 import com.metahumanz.pacilread.storage.JsonDatabase
 import com.metahumanz.pacilread.storage.SettingsStore
 import com.metahumanz.pacilread.theme.ThemedActivity
+import java.io.File
 import java.util.concurrent.Executors
 
 class SplashActivity : ThemedActivity() {
     private val handler = Handler(Looper.getMainLooper())
-    private val splashExecutor = Executors.newSingleThreadExecutor()
+    private val splashExecutor = Executors.newFixedThreadPool(2)
     private var finishing = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_splash)
+        splashExecutor.execute { removeLegacyLocalSnapshots() }
 
         if (intent.flags and Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT != 0) {
             finish()
@@ -66,6 +68,17 @@ class SplashActivity : ThemedActivity() {
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
         splashExecutor.shutdown()
+    }
+
+    private fun removeLegacyLocalSnapshots() {
+        try {
+            val snapshotsDir = File(filesDir, "snapshots")
+            if (snapshotsDir.exists() && !snapshotsDir.deleteRecursively()) {
+                Log.w(TAG, "Legacy local snapshots were not fully removed")
+            }
+        } catch (error: Exception) {
+            Log.w(TAG, "Remove legacy local snapshots failed", error)
+        }
     }
 
     companion object {

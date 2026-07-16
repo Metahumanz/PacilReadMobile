@@ -4,6 +4,8 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.Log
@@ -26,7 +28,6 @@ import com.metahumanz.pacilread.model.BookRecord
 import com.metahumanz.pacilread.model.ReplacementRuleRecord
 import com.metahumanz.pacilread.storage.JsonDatabase
 import com.metahumanz.pacilread.storage.SettingsStore
-import com.metahumanz.pacilread.storage.SnapshotManager
 import com.metahumanz.pacilread.sync.ReadingStatsSyncManager
 import com.metahumanz.pacilread.sync.SyncDiffItem
 import com.metahumanz.pacilread.sync.SyncDiffPreview
@@ -56,12 +57,12 @@ class SettingsScreenController(
     }
 
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val databaseHelper = JsonDatabase.getInstance(activity)
     private val settingsStore = SettingsStore(activity)
     private val webDavClient = WebDavClient(settingsStore)
     private val backupManager = WebDavBackupManager(activity, databaseHelper, settingsStore, webDavClient)
     private val readingStatsSyncManager = ReadingStatsSyncManager(activity, databaseHelper, settingsStore, webDavClient)
-    private val snapshotManager = SnapshotManager(activity, databaseHelper, settingsStore)
     private val importService = BookImportService(activity)
     private val testMimoTtsClient = MimoTtsClient()
 
@@ -75,10 +76,11 @@ class SettingsScreenController(
     private val textAppVersion: TextView? = activity.findViewById(R.id.text_app_version)
     private val scrollChangelog: NestedScrollView? = activity.findViewById(R.id.scroll_changelog)
     private val optimizeDatabaseButton: Button? = activity.findViewById(R.id.button_optimize_database)
-    private val createSnapshotButton: Button? = activity.findViewById(R.id.button_create_snapshot)
-    private val manageSnapshotsButton: Button? = activity.findViewById(R.id.button_manage_snapshots)
     private val fullBackupText: TextView? = activity.findViewById(R.id.text_backup_full)
     private val liteBackupText: TextView? = activity.findViewById(R.id.text_backup_lite)
+    private val backupProgressLayout: View = activity.findViewById(R.id.layout_backup_progress)
+    private val backupProgressBar: ProgressBar = activity.findViewById(R.id.progress_backup)
+    private val backupProgressText: TextView = activity.findViewById(R.id.text_backup_progress)
     private val autoOpenCheck: CheckBox = activity.findViewById(R.id.check_auto_open)
     private val readerMenuAutoHideCheck: CheckBox = activity.findViewById(R.id.check_reader_menu_auto_hide)
     private val bookshelfShowAddEntryCheck: CheckBox = activity.findViewById(R.id.check_bookshelf_show_add_entry)
@@ -135,6 +137,7 @@ class SettingsScreenController(
     private var selectedDarkStyleVariant = ThemeModeHelper.DARK_STYLE_YEMU
     private var selectedReaderOrientationMode = READER_ORIENTATION_SYSTEM
     private var selectedTransitionMotionMode = TransitionMotionModeHelper.MODE_FLUID
+    private var hideBackupProgressRunnable: Runnable? = null
 
     init {
         setupChangelogScrolling()
@@ -236,6 +239,8 @@ class SettingsScreenController(
     fun onResume() = refreshReadingStatsSummary(true)
     fun onPause() = persistSettingsIfReady()
     fun onDestroy() {
+        hideBackupProgressRunnable?.let(mainHandler::removeCallbacks)
+        hideBackupProgressRunnable = null
         testMimoTtsClient.cancel()
         testSystemTtsClient?.shutdown()
         executor.shutdownNow()
@@ -294,15 +299,13 @@ class SettingsScreenController(
         testButton.setOnClickListener { testWebDav() }
         ttsTestButton?.setOnClickListener { testTtsEngine() }
         optimizeDatabaseButton?.setOnClickListener { startDatabaseOptimization() }
-        createSnapshotButton?.setOnClickListener { createManualSnapshot() }
-        manageSnapshotsButton?.setOnClickListener { showSnapshotManager() }
         fullBackupButton.setOnClickListener { runWebDavAction("正在执行全量备份...") { backupManager.fullBackup(it) } }
         liteBackupButton.setOnClickListener { runWebDavAction("正在执行增量备份...") { backupManager.incrementalBackup(it) } }
         fullRestoreButton.setOnClickListener {
-            confirmRestore("将先预览云端全量备份和本地数据的差异，应用前会自动创建本地恢复点。", { previewWebDavRestore(true) }, false)
+            confirmRestore("将先预览云端全量备份和本地数据的差异。恢复操作不可撤销，请确认云端备份可用。", { previewWebDavRestore(true, it) }, false)
         }
         liteRestoreButton.setOnClickListener {
-            confirmRestore("将先预览云端增量备份和本地数据的差异，应用前会自动创建本地恢复点。", { previewWebDavRestore(false) }, false)
+            confirmRestore("将先预览云端增量备份和本地数据的差异。恢复操作不可撤销，请确认云端备份可用。", { previewWebDavRestore(false, it) }, false)
         }
     }
 
@@ -633,76 +636,12 @@ class SettingsScreenController(
             .setPositiveButton("继续") { _, _ -> runWebDavAction("正在恢复数据...", action, refreshLibraryOnSuccess) }.show()
     }
 
-    private fun createManualSnapshot() {
-        setBusy(true); statusText.text = "正在创建本地恢复点..."
-        executor.execute {
-            try {
-                snapshotManager.createSnapshot("manual")
-                activity.runOnUiThread { setBusy(false); refreshDatabaseSizeLabel(); statusText.text = "本地恢复点已创建"; showToast("本地恢复点已创建") }
-            } catch (error: Exception) {
-                activity.runOnUiThread {
-                    setBusy(false); val message = readableError(error); statusText.text = "创建恢复点失败: $message"; showToast("创建失败: $message")
-                }
-            }
-        }
-    }
-
-    private fun showSnapshotManager() {
-        val snapshots = snapshotManager.listSnapshots()
-        if (snapshots.isEmpty()) {
-            AlertDialog.Builder(activity).setTitle("本地恢复点").setMessage("当前还没有本地恢复点").setPositiveButton("知道了", null).show()
-            return
-        }
-        val format = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, Locale.SIMPLIFIED_CHINESE)
-        val labels = Array(snapshots.size) { index ->
-            val snapshot = snapshots[index]
-            "${format.format(Date(snapshot.createdAt))}\n${snapshot.reason} · ${JsonDatabase.formatFileSize(snapshot.bundleSize)}"
-        }
-        AlertDialog.Builder(activity).setTitle("本地恢复点")
-            .setItems(labels) { _, which -> showSnapshotActions(snapshots[which]) }
-            .setNegativeButton("关闭", null).show()
-    }
-
-    private fun showSnapshotActions(snapshot: SnapshotManager.Snapshot) {
-        AlertDialog.Builder(activity).setTitle("恢复点操作").setMessage(snapshot.id)
-            .setNegativeButton("删除") { _, _ -> deleteSnapshot(snapshot) }
-            .setPositiveButton("恢复") { _, _ -> restoreSnapshot(snapshot) }.show()
-    }
-
-    private fun restoreSnapshot(snapshot: SnapshotManager.Snapshot) {
-        setBusy(true); statusText.text = "正在恢复本地恢复点..."
-        executor.execute {
-            try {
-                snapshotManager.restoreSnapshot(snapshot.id)
-                activity.runOnUiThread {
-                    setBusy(false); bindCurrentValues(); refreshDatabaseSizeLabel(); statusText.text = "本地恢复点已恢复"
-                    host?.onLibraryDataRestored(); showToast("本地恢复点已恢复")
-                }
-            } catch (error: Exception) {
-                activity.runOnUiThread {
-                    setBusy(false); val message = readableError(error); statusText.text = "恢复失败: $message"; showToast("恢复失败: $message")
-                }
-            }
-        }
-    }
-
-    private fun deleteSnapshot(snapshot: SnapshotManager.Snapshot) {
-        executor.execute {
-            try {
-                snapshotManager.deleteSnapshot(snapshot.id)
-                activity.runOnUiThread { statusText.text = "本地恢复点已删除"; showToast("已删除恢复点") }
-            } catch (error: Exception) {
-                activity.runOnUiThread { showToast("删除失败: ${readableError(error)}") }
-            }
-        }
-    }
-
     @Throws(Exception::class)
-    private fun previewWebDavRestore(full: Boolean) {
+    private fun previewWebDavRestore(full: Boolean, listener: WebDavBackupManager.StatusListener) {
         val preview = if (full) {
-            backupManager.previewFullRestore { status -> activity.runOnUiThread { statusText.text = status } }
+            backupManager.previewFullRestore(listener)
         } else {
-            backupManager.previewIncrementalRestore { status -> activity.runOnUiThread { statusText.text = status } }
+            backupManager.previewIncrementalRestore(listener)
         }
         activity.runOnUiThread { showSyncDiffDialog(preview) }
     }
@@ -735,22 +674,65 @@ class SettingsScreenController(
     private fun runWebDavAction(startMessage: String, action: BackgroundAction) = runWebDavAction(startMessage, action, false)
 
     private fun runWebDavAction(startMessage: String, action: BackgroundAction, refreshLibraryOnSuccess: Boolean) {
-        saveSettings(); setBusy(true); statusText.text = startMessage
+        saveSettings(); setBusy(true); showBackupProgress(startMessage)
         executor.execute {
             try {
-                action.run { status -> activity.runOnUiThread { statusText.text = status } }
+                action.run(object : WebDavBackupManager.StatusListener {
+                    override fun onStatus(status: String) {
+                        activity.runOnUiThread { showBackupProgress(status) }
+                    }
+
+                    override fun onProgress(current: Int, total: Int) {
+                        activity.runOnUiThread { updateBackupProgress(current, total) }
+                    }
+                })
                 activity.runOnUiThread {
-                    setBusy(false); bindCurrentValues(); refreshBackupLabels(); statusText.text = "操作完成，设置已自动保存"
+                    setBusy(false); bindCurrentValues(); refreshBackupLabels(); finishBackupProgress("操作完成，设置已自动保存", false)
                     if (refreshLibraryOnSuccess) host?.onLibraryDataRestored()
                     showToast("WebDAV 操作已完成")
                 }
             } catch (error: Exception) {
                 activity.runOnUiThread {
                     val message = readableError(error); Log.w(TAG, "WebDAV 操作失败", error); setBusy(false)
-                    statusText.text = "操作失败: $message"; showToast("操作失败: $message")
+                    finishBackupProgress("操作失败: $message", true); showToast("操作失败: $message")
                 }
             }
         }
+    }
+
+    private fun showBackupProgress(message: String) {
+        hideBackupProgressRunnable?.let(mainHandler::removeCallbacks)
+        hideBackupProgressRunnable = null
+        backupProgressLayout.visibility = View.VISIBLE
+        backupProgressText.text = message
+        backupProgressBar.visibility = View.VISIBLE
+        if (!PROGRESS_FRACTION_PATTERN.containsMatchIn(message)) {
+            backupProgressBar.isIndeterminate = true
+        }
+    }
+
+    private fun updateBackupProgress(current: Int, total: Int) {
+        if (total <= 0) {
+            backupProgressBar.isIndeterminate = true
+            return
+        }
+        backupProgressLayout.visibility = View.VISIBLE
+        backupProgressBar.visibility = View.VISIBLE
+        backupProgressBar.isIndeterminate = false
+        backupProgressBar.max = total
+        backupProgressBar.progress = current.coerceIn(0, total)
+    }
+
+    private fun finishBackupProgress(message: String, failed: Boolean) {
+        backupProgressLayout.visibility = View.VISIBLE
+        backupProgressText.text = message
+        backupProgressBar.isIndeterminate = false
+        backupProgressBar.visibility = View.GONE
+        hideBackupProgressRunnable?.let(mainHandler::removeCallbacks)
+        hideBackupProgressRunnable = Runnable {
+            backupProgressLayout.visibility = View.GONE
+            hideBackupProgressRunnable = null
+        }.also { mainHandler.postDelayed(it, if (failed) 6000L else 4000L) }
     }
 
     private fun setBusy(busy: Boolean) {
@@ -760,8 +742,6 @@ class SettingsScreenController(
         ttsEngineSpinner?.isEnabled = !busy
         mimoApiKeyInput.isEnabled = !busy
         optimizeDatabaseButton?.isEnabled = !busy && hasPendingMaintenanceWork()
-        createSnapshotButton?.isEnabled = !busy
-        manageSnapshotsButton?.isEnabled = !busy
         fullBackupButton.isEnabled = !busy
         fullRestoreButton.isEnabled = !busy
         liteBackupButton.isEnabled = !busy
@@ -990,5 +970,6 @@ class SettingsScreenController(
         private const val READER_ORIENTATION_SYSTEM = "system"
         private const val READER_ORIENTATION_PORTRAIT = "portrait"
         private const val READER_ORIENTATION_LANDSCAPE = "landscape"
+        private val PROGRESS_FRACTION_PATTERN = Regex("\\d+\\s*/\\s*\\d+")
     }
 }
