@@ -153,6 +153,7 @@
                         android:text="备份界面" />
 
                     <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  备份、恢复和差异预览改为底部悬浮显示阶段与数量进度，滚动设置页后仍可随时查看" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  修复首页嵌入式设置缺少进度浮层导致的启动闪退，进度卡片固定显示在底部导航栏上方" />
                     <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  移除本地恢复点入口和自动快照，启动时清理旧恢复点文件，保留 WebDAV 差异预览与恢复能力" />
 
                     <View

@@ -78,9 +78,9 @@ class SettingsScreenController(
     private val optimizeDatabaseButton: Button? = activity.findViewById(R.id.button_optimize_database)
     private val fullBackupText: TextView? = activity.findViewById(R.id.text_backup_full)
     private val liteBackupText: TextView? = activity.findViewById(R.id.text_backup_lite)
-    private val backupProgressLayout: View = activity.findViewById(R.id.layout_backup_progress)
-    private val backupProgressBar: ProgressBar = activity.findViewById(R.id.progress_backup)
-    private val backupProgressText: TextView = activity.findViewById(R.id.text_backup_progress)
+    private val backupProgressLayout: View? = activity.findViewById(R.id.layout_backup_progress)
+    private val backupProgressBar: ProgressBar? = activity.findViewById(R.id.progress_backup)
+    private val backupProgressText: TextView? = activity.findViewById(R.id.text_backup_progress)
     private val autoOpenCheck: CheckBox = activity.findViewById(R.id.check_auto_open)
     private val readerMenuAutoHideCheck: CheckBox = activity.findViewById(R.id.check_reader_menu_auto_hide)
     private val bookshelfShowAddEntryCheck: CheckBox = activity.findViewById(R.id.check_bookshelf_show_add_entry)
@@ -703,34 +703,34 @@ class SettingsScreenController(
     private fun showBackupProgress(message: String) {
         hideBackupProgressRunnable?.let(mainHandler::removeCallbacks)
         hideBackupProgressRunnable = null
-        backupProgressLayout.visibility = View.VISIBLE
-        backupProgressText.text = message
-        backupProgressBar.visibility = View.VISIBLE
+        backupProgressLayout?.visibility = View.VISIBLE
+        backupProgressText?.text = message
+        backupProgressBar?.visibility = View.VISIBLE
         if (!PROGRESS_FRACTION_PATTERN.containsMatchIn(message)) {
-            backupProgressBar.isIndeterminate = true
+            backupProgressBar?.isIndeterminate = true
         }
     }
 
     private fun updateBackupProgress(current: Int, total: Int) {
         if (total <= 0) {
-            backupProgressBar.isIndeterminate = true
+            backupProgressBar?.isIndeterminate = true
             return
         }
-        backupProgressLayout.visibility = View.VISIBLE
-        backupProgressBar.visibility = View.VISIBLE
-        backupProgressBar.isIndeterminate = false
-        backupProgressBar.max = total
-        backupProgressBar.progress = current.coerceIn(0, total)
+        backupProgressLayout?.visibility = View.VISIBLE
+        backupProgressBar?.visibility = View.VISIBLE
+        backupProgressBar?.isIndeterminate = false
+        backupProgressBar?.max = total
+        backupProgressBar?.progress = current.coerceIn(0, total)
     }
 
     private fun finishBackupProgress(message: String, failed: Boolean) {
-        backupProgressLayout.visibility = View.VISIBLE
-        backupProgressText.text = message
-        backupProgressBar.isIndeterminate = false
-        backupProgressBar.visibility = View.GONE
+        backupProgressLayout?.visibility = View.VISIBLE
+        backupProgressText?.text = message
+        backupProgressBar?.isIndeterminate = false
+        backupProgressBar?.visibility = View.GONE
         hideBackupProgressRunnable?.let(mainHandler::removeCallbacks)
         hideBackupProgressRunnable = Runnable {
-            backupProgressLayout.visibility = View.GONE
+            backupProgressLayout?.visibility = View.GONE
             hideBackupProgressRunnable = null
         }.also { mainHandler.postDelayed(it, if (failed) 6000L else 4000L) }
     }
