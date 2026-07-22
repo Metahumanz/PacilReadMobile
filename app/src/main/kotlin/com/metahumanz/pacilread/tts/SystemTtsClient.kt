@@ -31,13 +31,14 @@ class SystemTtsClient @JvmOverloads constructor(context: Context, enginePackageN
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
     private val lock = Any()
+    private val callbackLock = Any()
     @Volatile private var tts: TextToSpeech? = null
     @Volatile private var initSuccess = false
     @Volatile private var currentCallback: SpeakCallback? = null
     @Volatile private var queuedCount = 0
     @Volatile private var completedCount = 0
     @Volatile private var paused = false
-    @Volatile private var firstSpeak = true
+    @Volatile private var activeUtteranceIds: Set<String> = emptySet()
     private val utteranceSequence = AtomicLong()
     @Volatile private var audioFocusLossListener: Runnable? = null
     private var audioManager: AudioManager? = appContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
@@ -84,18 +85,20 @@ class SystemTtsClient @JvmOverloads constructor(context: Context, enginePackageN
             callback?.onError("系统 TTS 未就绪")
             return
         }
-        currentCallback = callback
         paused = false
         engine.setSpeechRate(Math.max(0.5f, Math.min(rate, 3f)))
-        val result = engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "tts_${utteranceSequence.incrementAndGet()}")
+        val utteranceId = nextUtteranceId()
+        setActiveUtterances(setOf(utteranceId), callback)
+        val result = engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         if (result != TextToSpeech.SUCCESS) {
-            currentCallback = null
+            clearActiveUtterances()
             callback?.onError("系统 TTS 开始朗读失败")
         }
     }
 
     fun speakAll(texts: List<String?>?, rate: Float, callback: SpeakCallback?) {
-        if (texts.isNullOrEmpty()) {
+        val pendingTexts = texts?.filterNotNull()?.filter { it.isNotEmpty() }.orEmpty()
+        if (pendingTexts.isEmpty()) {
             callback?.onDone()
             return
         }
@@ -105,46 +108,37 @@ class SystemTtsClient @JvmOverloads constructor(context: Context, enginePackageN
             return
         }
         paused = false
-        currentCallback = callback
         engine.setSpeechRate(Math.max(0.5f, Math.min(rate, 3f)))
-        completedCount = 0
-        var count = 0
-        val first = firstSpeak
-        firstSpeak = false
-        for (i in texts.indices) {
-            val text = texts[i]
-            if (TextUtils.isEmpty(text)) continue
-            val mode = if (first && i == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
-            val result = engine.speak(text, mode, null, "tts_${utteranceSequence.incrementAndGet()}")
+        val utteranceIds = pendingTexts.map { nextUtteranceId() }
+        setActiveUtterances(utteranceIds.toSet(), callback)
+        for (i in pendingTexts.indices) {
+            val text = pendingTexts[i]
+            val mode = if (i == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+            val result = engine.speak(text, mode, null, utteranceIds[i])
             if (result != TextToSpeech.SUCCESS) {
-                currentCallback = null
-                queuedCount = 0
-                completedCount = 0
+                clearActiveUtterances()
+                try { engine.stop() } catch (_: Exception) {}
                 callback?.onError("系统 TTS 朗读失败")
                 return
             }
-            count++
         }
-        queuedCount = count
     }
 
     fun pause() {
         paused = true
+        clearActiveUtterances()
         tts?.let { try { it.stop() } catch (_: Exception) {} }
-        currentCallback = null
     }
 
     fun stop() {
         paused = false
-        firstSpeak = true
+        clearActiveUtterances()
         tts?.let { try { it.stop() } catch (_: Exception) {} }
-        currentCallback = null
         abandonAudioFocus()
     }
 
     fun shutdown() {
         stop()
-        firstSpeak = true
         synchronized(lock) {
             tts?.let { try { it.shutdown() } catch (_: Exception) {} }
             tts = null
@@ -160,6 +154,7 @@ class SystemTtsClient @JvmOverloads constructor(context: Context, enginePackageN
 
     fun requestAudioFocus(): Boolean {
         val manager = audioManager ?: return false
+        if (hasAudioFocus) return true
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val attrs = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
@@ -218,53 +213,98 @@ class SystemTtsClient @JvmOverloads constructor(context: Context, enginePackageN
         }
     }
 
+    private fun nextUtteranceId(): String = "tts_${utteranceSequence.incrementAndGet()}"
+
+    private fun setActiveUtterances(utteranceIds: Set<String>, callback: SpeakCallback?) = synchronized(callbackLock) {
+        activeUtteranceIds = utteranceIds
+        currentCallback = callback
+        queuedCount = utteranceIds.size
+        completedCount = 0
+    }
+
+    private fun clearActiveUtterances() = synchronized(callbackLock) {
+        activeUtteranceIds = emptySet()
+        currentCallback = null
+        queuedCount = 0
+        completedCount = 0
+    }
+
     @Suppress("DEPRECATION")
     private inner class Listener : UtteranceProgressListener() {
         override fun onStart(utteranceId: String?) {
-            Log.d(TAG, "onStart id=$utteranceId cb=${currentCallback != null}")
-            currentCallback?.onStart()
+            val callback = synchronized(callbackLock) {
+                if (utteranceId == null || utteranceId !in activeUtteranceIds) return
+                currentCallback
+            }
+            Log.d(TAG, "onStart id=$utteranceId cb=${callback != null}")
+            callback?.onStart()
         }
 
         override fun onDone(utteranceId: String?) {
-            val done = completedCount + 1
-            completedCount = done
-            val remaining = queuedCount - done
-            val callback = currentCallback
-            Log.d(TAG, "onDone id=$utteranceId done=$done queued=$queuedCount remaining=$remaining cb=${callback != null}")
-            if (remaining <= 0) {
-                currentCallback = null
-                queuedCount = 0
-                completedCount = 0
+            var done = 0
+            var total = 0
+            var remaining = 0
+            val callback = synchronized(callbackLock) {
+                if (utteranceId == null || utteranceId !in activeUtteranceIds) return
+                activeUtteranceIds = activeUtteranceIds - utteranceId
+                done = completedCount + 1
+                completedCount = done
+                total = queuedCount
+                remaining = total - done
+                val activeCallback = currentCallback
+                if (remaining <= 0) {
+                    currentCallback = null
+                    queuedCount = 0
+                    completedCount = 0
+                    activeUtteranceIds = emptySet()
+                }
+                activeCallback
             }
+            Log.d(TAG, "onDone id=$utteranceId done=$done queued=$total remaining=$remaining cb=${callback != null}")
             callback?.onDone()
         }
 
         @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
         override fun onError(utteranceId: String?) {
-            Log.e(TAG, "onError id=$utteranceId cb=${currentCallback != null}")
-            val callback = currentCallback
-            currentCallback = null
-            queuedCount = 0
-            completedCount = 0
+            val callback = synchronized(callbackLock) {
+                if (utteranceId == null || utteranceId !in activeUtteranceIds) return
+                currentCallback.also {
+                    activeUtteranceIds = emptySet()
+                    currentCallback = null
+                    queuedCount = 0
+                    completedCount = 0
+                }
+            }
+            Log.e(TAG, "onError id=$utteranceId cb=${callback != null}")
             callback?.onError("系统 TTS 朗读失败")
         }
 
         override fun onError(utteranceId: String?, errorCode: Int) {
-            Log.e(TAG, "onError id=$utteranceId code=$errorCode cb=${currentCallback != null}")
-            val callback = currentCallback
-            currentCallback = null
-            queuedCount = 0
-            completedCount = 0
+            val callback = synchronized(callbackLock) {
+                if (utteranceId == null || utteranceId !in activeUtteranceIds) return
+                currentCallback.also {
+                    activeUtteranceIds = emptySet()
+                    currentCallback = null
+                    queuedCount = 0
+                    completedCount = 0
+                }
+            }
+            Log.e(TAG, "onError id=$utteranceId code=$errorCode cb=${callback != null}")
             callback?.onError("系统 TTS 朗读失败 (code=$errorCode)")
         }
 
         override fun onStop(utteranceId: String?, interrupted: Boolean) {
             Log.d(TAG, "onStop id=$utteranceId interrupted=$interrupted paused=$paused cb=${currentCallback != null} queued=$queuedCount")
             if (!paused) {
-                val callback = currentCallback
-                currentCallback = null
-                queuedCount = 0
-                completedCount = 0
+                val callback = synchronized(callbackLock) {
+                    if (utteranceId == null || utteranceId !in activeUtteranceIds) return
+                    currentCallback.also {
+                        activeUtteranceIds = emptySet()
+                        currentCallback = null
+                        queuedCount = 0
+                        completedCount = 0
+                    }
+                }
                 if (callback != null && interrupted) callback.onError("系统 TTS 已被停止")
             }
         }
