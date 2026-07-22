@@ -14,6 +14,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import com.metahumanz.pacilread.R
 import com.metahumanz.pacilread.ReaderActivity
 import com.metahumanz.pacilread.model.BookRecord
@@ -53,6 +54,7 @@ class TtsPlaybackService : Service() {
     private val loadExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val mimoPlaybackExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val mimoPrefetchExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val mimoPrefetchLock = Object()
     private val listeners = CopyOnWriteArrayList<Listener>()
     private val sleepTimeout = Runnable(::stopPlayback)
 
@@ -70,14 +72,19 @@ class TtsPlaybackService : Service() {
     private var currentUnits: List<SpeechUnit> = ArrayList()
     private var currentChapterIndex = -1
     private var currentUnitIndex = -1
-    private var active = false
-    private var paused = false
+    @Volatile private var active = false
+    @Volatile private var paused = false
     private var foregroundStarted = false
     private var sleepDeadlineElapsed = 0L
-    private var sessionGeneration = 0
+    @Volatile private var sessionGeneration = 0
     private var systemReadyRetries = 0
     private var prefetchedPcm: ByteArray? = null
     private var prefetchedKey = ""
+    private var mimoPrefetchInFlight = false
+    private var systemPlaybackToken = 0
+    private var systemRetryKey = ""
+    private var systemRetryCount = 0
+    private var systemPlaybackWatchdog: Runnable? = null
     @Volatile private var snapshot = stoppedSnapshot()
 
     override fun onCreate() {
@@ -118,6 +125,7 @@ class TtsPlaybackService : Service() {
 
     override fun onDestroy() {
         sessionGeneration++
+        invalidateSystemPlayback()
         mainHandler.removeCallbacksAndMessages(null)
         loadExecutor.shutdownNow()
         mimoPlaybackExecutor.shutdownNow()
@@ -135,6 +143,8 @@ class TtsPlaybackService : Service() {
         active = true
         paused = false
         systemReadyRetries = 0
+        invalidateSystemPlayback()
+        resetSystemRetry()
         publishLoading(bookId)
         systemTts.stop()
         mimoPlayback.cancel()
@@ -184,48 +194,97 @@ class TtsPlaybackService : Service() {
             stopPlayback()
             return
         }
-        if (settings.ttsEngine == "mimo") playMimo(current) else playSystemBatch(current)
+        if (settings.ttsEngine == "mimo") playMimo(current) else playSystemUnit(current)
     }
 
-    private fun playSystemBatch(current: SpeechRef) {
-        val next = nextRef()
-        val texts = ArrayList<String>(2)
-        texts.add(current.unit.text)
-        if (next != null) texts.add(next.unit.text)
+    private fun playSystemUnit(current: SpeechRef) {
+        // 某些系统 TTS 会接受 QUEUE_ADD 却不启动第二条，因此每句完成后显式提交下一句。
         val generation = sessionGeneration
-        val batchSize = texts.size
-        val completed = intArrayOf(0)
-        systemTts.speakAll(texts, settings.ttsRate, object : SystemTtsClient.SpeakCallback {
+        val playbackKey = key(current)
+        if (systemRetryKey != playbackKey) {
+            systemRetryKey = playbackKey
+            systemRetryCount = 0
+        }
+        val playbackToken = ++systemPlaybackToken
+        scheduleSystemPlaybackWatchdog(current, generation, playbackToken)
+        systemTts.speak(current.unit.text, settings.ttsRate, object : SystemTtsClient.SpeakCallback {
             override fun onStart() = Unit
 
             override fun onDone() {
                 mainHandler.post {
-                    if (!active || paused || generation != sessionGeneration) return@post
-                    completed[0]++
+                    if (!isCurrentSystemPlayback(generation, playbackToken)) return@post
+                    clearSystemPlaybackWatchdog()
+                    resetSystemRetry()
                     advanceOne()
-                    val now = currentRef()
-                    if (now != null) {
-                        database.updateProgress(book!!.id, now.chapterIndex, now.unit.start)
-                        publish(TtsPlaybackSnapshot.STATE_PLAYING, now)
-                    }
-                    if (completed[0] >= batchSize) playCurrent()
+                    playCurrent()
                 }
             }
 
             override fun onError(message: String) {
-                mainHandler.post { if (generation == sessionGeneration) stopPlayback() }
+                mainHandler.post {
+                    if (!isCurrentSystemPlayback(generation, playbackToken)) return@post
+                    Log.w(TAG, "系统 TTS 朗读失败，准备恢复当前句：$playbackKey, $message")
+                    retryOrStopSystemPlayback(playbackKey)
+                }
             }
         })
+    }
+
+    private fun scheduleSystemPlaybackWatchdog(current: SpeechRef, generation: Int, playbackToken: Int) {
+        clearSystemPlaybackWatchdog()
+        val playbackKey = key(current)
+        val watchdog = Runnable {
+            if (!isCurrentSystemPlayback(generation, playbackToken)) return@Runnable
+            Log.w(TAG, "系统 TTS 超时未完成，准备恢复当前句：$playbackKey")
+            retryOrStopSystemPlayback(playbackKey)
+        }
+        systemPlaybackWatchdog = watchdog
+        mainHandler.postDelayed(
+            watchdog,
+            TtsPlaybackPolicy.systemUtteranceTimeoutMillis(current.unit.text.length, settings.ttsRate),
+        )
+    }
+
+    private fun retryOrStopSystemPlayback(playbackKey: String) {
+        clearSystemPlaybackWatchdog()
+        systemPlaybackToken++
+        systemTts.stop()
+        if (active && !paused && systemRetryKey == playbackKey && systemRetryCount < SYSTEM_TTS_MAX_RETRIES) {
+            systemRetryCount++
+            mainHandler.postDelayed(::playCurrent, SYSTEM_TTS_RETRY_DELAY_MS)
+            return
+        }
+        stopPlayback()
+    }
+
+    private fun isCurrentSystemPlayback(generation: Int, playbackToken: Int): Boolean =
+        active && !paused && generation == sessionGeneration && playbackToken == systemPlaybackToken
+
+    private fun clearSystemPlaybackWatchdog() {
+        systemPlaybackWatchdog?.let(mainHandler::removeCallbacks)
+        systemPlaybackWatchdog = null
+    }
+
+    private fun invalidateSystemPlayback() {
+        systemPlaybackToken++
+        clearSystemPlaybackWatchdog()
+    }
+
+    private fun resetSystemRetry() {
+        systemRetryKey = ""
+        systemRetryCount = 0
     }
 
     private fun playMimo(current: SpeechRef) {
         val generation = sessionGeneration
         val key = key(current)
-        val cached = takePrefetched(key)
         val next = nextRef()
-        if (next != null) prefetchMimo(next, generation)
         mimoPlaybackExecutor.execute {
             try {
+                // 第二句若仍在预取，等待并复用该请求，避免重复合成和丢弃先返回的结果。
+                val cached = takeOrAwaitPrefetched(key, generation)
+                if (!active || paused || generation != sessionGeneration) return@execute
+                if (next != null) prefetchMimo(next, generation)
                 val pcm = cached ?: mimoPlayback.synthesize(
                     current.unit.text,
                     settings.ttsMimoApiKey,
@@ -238,7 +297,8 @@ class TtsPlaybackService : Service() {
                     advanceOne()
                     playCurrent()
                 }
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                Log.e(TAG, "MiMo 当前句播放失败：$key", error)
                 mainHandler.post { if (generation == sessionGeneration) stopPlayback() }
             }
         }
@@ -246,41 +306,75 @@ class TtsPlaybackService : Service() {
 
     private fun prefetchMimo(next: SpeechRef, generation: Int) {
         val key = key(next)
-        synchronized(this) {
-            if (key == prefetchedKey) return
+        synchronized(mimoPrefetchLock) {
+            if (key == prefetchedKey && (mimoPrefetchInFlight || prefetchedPcm != null)) return
             prefetchedKey = key
             prefetchedPcm = null
+            mimoPrefetchInFlight = true
         }
         mimoPrefetchExecutor.execute {
             try {
-                val pcm = mimoPrefetch.synthesize(next.unit.text, settings.ttsMimoApiKey, settings.ttsMimoVoice)
-                synchronized(this) {
-                    if (active && generation == sessionGeneration && key == prefetchedKey) prefetchedPcm = pcm
+                synchronized(mimoPrefetchLock) {
+                    if (!active || paused || generation != sessionGeneration || key != prefetchedKey) {
+                        if (key == prefetchedKey) mimoPrefetchInFlight = false
+                        mimoPrefetchLock.notifyAll()
+                        return@execute
+                    }
                 }
-            } catch (_: Exception) {
+                val pcm = mimoPrefetch.synthesize(next.unit.text, settings.ttsMimoApiKey, settings.ttsMimoVoice)
+                synchronized(mimoPrefetchLock) {
+                    if (active && !paused && generation == sessionGeneration && key == prefetchedKey) {
+                        prefetchedPcm = pcm.takeIf { it.isNotEmpty() }
+                        mimoPrefetchInFlight = false
+                    }
+                    mimoPrefetchLock.notifyAll()
+                }
+            } catch (error: Exception) {
+                Log.w(TAG, "MiMo 下一句预取失败：$key", error)
+                synchronized(mimoPrefetchLock) {
+                    if (key == prefetchedKey) mimoPrefetchInFlight = false
+                    mimoPrefetchLock.notifyAll()
+                }
             }
         }
     }
 
-    @Synchronized
-    private fun takePrefetched(key: String): ByteArray? {
-        if (key != prefetchedKey || prefetchedPcm == null) return null
-        val result = prefetchedPcm
+    private fun takeOrAwaitPrefetched(key: String, generation: Int): ByteArray? = synchronized(mimoPrefetchLock) {
+        if (key != prefetchedKey) return@synchronized null
+        val deadline = SystemClock.uptimeMillis() + MIMO_PREFETCH_WAIT_TIMEOUT_MS
+        while (key == prefetchedKey && mimoPrefetchInFlight && active && !paused && generation == sessionGeneration) {
+            val remaining = deadline - SystemClock.uptimeMillis()
+            if (remaining <= 0L) break
+            try {
+                mimoPrefetchLock.wait(remaining)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                break
+            }
+        }
+        if (key != prefetchedKey || generation != sessionGeneration) return@synchronized null
+        val result = prefetchedPcm ?: return@synchronized null
         prefetchedPcm = null
         prefetchedKey = ""
-        return result
+        mimoPrefetchInFlight = false
+        result
     }
 
-    @Synchronized
     private fun clearPrefetch() {
-        prefetchedPcm = null
-        prefetchedKey = ""
+        synchronized(mimoPrefetchLock) {
+            prefetchedPcm = null
+            prefetchedKey = ""
+            mimoPrefetchInFlight = false
+            mimoPrefetchLock.notifyAll()
+        }
     }
 
     private fun pausePlayback() {
         if (!active || paused) return
         paused = true
         sessionGeneration++
+        invalidateSystemPlayback()
+        resetSystemRetry()
         systemTts.pause()
         mimoPlayback.cancel()
         mimoPrefetch.cancel()
@@ -300,6 +394,8 @@ class TtsPlaybackService : Service() {
         active = false
         paused = false
         sessionGeneration++
+        invalidateSystemPlayback()
+        resetSystemRetry()
         systemTts.stop()
         mimoPlayback.cancel()
         mimoPrefetch.cancel()
@@ -563,6 +659,7 @@ class TtsPlaybackService : Service() {
     private class SpeechRef(val chapterIndex: Int, val unit: SpeechUnit)
 
     companion object {
+        private const val TAG = "TtsPlaybackService"
         const val ACTION_START = "com.metahumanz.pacilread.tts.START"
         const val ACTION_PAUSE = "com.metahumanz.pacilread.tts.PAUSE"
         const val ACTION_RESUME = "com.metahumanz.pacilread.tts.RESUME"
@@ -574,6 +671,9 @@ class TtsPlaybackService : Service() {
         const val EXTRA_TIMER_MILLIS = "timer_millis"
         private const val CHANNEL_ID = "tts_playback"
         private const val NOTIFICATION_ID = 4021
+        private const val SYSTEM_TTS_MAX_RETRIES = 1
+        private const val SYSTEM_TTS_RETRY_DELAY_MS = 250L
+        private const val MIMO_PREFETCH_WAIT_TIMEOUT_MS = 65_000L
         private val SEGMENT_PATTERN: Pattern = Pattern.compile("[^ \\n\\t。！？.!?,，;；、]+[。！？.!?,，;；、]*")
     }
 }
