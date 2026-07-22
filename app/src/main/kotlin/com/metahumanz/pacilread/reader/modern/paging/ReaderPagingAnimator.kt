@@ -174,7 +174,11 @@ class ReaderPagingAnimator(
         }
         if (mode == "simulation") initializeSimulationAutoStart(direction, height) else resetInteractiveTouchState()
         navigation.bindIncomingSpread(targetChapterIndex, targetPageIndex)
-        preparePagingSnapshots(targetChapterIndex, targetPageIndex, direction)
+        if (!preparePagingSnapshots(targetChapterIndex, targetPageIndex, direction)) {
+            Log.w(TAG, "[翻页诊断] 完整页面快照创建失败，跳过残缺动效并直接完成翻页")
+            finishAnimation(targetChapterIndex, targetPageIndex, direction, token)
+            return
+        }
         arrangePagingLayers(mode)
         applyPagingVisuals(mode, direction, 0f, if (mode == "simulation") state.interactiveTouchY else height * 0.5f)
         val animator = ValueAnimator.ofFloat(0f, 1f)
@@ -495,7 +499,11 @@ class ReaderPagingAnimator(
         resetAnimatedPage(views.pageCurrent)
         resetAnimatedPage(views.pageIncoming)
         resetShadowView()
-        preparePagingSnapshots(target.chapterIndex, target.pageIndex, direction)
+        if (!preparePagingSnapshots(target.chapterIndex, target.pageIndex, direction)) {
+            Log.w(TAG, "[翻页诊断] 完整页面快照创建失败，取消本次手势翻页")
+            cancelInteractivePaging()
+            return false
+        }
         arrangePagingLayers(runtime.settingsStore.flipMode)
         applyInteractivePagingProgress(0f, state.interactiveTouchY)
         return true
@@ -994,7 +1002,7 @@ class ReaderPagingAnimator(
         }
     }
 
-    private fun preparePagingSnapshots(targetChapterIndex: Int, targetPageIndex: Int, direction: Int) {
+    private fun preparePagingSnapshots(targetChapterIndex: Int, targetPageIndex: Int, direction: Int): Boolean {
         val startedAt = SystemClock.uptimeMillis()
         val simulationMode = runtime.settingsStore.flipMode == "simulation"
         val bridgeStableCover = simulationMode && state.simulationStableCoverVisible
@@ -1004,14 +1012,14 @@ class ReaderPagingAnimator(
         val currentHit = hasPreparedCurrentSnapshot(state.currentChapterIndex, state.currentPageIndex)
         val preparedTarget = preparedTargetSnapshot(targetChapterIndex, targetPageIndex)
         val targetHitBeforeCapture = preparedTarget != null && !preparedTarget.isRecycled
-        if (!simulationMode && (!currentHit || !targetHitBeforeCapture)) {
+        if (!currentHit || !targetHitBeforeCapture) {
             Log.d(
                 TAG,
-                "[翻页诊断] snapshot未预热，非仿真动效改用live图层 - currentHit=$currentHit targetHit=$targetHitBeforeCapture target=$targetChapterIndex/$targetPageIndex",
+                "[翻页诊断] snapshot未预热，同步补齐完整页面 - currentHit=$currentHit targetHit=$targetHitBeforeCapture target=$targetChapterIndex/$targetPageIndex",
             )
-            restoreLivePageLayers(true)
-            return
         }
+        // 阅读背景位于文字页容器之外，直接移动 live 图层只会移动文字。
+        // 即使缓存尚未预热，也必须补齐包含背景的整页快照后再启动任何翻页动效。
         ensurePreparedCurrentSnapshot()
         var targetSnapshot = preparedTarget
         val targetHit = targetHitBeforeCapture
@@ -1025,7 +1033,7 @@ class ReaderPagingAnimator(
         )
         if (state.currentPageSnapshotBitmap == null || state.incomingPageSnapshotBitmap == null) {
             restoreLivePageLayers(true)
-            return
+            return false
         }
         views.pageSnapshotCurrent.setImageBitmap(state.currentPageSnapshotBitmap)
         views.pageSnapshotIncoming.setImageBitmap(state.incomingPageSnapshotBitmap)
@@ -1036,6 +1044,7 @@ class ReaderPagingAnimator(
         hideLiveHudDuringPaging()
         state.pagingSnapshotsVisible = true
         state.simulationStableCoverVisible = false
+        return true
     }
 
     private fun screenshotPageLayer(source: View, reuse: Bitmap?, chapterIndex: Int, pageIndex: Int): Bitmap? {
