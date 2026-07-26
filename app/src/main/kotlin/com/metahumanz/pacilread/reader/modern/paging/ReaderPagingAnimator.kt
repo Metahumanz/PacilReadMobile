@@ -312,6 +312,11 @@ class ReaderPagingAnimator(
         state.preparedPreviousSnapshotPageIndex = -1
     }
 
+    fun invalidateAndWarmPreparedPagingSnapshots() {
+        invalidatePreparedPagingSnapshots()
+        schedulePagingSnapshotWarmup()
+    }
+
     fun restoreLivePageLayers(incomingVisible: Boolean) {
         state.pagingSnapshotsVisible = false
         state.simulationFinishCoverVisible = false

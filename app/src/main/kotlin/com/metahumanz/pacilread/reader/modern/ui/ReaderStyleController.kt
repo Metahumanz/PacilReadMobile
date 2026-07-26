@@ -128,7 +128,7 @@ class ReaderStyleController(
         attachedChrome.updateSystemBarsVisibility(state.controlsVisible)
         attachedChrome.applyGlassOpacity()
         attachedChrome.updateReaderHud()
-        attachedPaging.invalidatePreparedPagingSnapshots()
+        attachedPaging.invalidateAndWarmPreparedPagingSnapshots()
     }
 
     fun attachBackground(uri: Uri?) {
