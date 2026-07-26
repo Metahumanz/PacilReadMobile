@@ -198,7 +198,10 @@ class ReaderChromeController(
         applyHudSlot(views.hudBottomLeft, runtime.settingsStore.hudBottomLeft)
         if (showCenterSlots) applyHudSlot(views.hudBottomCenter, runtime.settingsStore.hudBottomCenter) else hideHudSlot(views.hudBottomCenter)
         applyHudSlot(views.hudBottomRight, runtime.settingsStore.hudBottomRight)
-        if (::paging.isInitialized && !state.isAnimating && !state.interactivePaging && !state.simulationStableCoverVisible) paging.invalidatePreparedPagingSnapshots()
+        if (::paging.isInitialized && !state.isAnimating && !state.interactivePaging && !state.simulationStableCoverVisible) {
+            // 时间与电量会在页面静止时更新；只让快照失效会把整页重绘推迟到下一次翻页点击。
+            paging.invalidateAndWarmPreparedPagingSnapshots()
+        }
     }
 
     fun captureHudSnapshotState() = HudSnapshotState(

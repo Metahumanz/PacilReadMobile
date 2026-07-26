@@ -1529,7 +1529,7 @@ class ReaderContentController(
         if (paginationInsetsChanged) {
             scheduleReflowAfterLayout(chapterIndex, currentCharOffset())
         } else if (!suppressReflow) {
-            paging?.invalidatePreparedPagingSnapshots()
+            paging?.invalidateAndWarmPreparedPagingSnapshots()
         }
     }
 
