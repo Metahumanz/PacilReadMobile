@@ -176,7 +176,7 @@ class ReaderNavigationController(
     }
 
     fun requestTapPageTurn(direction: Int): Boolean {
-        if (direction == 0 || state.chapters.isEmpty()) return false
+        if (direction == 0 || state.chapters.isEmpty() || state.controlsTransitionActive) return false
         if (state.isAnimating || state.interactivePaging) requireNotNull(pagingController).settleInterruptedPagingAnimation()
         return if (direction > 0) pageDown() else pageUp()
     }

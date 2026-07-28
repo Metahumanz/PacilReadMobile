@@ -77,7 +77,9 @@ class ReaderAutoPageController(
 
     private fun onAutoPageTick() {
         if (!state.autoPageActive) return
-        if (!state.controlsVisible && !state.isAnimating && !state.interactivePaging) navigation!!.pageDown()
+        if (!state.controlsVisible && !state.controlsTransitionActive && !state.isAnimating && !state.interactivePaging) {
+            navigation!!.pageDown()
+        }
         scheduleNextAutoPageTick()
     }
 }

@@ -318,7 +318,7 @@ open class ModernReaderActivity : ThemedReaderActivity() {
         if (paging.handleReaderVolumeKeyEvent(event)) {
             return true
         }
-        if (event.action == KeyEvent.ACTION_DOWN && !state.controlsVisible) {
+        if (event.action == KeyEvent.ACTION_DOWN && !state.controlsVisible && !state.controlsTransitionActive) {
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_UP,
                 KeyEvent.KEYCODE_DPAD_LEFT,
@@ -345,7 +345,8 @@ open class ModernReaderActivity : ThemedReaderActivity() {
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         if (event.source and InputDevice.SOURCE_CLASS_POINTER != 0 &&
             event.actionMasked == MotionEvent.ACTION_SCROLL &&
-            !state.controlsVisible
+            !state.controlsVisible &&
+            !state.controlsTransitionActive
         ) {
             val vScroll = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
             if (Math.abs(vScroll) > 0.5f) {
@@ -946,6 +947,7 @@ open class ModernReaderActivity : ThemedReaderActivity() {
             override fun onDown(e: MotionEvent): Boolean = true
 
             override fun onSingleTapUp(e: MotionEvent): Boolean {
+                if (state.controlsTransitionActive) return true
                 if (state.controlsVisible) {
                     if (chrome.isInsideView(e, views.menuTopPanel) ||
                         chrome.isInsideView(e, views.menuInfoPanel) ||
@@ -997,7 +999,7 @@ open class ModernReaderActivity : ThemedReaderActivity() {
                 velocityX: Float,
                 velocityY: Float,
             ): Boolean {
-                if (state.controlsVisible || state.isAnimating || state.interactivePaging) {
+                if (state.controlsVisible || state.controlsTransitionActive || state.isAnimating || state.interactivePaging) {
                     return false
                 }
                 if (Math.abs(velocityX) > Math.abs(velocityY) * 1.3f && Math.abs(velocityX) > 700f) {

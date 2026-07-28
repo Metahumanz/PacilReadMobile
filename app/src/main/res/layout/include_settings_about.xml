@@ -90,7 +90,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <!-- v1.4.5 平板翻页流畅性修复 -->
+                <!-- v1.4.6 阅读菜单流畅性修复 -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -121,6 +121,55 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
+                            android:text="v1.4.6 — 阅读菜单流畅性修复" />
+
+                        <TextView
+                            style="@style/AppChromeCaption"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="end"
+                            android:text="2026-07-28" />
+                    </LinearLayout>
+
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="菜单与翻页" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  修复平板收起阅读菜单时偶发掉帧的问题，整页快照改为在菜单动画和系统栏变化稳定后统一预热" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  菜单过渡期间会协调触摸、音量键、键盘、自动翻页和听书翻页，避免多个动画与页面重绘同时发生" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="14dp"
+                        android:layout_marginBottom="10dp"
+                        android:background="?attr/themeColorAppBorder" />
+
+                </LinearLayout>
+
+                <!-- v1.4.5 平板翻页流畅性修复 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            style="@style/AppChromeBodyStrong"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
                             android:text="v1.4.5 — 平板翻页流畅性修复" />
 
                         <TextView

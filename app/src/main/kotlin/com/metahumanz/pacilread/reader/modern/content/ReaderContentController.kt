@@ -1511,6 +1511,7 @@ class ReaderContentController(
 
     fun onReaderInsetsChanged(suppressReflow: Boolean, paginationInsetsChanged: Boolean) {
         if (!activity.isReaderActive) return
+        if (!ReaderInsetUpdatePolicy.shouldRefreshReaderContent(suppressReflow, paginationInsetsChanged)) return
         style?.applyReaderSettings()
         cachedPaginationSnapshot = null
         if (state.book == null || state.chapters.isEmpty()) return
@@ -1528,8 +1529,6 @@ class ReaderContentController(
         }
         if (paginationInsetsChanged) {
             scheduleReflowAfterLayout(chapterIndex, currentCharOffset())
-        } else if (!suppressReflow) {
-            paging?.invalidateAndWarmPreparedPagingSnapshots()
         }
     }
 

@@ -95,7 +95,9 @@ class ReaderTextSelectionController(
             clearSelection()
             return true
         }
-        if (state.controlsVisible || state.isAnimating || state.interactivePaging || state.chapters.isEmpty()) {
+        if (state.controlsVisible || state.controlsTransitionActive || state.isAnimating ||
+            state.interactivePaging || state.chapters.isEmpty()
+        ) {
             cancelPendingLongPress()
             return false
         }
