@@ -396,7 +396,7 @@ class ReaderTtsController(
     private fun playCurrentTtsUnit() {
         if (!state.ttsActive) { Log.d(TAG, "playCurrentTtsUnit: ttsActive=false, return"); return }
         if (state.ttsChapterIndex !in state.chapters.indices) { Log.d(TAG, "playCurrentTtsUnit: bad chapter index, stop"); stopTts(); return }
-        if (state.isAnimating || state.interactivePaging) { Log.d(TAG, "playCurrentTtsUnit: isAnimating=${state.isAnimating} interactivePaging=${state.interactivePaging}, delay retry"); scheduleTtsPlayback(paging.readerFlipDurationMs() + 60L); return }
+        if (state.controlsTransitionActive || state.isAnimating || state.interactivePaging) { Log.d(TAG, "playCurrentTtsUnit: controlsTransition=${state.controlsTransitionActive} isAnimating=${state.isAnimating} interactivePaging=${state.interactivePaging}, delay retry"); scheduleTtsPlayback(paging.readerFlipDurationMs() + 60L); return }
         if (state.currentTtsUnitIndex >= ttsUnits.size) { Log.d(TAG, "playCurrentTtsUnit: index=${state.currentTtsUnitIndex} >= size=${ttsUnits.size}, next chapter"); advanceToNextTtsChapter(); return }
         if (state.currentChapterIndex != state.ttsChapterIndex) {
             val pendingUnit = ttsUnits[ui.clamp(state.currentTtsUnitIndex, 0, max(ttsUnits.size - 1, 0))]
@@ -499,7 +499,7 @@ class ReaderTtsController(
         private var retries = 0
         override fun run() {
             if (!state.ttsActive || sessionId != state.ttsSessionId) return
-            if (state.isAnimating || state.interactivePaging) { if (retries++ < 30) runtime.mainHandler.postDelayed(this, paging.readerFlipDurationMs() + 20L); return }
+            if (state.controlsTransitionActive || state.isAnimating || state.interactivePaging) { if (retries++ < 30) runtime.mainHandler.postDelayed(this, paging.readerFlipDurationMs() + 20L); return }
             val navigationPages = content.getNavigationPagesForPage(state.ttsChapterIndex, state.currentPageIndex, "tts_highlight_task")
             val pages = navigationPages.pages
             if (pages.isEmpty()) return

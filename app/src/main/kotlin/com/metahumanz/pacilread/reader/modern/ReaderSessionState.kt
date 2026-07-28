@@ -28,6 +28,7 @@ class ReaderSessionState {
     @JvmField var readerContentInsetRight = 0
     @JvmField var currentBatteryLevel = -1
     @JvmField var controlsVisible = false
+    @JvmField var controlsTransitionActive = false
     @JvmField var autoPageActive = false
     @JvmField var ttsActive = false
     @JvmField var ttsPaused = false

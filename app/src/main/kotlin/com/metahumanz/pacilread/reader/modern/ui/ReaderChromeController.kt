@@ -45,6 +45,10 @@ class ReaderChromeController(
     private val ui: ReaderUiUtils,
 ) {
     private val autoHideRunnable = Runnable { setControlsVisible(false) }
+    private val controlsTransitionEndRunnable = Runnable {
+        state.controlsTransitionActive = false
+        if (!state.controlsVisible && ::paging.isInitialized) paging.schedulePagingSnapshotWarmup()
+    }
     private var menuPanelColor = 0xFFF7F0E1.toInt()
     private var menuPanelStrokeColor = 0xFFE3D6C7.toInt()
     private var menuButtonColor = 0xFFF1E8D7.toInt()
@@ -188,7 +192,7 @@ class ReaderChromeController(
         return (readLength * 100.0 / totalLength).roundToInt()
     }
 
-    fun updateReaderHud() {
+    fun updateReaderHud(refreshPagingSnapshots: Boolean = true) {
         if (state.book == null || state.chapters.isEmpty()) return
         content.rememberCurrentPageAnchor()
         val showCenterSlots = isLandscapeHudMode()
@@ -198,7 +202,9 @@ class ReaderChromeController(
         applyHudSlot(views.hudBottomLeft, runtime.settingsStore.hudBottomLeft)
         if (showCenterSlots) applyHudSlot(views.hudBottomCenter, runtime.settingsStore.hudBottomCenter) else hideHudSlot(views.hudBottomCenter)
         applyHudSlot(views.hudBottomRight, runtime.settingsStore.hudBottomRight)
-        if (::paging.isInitialized && !state.isAnimating && !state.interactivePaging && !state.simulationStableCoverVisible) {
+        if (refreshPagingSnapshots && ::paging.isInitialized && !state.isAnimating &&
+            !state.interactivePaging && !state.simulationStableCoverVisible
+        ) {
             // 时间与电量会在页面静止时更新；只让快照失效会把整页重绘推迟到下一次翻页点击。
             paging.invalidateAndWarmPreparedPagingSnapshots()
         }
@@ -297,6 +303,8 @@ class ReaderChromeController(
             return
         }
         state.controlsVisible = visible
+        runtime.mainHandler.removeCallbacks(controlsTransitionEndRunnable)
+        state.controlsTransitionActive = true
         animatePanel(views.hudTopContainer, !visible, -ui.dp(12).toFloat())
         animatePanel(views.hudBottomContainer, !visible, ui.dp(12).toFloat())
         animatePanel(views.menuTopPanel, visible, -ui.dp(18).toFloat())
@@ -305,7 +313,9 @@ class ReaderChromeController(
         suppressInsetDrivenReflowTemporarily()
         updateSystemBarsVisibility(visible)
         if (visible) { scheduleAutoHide(); views.readerRoot.post(::updateReaderLayoutInsets) }
-        else { runtime.mainHandler.removeCallbacks(autoHideRunnable); if (::paging.isInitialized) paging.schedulePagingSnapshotWarmup() }
+        else runtime.mainHandler.removeCallbacks(autoHideRunnable)
+        val transitionDuration = if (visible) MENU_SHOW_DURATION_MS else MENU_HIDE_DURATION_MS
+        runtime.mainHandler.postDelayed(controlsTransitionEndRunnable, transitionDuration + MENU_TRANSITION_SETTLE_MS)
     }
 
     fun scheduleAutoHide() {
@@ -479,16 +489,19 @@ class ReaderChromeController(
         view.animate().cancel()
         if (show) {
             view.visibility = View.VISIBLE; view.alpha = 0f; view.translationY = hiddenTranslationY
-            view.animate().alpha(1f).translationY(0f).setDuration(220L).start(); return
+            view.animate().alpha(1f).translationY(0f).setDuration(MENU_SHOW_DURATION_MS).start(); return
         }
         if (view.visibility != View.VISIBLE) return
-        view.animate().alpha(0f).translationY(hiddenTranslationY).setDuration(180L).withEndAction {
+        view.animate().alpha(0f).translationY(hiddenTranslationY).setDuration(MENU_HIDE_DURATION_MS).withEndAction {
             if (!state.controlsVisible) { view.visibility = View.GONE; view.translationY = 0f }
         }.start()
     }
 
     companion object {
         private const val MENU_AUTO_HIDE_DELAY_MS = 2500L
+        private const val MENU_SHOW_DURATION_MS = 220L
+        private const val MENU_HIDE_DURATION_MS = 180L
+        private const val MENU_TRANSITION_SETTLE_MS = 32L
         private const val INSET_REFLOW_SUPPRESS_WINDOW_MS = 450L
     }
 }

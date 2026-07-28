@@ -110,7 +110,6 @@ class ReaderStyleController(
         views.pageTitleIncoming.gravity = titleGravity
         views.pageTitleIncomingRight.gravity = titleGravity
 
-        attachedPaging.invalidatePreparedPagingSnapshots()
         tts?.updateTtsHighlight()
         if (runtime.settingsStore.isKeepScreenOn) {
             activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -127,7 +126,7 @@ class ReaderStyleController(
         views.pageBodyIncomingRight.requestLayout()
         attachedChrome.updateSystemBarsVisibility(state.controlsVisible)
         attachedChrome.applyGlassOpacity()
-        attachedChrome.updateReaderHud()
+        attachedChrome.updateReaderHud(refreshPagingSnapshots = false)
         attachedPaging.invalidateAndWarmPreparedPagingSnapshots()
     }
 

@@ -60,7 +60,9 @@ class ReaderPagingAnimator(
     }
 
     fun handleReaderPagingTouchEvent(event: MotionEvent): Boolean {
-        if (state.controlsVisible || state.chapters.isEmpty() || views.pageStage.width == 0 || views.pageStage.height == 0) {
+        if (state.controlsVisible || state.controlsTransitionActive || state.chapters.isEmpty() ||
+            views.pageStage.width == 0 || views.pageStage.height == 0
+        ) {
             return false
         }
         when (event.actionMasked) {
@@ -132,7 +134,7 @@ class ReaderPagingAnimator(
     }
 
     fun handleReaderVolumeKeyEvent(event: KeyEvent?): Boolean {
-        if (event == null || state.controlsVisible) return false
+        if (event == null || state.controlsVisible || state.controlsTransitionActive) return false
         val action = when (event.keyCode) {
             KeyEvent.KEYCODE_VOLUME_UP -> runtime.settingsStore.volumeKeyUpAction
             KeyEvent.KEYCODE_VOLUME_DOWN -> runtime.settingsStore.volumeKeyDownAction
@@ -259,8 +261,14 @@ class ReaderPagingAnimator(
         views.pageStage.postOnAnimation { waitForPagingSnapshotWarmupPreDraw(requestId, snapshotWarmupPreDrawPasses()) }
     }
 
-    private fun shouldSkipPagingSnapshotWarmup(): Boolean =
-        state.chapters.isEmpty() || state.controlsVisible || activity.isReaderEnterTransitionActive || state.isAnimating || state.interactivePaging
+    private fun shouldSkipPagingSnapshotWarmup(): Boolean = ReaderPagingSnapshotWarmupPolicy.shouldSkip(
+        hasChapters = state.chapters.isNotEmpty(),
+        controlsVisible = state.controlsVisible,
+        controlsTransitionActive = state.controlsTransitionActive,
+        readerEnterTransitionActive = activity.isReaderEnterTransitionActive,
+        pageAnimationActive = state.isAnimating,
+        interactivePaging = state.interactivePaging,
+    )
 
     private fun waitForPagingSnapshotWarmupPreDraw(requestId: Int, remainingPasses: Int) {
         if (requestId != pagingSnapshotWarmupRequestId || shouldSkipPagingSnapshotWarmup()) return
