@@ -381,6 +381,46 @@
             android:visibility="gone" />
     </FrameLayout>
 
+    <!-- 听书快捷操作只放在屏幕边缘，避免和正文的翻页手势重叠。 -->
+    <LinearLayout
+        android:id="@+id/reader_quick_actions"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end|center_vertical"
+        android:background="@drawable/bg_reader_menu_panel_solid"
+        android:elevation="8dp"
+        android:orientation="vertical"
+        android:padding="4dp">
+
+        <Button
+            android:id="@+id/button_quick_tts_toggle"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_reader_menu_button_solid"
+            android:fontFamily="sans-serif-medium"
+            android:minWidth="0dp"
+            android:text="@string/tts_pause"
+            android:textAllCaps="false"
+            android:textColor="?attr/themeColorReaderMenuButtonText"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/button_quick_tts_stop"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_reader_menu_button_solid"
+            android:fontFamily="sans-serif-medium"
+            android:minWidth="0dp"
+            android:text="@string/tts_stop"
+            android:textAllCaps="false"
+            android:textColor="?attr/themeColorReaderMenuButtonText"
+            android:textSize="12sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
     <!-- HUD Bottom -->
     <FrameLayout
         android:id="@+id/hud_container_bottom"

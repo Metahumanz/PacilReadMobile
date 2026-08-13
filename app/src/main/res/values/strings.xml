@@ -13,5 +13,6 @@
     <string name="tts_pause">暂停听书</string>
     <string name="tts_resume">继续听书</string>
     <string name="tts_stop">停止听书</string>
+    <string name="tts_show_quick_controls">听书时显示暂停、继续和停止快捷按钮</string>
     <string name="tts_start">开始听书</string>
 </resources>
