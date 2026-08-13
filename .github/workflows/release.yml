@@ -1,0 +1,148 @@
+name: Publish Android release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create or update, for example v1.4.7"
+        required: true
+        type: string
+
+# The automatically provided GITHUB_TOKEN creates and updates GitHub Releases.
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Build and publish signed APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          tag="$INPUT_TAG"
+          if [[ -z "$tag" ]]; then
+            tag="$GITHUB_REF_NAME"
+          fi
+          if [[ ! "$tag" =~ ^v.+ ]]; then
+            echo "Release tag must start with v (for example v1.4.7): $tag" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Verify app version matches release tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          version_name="$(sed -nE 's/^[[:space:]]*versionName[[:space:]]+"([^"]+)".*/\1/p' app/build.gradle | head -n 1)"
+          if [[ -z "$version_name" ]]; then
+            echo "Could not read versionName from app/build.gradle." >&2
+            exit 1
+          fi
+          if [[ "v$version_name" != "$RELEASE_TAG" ]]; then
+            echo "Release tag $RELEASE_TAG does not match app versionName $version_name." >&2
+            exit 1
+          fi
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
+
+      - name: Restore Android signing key
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for secret_name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [[ -z "${!secret_name}" ]]; then
+              echo "Required GitHub Actions secret is missing: $secret_name" >&2
+              exit 1
+            fi
+          done
+
+          key_store_path="$RUNNER_TEMP/pacilread-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$key_store_path"
+          chmod 600 "$key_store_path"
+          {
+            printf 'storeFile=%s\n' "$key_store_path"
+            printf 'storePassword=%s\n' "$ANDROID_KEYSTORE_PASSWORD"
+            printf 'keyAlias=%s\n' "$ANDROID_KEY_ALIAS"
+            printf 'keyPassword=%s\n' "$ANDROID_KEY_PASSWORD"
+          } > keystore.properties
+          chmod 600 keystore.properties
+
+      - name: Test and build release APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon --console plain testDebugUnitTest assembleRelease
+
+      - name: Verify signed APK
+        id: artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk_path="$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*-release.apk' -print -quit)"
+          if [[ -z "$apk_path" ]]; then
+            echo "Signed release APK was not produced." >&2
+            exit 1
+          fi
+          apksigner_path="$(find "$ANDROID_HOME/build-tools" -mindepth 2 -maxdepth 2 -type f -name apksigner -print | sort -V | tail -n 1)"
+          if [[ -z "$apksigner_path" ]]; then
+            echo "Android apksigner was not found." >&2
+            exit 1
+          fi
+          "$apksigner_path" verify --verbose "$apk_path"
+          sha256sum "$apk_path" > "$apk_path.sha256"
+          echo "apk_path=$apk_path" >> "$GITHUB_OUTPUT"
+          echo "checksum_path=$apk_path.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          APK_PATH: ${{ steps.artifact.outputs.apk_path }}
+          CHECKSUM_PATH: ${{ steps.artifact.outputs.checksum_path }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$APK_PATH" "$CHECKSUM_PATH" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$APK_PATH" "$CHECKSUM_PATH" \
+              --target "$GITHUB_SHA" \
+              --title "PacilRead $RELEASE_TAG" \
+              --generate-notes
+          fi
+
+      - name: Remove signing material
+        if: always()
+        shell: bash
+        run: |
+          rm -f keystore.properties "$RUNNER_TEMP/pacilread-release.jks"
