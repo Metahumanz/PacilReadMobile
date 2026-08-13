@@ -75,6 +75,7 @@ class SettingsScreenController(
     private val maintenanceSummaryText: TextView? = activity.findViewById(R.id.text_maintenance_summary)
     private val textAppVersion: TextView? = activity.findViewById(R.id.text_app_version)
     private val scrollChangelog: NestedScrollView? = activity.findViewById(R.id.scroll_changelog)
+    private val checkUpdateButton: Button? = activity.findViewById(R.id.button_check_update)
     private val optimizeDatabaseButton: Button? = activity.findViewById(R.id.button_optimize_database)
     private val fullBackupText: TextView? = activity.findViewById(R.id.text_backup_full)
     private val liteBackupText: TextView? = activity.findViewById(R.id.text_backup_lite)
@@ -138,6 +139,7 @@ class SettingsScreenController(
     private var selectedReaderOrientationMode = READER_ORIENTATION_SYSTEM
     private var selectedTransitionMotionMode = TransitionMotionModeHelper.MODE_FLUID
     private var hideBackupProgressRunnable: Runnable? = null
+    private var checkingForUpdate = false
 
     init {
         setupChangelogScrolling()
@@ -296,6 +298,7 @@ class SettingsScreenController(
     }
 
     private fun setupActionButtons() {
+        checkUpdateButton?.setOnClickListener { checkForAppUpdate() }
         testButton.setOnClickListener { testWebDav() }
         ttsTestButton?.setOnClickListener { testTtsEngine() }
         optimizeDatabaseButton?.setOnClickListener { startDatabaseOptimization() }
@@ -737,6 +740,7 @@ class SettingsScreenController(
 
     private fun setBusy(busy: Boolean) {
         settingsBusy = busy
+        checkUpdateButton?.isEnabled = !busy && !checkingForUpdate
         testButton.isEnabled = !busy
         ttsTestButton?.isEnabled = !busy
         ttsEngineSpinner?.isEnabled = !busy
@@ -759,6 +763,77 @@ class SettingsScreenController(
     private fun hasPendingMaintenanceWork(): Boolean = try { databaseHelper.hasPendingMaintenanceWork() } catch (_: Exception) { false }
     private fun persistSettingsIfReady() = saveSettings()
     private fun showToast(text: String) = AppUiUtils.showToast(activity, text)
+
+    private fun checkForAppUpdate() {
+        if (checkingForUpdate || settingsBusy) return
+        checkingForUpdate = true
+        checkUpdateButton?.apply {
+            isEnabled = false
+            text = "正在检查更新..."
+        }
+        executor.execute {
+            try {
+                val release = GitHubReleaseUpdateChecker().latestRelease()
+                activity.runOnUiThread {
+                    if (!isSettingsActivityActive()) return@runOnUiThread
+                    finishUpdateCheckUi()
+                    if (release == null) {
+                        showToast("暂未发布正式版本")
+                        return@runOnUiThread
+                    }
+                    when (AppVersionComparator.compare(release.tagName, BuildConfig.VERSION_NAME)) {
+                        null -> showUncomparableReleaseDialog(release)
+                        1 -> showUpdateAvailableDialog(release)
+                        0 -> showToast("已是最新版本（v${BuildConfig.VERSION_NAME}）")
+                        else -> showToast("当前版本比最新发布版更新")
+                    }
+                }
+            } catch (error: Exception) {
+                Log.w(TAG, "检查更新失败", error)
+                activity.runOnUiThread {
+                    if (!isSettingsActivityActive()) return@runOnUiThread
+                    finishUpdateCheckUi()
+                    showToast("检查更新失败：${readableError(error)}")
+                }
+            }
+        }
+    }
+
+    private fun finishUpdateCheckUi() {
+        checkingForUpdate = false
+        checkUpdateButton?.apply {
+            isEnabled = !settingsBusy
+            text = "检查更新"
+        }
+    }
+
+    private fun showUpdateAvailableDialog(release: GitHubRelease) {
+        AlertDialog.Builder(activity)
+            .setTitle("发现新版本")
+            .setMessage("当前版本：v${BuildConfig.VERSION_NAME}\n最新版本：${release.tagName}\n\n是否前往 GitHub 发布页下载？")
+            .setNegativeButton("稍后", null)
+            .setPositiveButton("前往下载") { _, _ -> openReleasePage(release.releasePageUrl) }
+            .show()
+    }
+
+    private fun showUncomparableReleaseDialog(release: GitHubRelease) {
+        AlertDialog.Builder(activity)
+            .setTitle("发现新发布")
+            .setMessage("检测到 ${release.tagName}，但无法与当前版本自动比较。是否前往 GitHub 发布页查看？")
+            .setNegativeButton("关闭", null)
+            .setPositiveButton("查看发布") { _, _ -> openReleasePage(release.releasePageUrl) }
+            .show()
+    }
+
+    private fun openReleasePage(releasePageUrl: String) {
+        try {
+            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(releasePageUrl)))
+        } catch (_: Exception) {
+            showToast("无法打开 GitHub 发布页")
+        }
+    }
+
+    private fun isSettingsActivityActive() = !activity.isFinishing && !activity.isDestroyed
 
     private fun readableError(error: Throwable?): String {
         if (error == null) return "未知错误"

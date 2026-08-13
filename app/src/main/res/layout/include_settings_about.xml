@@ -46,6 +46,25 @@
                 android:textColor="?attr/themeColorAppPrimary" />
         </LinearLayout>
 
+        <Button
+            android:id="@+id/button_check_update"
+            style="@style/AppChromeCompactToggleButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:minHeight="46dp"
+            android:background="@drawable/bg_app_outline_button"
+            android:text="检查更新"
+            android:textAllCaps="false"
+            android:textColor="?attr/themeColorAppButtonOutlineText" />
+
+        <TextView
+            style="@style/AppChromeCaption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="手动检查 GitHub 上的最新正式发布版本" />
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
@@ -90,7 +109,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <!-- v1.4.6 阅读菜单流畅性修复 -->
+                <!-- v1.4.7 更新检查与听书快捷控制 -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -115,6 +134,57 @@
                             android:text="最新"
                             android:textColor="@android:color/white"
                             android:textSize="11sp" />
+
+                        <TextView
+                            style="@style/AppChromeBodyStrong"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:text="v1.4.7 — 更新检查与听书快捷控制" />
+
+                        <TextView
+                            style="@style/AppChromeCaption"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="end"
+                            android:text="2026-08-14" />
+                    </LinearLayout>
+
+                    <TextView
+                        style="@style/AppChromeBodyStrong"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="发布与听书体验" />
+
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  设置页支持手动检查 GitHub 最新正式版本，发现新版本后可直接前往发布页下载" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  听书时可在听书菜单选择是否显示暂停、继续和停止快捷按钮；阅读器返回时会自动停止听书" />
+                    <TextView style="@style/AppChromeBodyMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="  •  新增自动发布工作流：推送版本标签后会构建、验签并上传 APK 与 SHA-256 校验文件" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="14dp"
+                        android:layout_marginBottom="10dp"
+                        android:background="?attr/themeColorAppBorder" />
+
+                </LinearLayout>
+
+                <!-- v1.4.6 阅读菜单流畅性修复 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
 
                         <TextView
                             style="@style/AppChromeBodyStrong"
