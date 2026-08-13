@@ -207,6 +207,14 @@
         android:textColor="?attr/themeColorOnSurfaceMuted"
         android:textSize="13sp" />
 
+    <CheckBox
+        android:id="@+id/tts_check_reader_quick_controls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/tts_show_quick_controls"
+        android:textColor="?attr/themeColorOnSurface" />
+
     <Button
         android:id="@+id/tts_button_toggle"
         android:layout_width="match_parent"

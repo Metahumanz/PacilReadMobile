@@ -224,6 +224,10 @@ open class SettingsStore(context: Context) {
         get() = if (preferences.getString(KEY_TTS_TIMER_MODE, "slider") == "precise") "precise" else "slider"
         set(value) = edit { putString(KEY_TTS_TIMER_MODE, if (value == "precise") "precise" else "slider") }
 
+    var isReaderTtsQuickControlsEnabled: Boolean
+        get() = preferences.getBoolean(KEY_READER_TTS_QUICK_CONTROLS, true)
+        set(value) = edit { putBoolean(KEY_READER_TTS_QUICK_CONTROLS, value) }
+
     var flipMode: String
         get() = normalizeFlipMode(preferences.getString(KEY_FLIP_MODE, "slide"))
         set(value) = edit { putString(KEY_FLIP_MODE, normalizeFlipMode(value)) }
@@ -574,6 +578,7 @@ open class SettingsStore(context: Context) {
         private const val KEY_TTS_MIMO_VOICE = "tts_mimo_voice"
         private const val KEY_TTS_SYSTEM_ENGINE = "tts_system_engine"
         private const val KEY_TTS_TIMER_MODE = "tts_timer_mode"
+        private const val KEY_READER_TTS_QUICK_CONTROLS = "reader_tts_quick_controls"
         private const val KEY_FLIP_MODE = "flip_mode"
         private const val KEY_READER_SLIDER_MODE = "reader_slider_mode"
         private const val KEY_VOLUME_KEY_UP_ACTION = "volume_key_up_action"
@@ -644,6 +649,7 @@ open class SettingsStore(context: Context) {
             KEY_TTS_MIMO_VOICE,
             KEY_TTS_SYSTEM_ENGINE,
             KEY_TTS_TIMER_MODE,
+            KEY_READER_TTS_QUICK_CONTROLS,
             KEY_FLIP_MODE,
             KEY_READER_SLIDER_MODE,
             KEY_VOLUME_KEY_UP_ACTION,

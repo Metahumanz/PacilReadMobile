@@ -15,6 +15,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.widget.AdapterView
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.NumberPicker
 import android.widget.SeekBar
 import android.widget.Spinner
@@ -89,6 +90,8 @@ class ReaderTtsController(
 
     fun isActive() = state.ttsActive
 
+    fun isPaused() = state.ttsPaused
+
     fun bindPlaybackService() {
         if (playbackBound || playbackBindingRequested) return
         try { playbackBindingRequested = activity.bindService(Intent(activity, TtsPlaybackService::class.java), playbackConnection, 0) } catch (_: Exception) {}
@@ -115,6 +118,7 @@ class ReaderTtsController(
         stagedSleepDurationMillis = timerDuration
         state.ttsActive = true; state.ttsPaused = false; state.ttsSessionId++
         chrome.styleReaderMenuButton(views.ttsButton, true)
+        chrome.updateQuickTtsControls()
         requestNotificationPermissionIfNeeded()
         val intent = Intent(activity, TtsPlaybackService::class.java).setAction(TtsPlaybackService.ACTION_START)
             .putExtra(TtsPlaybackService.EXTRA_BOOK_ID, state.bookId).putExtra(TtsPlaybackService.EXTRA_CHAPTER_INDEX, chapterIndex)
@@ -133,6 +137,7 @@ class ReaderTtsController(
         synchronized(mimoPcmCache) { mimoPcmCache.clear() }
         state.ttsHighlightPageIndex = -1; state.ttsHighlightStart = -1; state.ttsHighlightEnd = -1
         updateTtsHighlight(); chrome.styleReaderMenuButton(views.ttsButton, false)
+        chrome.updateQuickTtsControls()
     }
 
     fun pauseTts() {
@@ -142,12 +147,14 @@ class ReaderTtsController(
         cancelHighlightProgression(); synchronized(mimoPcmCache) { mimoPcmCache.clear() }
         state.ttsHighlightPageIndex = -1; state.ttsHighlightStart = -1; state.ttsHighlightEnd = -1
         updateTtsHighlight(); chrome.styleReaderMenuButton(views.ttsButton, true)
+        chrome.updateQuickTtsControls()
     }
 
     fun resumeTts() {
         if (!state.ttsActive || !state.ttsPaused) return
         state.ttsPaused = false
         activity.startService(Intent(activity, TtsPlaybackService::class.java).setAction(TtsPlaybackService.ACTION_RESUME))
+        chrome.updateQuickTtsControls()
     }
 
     fun speakTextOnce(text: String?) {
@@ -259,6 +266,7 @@ class ReaderTtsController(
         state.ttsActive = sameBook && playback.isActive()
         state.ttsPaused = state.ttsActive && playback.isPaused()
         chrome.styleReaderMenuButton(views.ttsButton, state.ttsActive)
+        chrome.updateQuickTtsControls()
         if (!state.ttsActive || state.ttsPaused || playback.chapterIndex < 0) {
             state.ttsHighlightPageIndex = -1; state.ttsHighlightStart = -1; state.ttsHighlightEnd = -1; updateTtsHighlight(); return
         }
@@ -322,6 +330,7 @@ class ReaderTtsController(
         val systemEngineSpinner = contentView.findViewById<Spinner>(R.id.tts_spinner_system_engine)
         val valueText = contentView.findViewById<TextView>(R.id.tts_text_rate)
         val noteText = contentView.findViewById<TextView>(R.id.tts_text_note)
+        val quickControlsCheck = contentView.findViewById<CheckBox>(R.id.tts_check_reader_quick_controls)
         val toggleButton = contentView.findViewById<Button>(R.id.tts_button_toggle)
         val stopButton = contentView.findViewById<Button>(R.id.tts_button_stop)
         val timerSliderModeButton = contentView.findViewById<Button>(R.id.tts_button_timer_slider_mode)
@@ -385,6 +394,11 @@ class ReaderTtsController(
         seekBar.setOnSeekBarChangeListener(ReaderDialogSupport.SimpleSeekListener(Runnable {
             val rate = 0.5f + seekBar.progress / 10f; valueText.text = String.format(Locale.SIMPLIFIED_CHINESE, "%.1f 倍", rate); runtime.settingsStore.ttsRate = rate
         }))
+        quickControlsCheck.isChecked = runtime.settingsStore.isReaderTtsQuickControlsEnabled
+        quickControlsCheck.setOnCheckedChangeListener { _, checked ->
+            runtime.settingsStore.isReaderTtsQuickControlsEnabled = checked
+            chrome.updateQuickTtsControls()
+        }
         toggleButton.text = when { state.ttsPaused -> "继续听书"; state.ttsActive -> "暂停听书"; else -> "开始听书" }
         stopButton.visibility = if (state.ttsActive || state.ttsPaused) View.VISIBLE else View.GONE
         val dialog = AlertDialog.Builder(activity).setView(contentView).create()

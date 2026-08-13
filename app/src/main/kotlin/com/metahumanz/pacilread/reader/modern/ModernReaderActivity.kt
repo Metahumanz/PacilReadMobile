@@ -88,6 +88,7 @@ open class ModernReaderActivity : ThemedReaderActivity() {
     private var launchSource: LaunchSourceTransition.Source? = null
     private var lastScrollPageTurnTime = 0L
     private var remoteProgressBannerTouch = false
+    private var quickActionsTouch = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -294,6 +295,8 @@ open class ModernReaderActivity : ThemedReaderActivity() {
             markReadingActivity()
             remoteProgressBannerTouch = views.remoteProgressBanner.visibility == View.VISIBLE &&
                 chrome.isInsideView(event, views.remoteProgressBanner)
+            quickActionsTouch = views.quickActionsPanel.visibility == View.VISIBLE &&
+                chrome.isInsideView(event, views.quickActionsPanel)
         }
         if (remoteProgressBannerTouch) {
             val handled = super.dispatchTouchEvent(event)
@@ -301,6 +304,15 @@ open class ModernReaderActivity : ThemedReaderActivity() {
                 event.actionMasked == MotionEvent.ACTION_CANCEL
             ) {
                 remoteProgressBannerTouch = false
+            }
+            return handled
+        }
+        if (quickActionsTouch) {
+            val handled = super.dispatchTouchEvent(event)
+            if (event.actionMasked == MotionEvent.ACTION_UP ||
+                event.actionMasked == MotionEvent.ACTION_CANCEL
+            ) {
+                quickActionsTouch = false
             }
             return handled
         }
@@ -534,6 +546,7 @@ open class ModernReaderActivity : ThemedReaderActivity() {
             views.hudTopContainer,
             views.hudBottomContainer,
             views.menuTopPanel,
+            views.quickActionsPanel,
             views.menuInfoPanel,
             views.menuBottomPanel,
         )
@@ -582,7 +595,14 @@ open class ModernReaderActivity : ThemedReaderActivity() {
         filter.addAction(Intent.ACTION_BATTERY_CHANGED)
         registerReceiver(receiver, filter)
 
-        findViewById<View>(R.id.button_back).setOnClickListener { finishReaderActivity() }
+        findViewById<View>(R.id.button_back).setOnClickListener {
+            tts.stopTts()
+            finishReaderActivity()
+        }
+        views.quickTtsToggleButton.setOnClickListener {
+            if (tts.isPaused()) tts.resumeTts() else tts.pauseTts()
+        }
+        views.quickTtsStopButton.setOnClickListener { tts.stopTts() }
         findViewById<View>(R.id.button_prev_chapter).setOnClickListener {
             navigation.openChapterFromStart(state.currentChapterIndex - 1, true, -1)
         }
@@ -618,6 +638,7 @@ open class ModernReaderActivity : ThemedReaderActivity() {
             dialogSupport.setNextDismissSource(v)
             tts.showTtsDialog()
         }
+        chrome.updateQuickTtsControls()
         views.autoPageButton.setOnClickListener { v ->
             dialogSupport.setNextDismissSource(v)
             autoPage.showAutoPageDialog()
@@ -747,6 +768,7 @@ open class ModernReaderActivity : ThemedReaderActivity() {
             false
         }
         views.menuTopPanel.setOnTouchListener(keepMenuAliveListener)
+        views.quickActionsPanel.setOnTouchListener(keepMenuAliveListener)
         views.menuInfoPanel.setOnTouchListener(keepMenuAliveListener)
         views.menuBottomPanel.setOnTouchListener(keepMenuAliveListener)
         views.progressSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -950,6 +972,7 @@ open class ModernReaderActivity : ThemedReaderActivity() {
                 if (state.controlsTransitionActive) return true
                 if (state.controlsVisible) {
                     if (chrome.isInsideView(e, views.menuTopPanel) ||
+                        chrome.isInsideView(e, views.quickActionsPanel) ||
                         chrome.isInsideView(e, views.menuInfoPanel) ||
                         chrome.isInsideView(e, views.menuBottomPanel)
                     ) {

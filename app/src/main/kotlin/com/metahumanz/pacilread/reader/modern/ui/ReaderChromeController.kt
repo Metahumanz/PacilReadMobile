@@ -146,6 +146,7 @@ class ReaderChromeController(
             ui.dp(runtime.settingsStore.hudBottomMarginDp) + state.readerContentInsetBottom)
         views.pageStage.setPadding(0, 0, 0, 0)
         updateFrameLayoutMargins(views.menuTopPanel, ui.dp(10) + state.systemInsetLeft, ui.dp(10) + state.systemInsetTop, ui.dp(10) + state.systemInsetRight, 0)
+        updateFrameLayoutMargins(views.quickActionsPanel, 0, 0, ui.dp(10) + state.systemInsetRight, 0)
         updateFrameLayoutMargins(views.remoteProgressBanner, ui.dp(12) + state.systemInsetLeft, ui.dp(12) + state.systemInsetTop, ui.dp(12) + state.systemInsetRight, 0)
         updateFrameLayoutMargins(views.menuInfoPanel, ui.dp(10) + state.systemInsetLeft, 0, ui.dp(10) + state.systemInsetRight, infoBottomMargin)
         updateFrameLayoutMargins(views.menuBottomPanel, ui.dp(10) + state.systemInsetLeft, 0, ui.dp(10) + state.systemInsetRight, bottomPanelBottomMargin)
@@ -177,6 +178,7 @@ class ReaderChromeController(
         }
         updateReaderHud()
         styleReaderMenuButton(views.ttsButton, tts?.isActive() == true)
+        updateQuickTtsControls()
         styleReaderMenuButton(views.autoPageButton, autoPage?.isActive() == true)
         styleReaderMenuButton(views.themeToggleButton, isDarkReaderUi())
     }
@@ -267,8 +269,21 @@ class ReaderChromeController(
         button.setTextColor(if (active) menuActiveTextColor else menuButtonTextColor)
     }
 
+    fun updateQuickTtsControls() {
+        val ttsActive = tts?.isActive() == true
+        val ttsPaused = tts?.isPaused() == true
+        val showTtsQuickControls = ttsActive && runtime.settingsStore.isReaderTtsQuickControlsEnabled
+        views.quickActionsPanel.visibility = if (showTtsQuickControls) View.VISIBLE else View.GONE
+        views.quickTtsToggleButton.visibility = if (showTtsQuickControls) View.VISIBLE else View.GONE
+        views.quickTtsStopButton.visibility = if (showTtsQuickControls) View.VISIBLE else View.GONE
+        views.quickTtsToggleButton.text = activity.getString(if (ttsPaused) R.string.tts_resume else R.string.tts_pause)
+        styleReaderMenuButton(views.quickTtsToggleButton, ttsActive)
+        styleReaderMenuButton(views.quickTtsStopButton, false)
+    }
+
     fun applyGlassOpacity() {
         GlassUiHelper.applyToHierarchy(activity, views.menuTopPanel, runtime.settingsStore.glassOpacityPercent)
+        GlassUiHelper.applyToHierarchy(activity, views.quickActionsPanel, runtime.settingsStore.glassOpacityPercent)
         GlassUiHelper.applyToHierarchy(activity, views.menuInfoPanel, runtime.settingsStore.glassOpacityPercent)
         GlassUiHelper.applyToHierarchy(activity, views.menuBottomPanel, runtime.settingsStore.glassOpacityPercent)
     }
@@ -354,9 +369,10 @@ class ReaderChromeController(
     }
 
     private fun applyReaderMenuSurfaces() {
-        applyReaderMenuPanel(views.menuTopPanel); applyReaderMenuPanel(views.menuInfoPanel); applyReaderMenuPanel(views.menuBottomPanel)
-        applyReaderMenuHierarchy(views.menuTopPanel); applyReaderMenuHierarchy(views.menuInfoPanel); applyReaderMenuHierarchy(views.menuBottomPanel)
+        applyReaderMenuPanel(views.menuTopPanel); applyReaderMenuPanel(views.quickActionsPanel); applyReaderMenuPanel(views.menuInfoPanel); applyReaderMenuPanel(views.menuBottomPanel)
+        applyReaderMenuHierarchy(views.menuTopPanel); applyReaderMenuHierarchy(views.quickActionsPanel); applyReaderMenuHierarchy(views.menuInfoPanel); applyReaderMenuHierarchy(views.menuBottomPanel)
         styleReaderMenuButton(views.ttsButton, tts?.isActive() == true)
+        updateQuickTtsControls()
         styleReaderMenuButton(views.autoPageButton, autoPage?.isActive() == true)
         styleReaderMenuButton(views.themeToggleButton, isDarkReaderUi())
     }
