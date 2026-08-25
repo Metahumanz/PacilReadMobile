@@ -589,9 +589,14 @@ class ReaderTextSelectionController(
     private fun selectedText(): String {
         val target = activeTarget
         if (!selectionActive || target == null || selectionEnd <= selectionStart) return ""
-        val text = target.textView.text ?: return ""
-        val safeStart = ui.clamp(selectionStart, 0, text.length); val safeEnd = ui.clamp(selectionEnd, safeStart, text.length)
-        return text.subSequence(safeStart, safeEnd).toString()
+        val bodyStart = max(target.slice.bodyStartInSlice, 0)
+        val bodyEnd = max(bodyStart, target.slice.bodyEndInSlice)
+        val safeStart = ui.clamp(selectionStart, bodyStart, bodyEnd)
+        val safeEnd = ui.clamp(selectionEnd, safeStart, bodyEnd)
+        val chapterText = content.getProcessedChapterText(target.chapterIndex)
+        val chapterStart = ui.clamp(target.slice.start + safeStart - bodyStart, 0, chapterText.length)
+        val chapterEnd = ui.clamp(target.slice.start + safeEnd - bodyStart, chapterStart, chapterText.length)
+        return chapterText.substring(chapterStart, chapterEnd)
     }
     private fun selectedChapterOffset(): Int {
         val target = activeTarget ?: return 0

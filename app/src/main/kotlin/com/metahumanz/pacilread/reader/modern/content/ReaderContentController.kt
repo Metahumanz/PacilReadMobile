@@ -20,6 +20,7 @@ import com.metahumanz.pacilread.model.BookRecord
 import com.metahumanz.pacilread.model.ChapterRecord
 import com.metahumanz.pacilread.model.ReplacementRuleRecord
 import com.metahumanz.pacilread.reader.PageSlice
+import com.metahumanz.pacilread.reader.ReaderDisplayTextNormalizer
 import com.metahumanz.pacilread.reader.ReaderPaginator
 import com.metahumanz.pacilread.reader.ReaderParagraphBottomSpacingSpan
 import com.metahumanz.pacilread.reader.ReaderTitleSpan
@@ -429,7 +430,8 @@ class ReaderContentController(
         val start = ui.clamp(charOffset, 0, previewText.length)
         val end = Math.min(previewText.length, start + NAVIGATION_PREVIEW_CHAR_LIMIT)
         if (end <= start) return PageSlice(start, start, -1, -1, "")
-        return PageSlice(start, end, 0, end - start, previewText.subSequence(start, end))
+        val displayText = ReaderDisplayTextNormalizer.maskParagraphLeadingWhitespace(previewText.toString())
+        return PageSlice(start, end, 0, end - start, displayText.subSequence(start, end))
     }
 
     private fun getPreviewChapterText(chapterIndex: Int): CharSequence? {
@@ -1175,12 +1177,15 @@ class ReaderContentController(
         return DisplayChapterText(builder, bodyStartIndex)
     }
 
-    private fun buildDisplayBodyText(chapterIndex: Int): CharSequence {
-        val processed = getProcessedChapterText(chapterIndex)
-        val indentPx = computeParagraphIndentPx()
-        val paragraphSpacingPx = computeParagraphSpacingPx()
+    private fun buildDisplayBodyText(chapterIndex: Int): CharSequence = buildStyledBodyText(
+        getProcessedChapterText(chapterIndex),
+        computeParagraphIndentPx(),
+        computeParagraphSpacingPx(),
+    )
+
+    private fun buildStyledBodyText(processed: String, indentPx: Int, paragraphSpacingPx: Int): CharSequence {
         if (processed.isEmpty()) return processed
-        val spannable = SpannableString(processed)
+        val spannable = SpannableString(ReaderDisplayTextNormalizer.maskParagraphLeadingWhitespace(processed))
         var start = 0
         val length = processed.length
         while (start < length) {
@@ -1592,7 +1597,7 @@ class ReaderContentController(
 
     private fun hasVisibleParagraphText(text: String, start: Int, end: Int): Boolean {
         for (i in start until end) {
-            if (!Character.isWhitespace(text[i])) {
+            if (!ReaderDisplayTextNormalizer.isParagraphWhitespace(text[i])) {
                 return true
             }
         }
@@ -2281,49 +2286,8 @@ class ReaderContentController(
         return DisplayChapterText(builder, bodyStartIndex)
     }
 
-    private fun buildDisplayBodyTextForBackground(chapterIndex: Int, indentPx: Int): CharSequence {
-        val processed = getProcessedChapterText(chapterIndex)
-        val paragraphSpacingPx = computeParagraphSpacingPx()
-        if (processed.isEmpty()) return processed
-
-        val spannable = SpannableString(processed)
-        var start = 0
-        val length = processed.length
-        while (start < length) {
-            var end = start
-            while (end < length && processed[end] != '\n') {
-                end++
-            }
-            val paragraphLimit = if (end < length) end + 1 else end
-            if (hasVisibleParagraphText(processed, start, end)) {
-                if (indentPx > 0) {
-                    spannable.setSpan(
-                        LeadingMarginSpan.Standard(indentPx, 0),
-                        start,
-                        paragraphLimit,
-                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                    )
-                }
-                if (end < length && isNextLineVisible(processed, paragraphLimit) && paragraphSpacingPx > 0) {
-                    spannable.setSpan(
-                        ReaderParagraphBottomSpacingSpan(paragraphSpacingPx),
-                        end,
-                        paragraphLimit,
-                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                    )
-                }
-            } else if (end < length && paragraphSpacingPx > 0) {
-                spannable.setSpan(
-                    FixedLineHeightSpan(paragraphSpacingPx),
-                    start,
-                    paragraphLimit,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                )
-            }
-            start = paragraphLimit
-        }
-        return spannable
-    }
+    private fun buildDisplayBodyTextForBackground(chapterIndex: Int, indentPx: Int): CharSequence =
+        buildStyledBodyText(getProcessedChapterText(chapterIndex), indentPx, computeParagraphSpacingPx())
 
     private fun requireNavigation(): ReaderNavigationController = requireNotNull(navigation)
 
