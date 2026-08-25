@@ -161,6 +161,8 @@ object ReaderLineJustifier {
     ) {
         fun length(): Int = end - start
         fun isOrdinarySpace(): Boolean = text == " "
-        fun isIndent(): Boolean = text == " " || text == "\t" || text == "\u3000"
+        fun isIndent(): Boolean =
+            text == " " || text == "\t" || text == "\u3000" ||
+                text.all { it == ReaderDisplayTextNormalizer.MASKED_INDENT_CHAR }
     }
 }
