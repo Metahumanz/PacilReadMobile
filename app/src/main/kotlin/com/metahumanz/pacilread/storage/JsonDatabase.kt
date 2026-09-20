@@ -14,6 +14,7 @@ import com.metahumanz.pacilread.model.ReadingBookStatRecord
 import com.metahumanz.pacilread.model.ReadingTimeEntryRecord
 import com.metahumanz.pacilread.model.ReplacementRuleRecord
 import com.metahumanz.pacilread.stats.ReadingStatsUtils
+import com.metahumanz.pacilread.sync.isFileGzipChapterStorage
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -932,7 +933,7 @@ class JsonDatabase private constructor(context: Context) {
         val safeOffset = charOffset.coerceAtLeast(0)
         val excerptStart = (safeOffset - safeMaxChars / 3).coerceAtLeast(0)
         if (!cached.isNullOrEmpty()) return textExcerpt(cached, excerptStart, safeMaxChars)
-        if (chapter.bodyTextStorage != "file_gzip" || chapter.bodyTextPath.isNullOrEmpty()) {
+        if (!isFileGzipChapterStorage(chapter.bodyTextStorage, chapter.bodyTextPath)) {
             return textExcerpt(chapter.bodyText, excerptStart, safeMaxChars)
         }
 
@@ -989,7 +990,7 @@ class JsonDatabase private constructor(context: Context) {
             val source = chaptersByBookId[bookId]
             if (source != null) {
                 for (ch in source) {
-                    if (ch.bodyTextStorage == "file_gzip" && !ch.bodyTextPath.isNullOrEmpty()) chapters.add(ch)
+                    if (isFileGzipChapterStorage(ch.bodyTextStorage, ch.bodyTextPath)) chapters.add(ch)
                 }
             }
             return chapters
@@ -1797,7 +1798,7 @@ class JsonDatabase private constructor(context: Context) {
         bodyTextPath: String?,
         bodyTextStorage: String?,
     ): String {
-        if (bodyTextStorage == "file_gzip" && !bodyTextPath.isNullOrEmpty()) {
+        if (isFileGzipChapterStorage(bodyTextStorage, bodyTextPath)) {
             val cached = decompressedTextCache.get(chapterId)
             if (cached != null) return cached
             val file = resolveChapterTextFile(bodyTextPath)
@@ -1814,7 +1815,7 @@ class JsonDatabase private constructor(context: Context) {
             }
         }
         if (!bodyText.isNullOrEmpty()) return bodyText
-        if (bodyTextStorage != "file_gzip" && bodyTextPath.isNullOrEmpty()) {
+        if (!isFileGzipChapterStorage(bodyTextStorage, bodyTextPath)) {
             Log.w(TAG, "章节正文不可用: book=" + bookId + " chapter=" + chapterId + " storage=" + bodyTextStorage + " path=" + bodyTextPath)
         }
         return ""
