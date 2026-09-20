@@ -98,6 +98,21 @@ open class WebDavClient(private val settingsStore: SettingsStore) {
 
     fun syncBaseUrl(): String = "${backupBaseUrl()}sync/"
 
+    fun snapshotBaseUrl(snapshotPrefix: String): String =
+        appendDirectory(backupBaseUrl(), snapshotPrefix)
+
+    @Throws(Exception::class)
+    fun ensureSnapshotDirectories(snapshotPrefix: String) {
+        val root = backupBaseUrl()
+        val snapshotRoot = appendDirectory(root, "snapshots")
+        val snapshotBase = appendDirectory(root, snapshotPrefix)
+        ensureDirectory(snapshotRoot)
+        ensureDirectory(snapshotBase)
+        for (directory in arrayOf("database", "sync", "chapter_text", "covers", "books")) {
+            ensureDirectory(appendDirectory(snapshotBase, directory))
+        }
+    }
+
     fun databaseBaseUrl(): String = "${backupBaseUrl()}database/"
 
     @Throws(Exception::class)
