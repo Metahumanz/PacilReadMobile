@@ -98,11 +98,50 @@ open class WebDavClient(private val settingsStore: SettingsStore) {
 
     fun syncBaseUrl(): String = "${backupBaseUrl()}sync/"
 
+    fun snapshotBaseUrl(snapshotPrefix: String): String =
+        appendDirectory(backupBaseUrl(), snapshotPrefix)
+
+    @Throws(Exception::class)
+    fun ensureSnapshotDirectories(snapshotPrefix: String) {
+        val root = backupBaseUrl()
+        ensureDirectoryTree(root, "snapshots", "初始化快照目录")
+        ensureDirectoryTree(root, snapshotPrefix, "初始化快照目录")
+        val snapshotBase = appendDirectory(root, snapshotPrefix)
+        for (directory in arrayOf("database", "sync", "chapter_text", "covers", "books")) {
+            ensureDirectoryTree(snapshotBase, directory, "初始化快照目录")
+        }
+    }
+
+    @Throws(Exception::class)
+    fun ensureSyncSnapshotDirectories(snapshotPrefix: String) {
+        val root = backupBaseUrl()
+        ensureDirectoryTree(root, "sync-snapshots", "初始化增量快照目录")
+        ensureDirectoryTree(root, snapshotPrefix, "初始化增量快照目录")
+        val snapshotBase = appendDirectory(root, snapshotPrefix)
+        for (directory in arrayOf("chapter_text", "covers", "books", "backgrounds")) {
+            ensureDirectoryTree(snapshotBase, directory, "初始化增量快照目录")
+        }
+    }
+
     fun databaseBaseUrl(): String = "${backupBaseUrl()}database/"
 
     @Throws(Exception::class)
     fun ensureDirectory(directoryUrl: String) {
-        requireSuccessfulResponse(requestText(directoryUrl, "MKCOL", null, null), "创建目录", true)
+        val normalizedUrl = if (directoryUrl.endsWith('/')) directoryUrl else "$directoryUrl/"
+        val probe = requestText(normalizedUrl, "PROPFIND", null, "0")
+        if (probe.code == 200 || probe.code == 207) return
+        if (probe.code != 404) {
+            throw IllegalStateException("验证目录失败: HTTP ${probe.code}")
+        }
+
+        val mkcol = requestText(normalizedUrl, "MKCOL", null, null)
+        if (mkcol.code !in 200..299 && mkcol.code != 405 && mkcol.code != 301 && mkcol.code != 302) {
+            throw IllegalStateException("创建目录失败: HTTP ${mkcol.code}")
+        }
+        val verify = requestText(normalizedUrl, "PROPFIND", null, "0")
+        if (verify.code != 200 && verify.code != 207) {
+            throw IllegalStateException("创建目录后验证失败: HTTP ${verify.code}")
+        }
     }
 
     fun backupRootBaseUrl(): String = appendDirectory(requireConfiguredServerUrl(), settingsStore.webDavDir)
@@ -412,14 +451,16 @@ open class WebDavClient(private val settingsStore: SettingsStore) {
 
     private fun ensureDirectoryTree(parentUrl: String, directory: String?, action: String) {
         val normalizedParent = if (parentUrl.endsWith('/')) parentUrl else "$parentUrl/"
-        var normalizedDirectory = directory?.trim().orEmpty()
-        while (normalizedDirectory.startsWith('/')) normalizedDirectory = normalizedDirectory.substring(1)
-        if (normalizedDirectory.isBlank()) return
+        val segments = normalizedDirectorySegments(directory)
+        if (segments.isEmpty()) return
         var currentUrl = normalizedParent
-        for (segment in normalizedDirectory.split('/')) {
-            if (segment.isBlank()) continue
+        for (segment in segments) {
             currentUrl += "$segment/"
-            requireSuccessfulResponse(requestText(currentUrl, "MKCOL", null, null), action, true)
+            try {
+                ensureDirectory(currentUrl)
+            } catch (error: Exception) {
+                throw IllegalStateException("$action: $currentUrl", error)
+            }
         }
     }
 
@@ -497,4 +538,11 @@ open class WebDavClient(private val settingsStore: SettingsStore) {
         val HREF_PATTERN: Pattern = Pattern.compile("(?i)<[^>]*href[^>]*>(.*?)</[^>]*href>")
         val DEFAULT_BODY_TYPE: MediaType = "application/json; charset=utf-8".toMediaType()
     }
+}
+
+internal fun normalizedDirectorySegments(directory: String?): List<String> {
+    var normalized = directory?.trim().orEmpty()
+    while (normalized.startsWith('/')) normalized = normalized.substring(1)
+    while (normalized.endsWith('/')) normalized = normalized.substring(0, normalized.length - 1)
+    return normalized.split('/').filter { it.isNotBlank() }
 }
