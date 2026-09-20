@@ -1,6 +1,7 @@
 package com.metahumanz.pacilread.model
 
 import org.json.JSONObject
+import com.metahumanz.pacilread.sync.normalizeChapterStorage
 
 class ChapterRecord {
     @JvmField var id: Long = 0
@@ -21,7 +22,7 @@ class ChapterRecord {
             json.put("title", title ?: "")
             json.put("orderIndex", orderIndex)
             json.put("bodyTextPath", bodyTextPath ?: "")
-            json.put("bodyTextStorage", bodyTextStorage ?: "db")
+            json.put("bodyTextStorage", normalizeChapterStorage(bodyTextStorage, bodyTextPath))
             json.put("bodyTextSize", bodyTextSize)
         } catch (_: Exception) {
         }
@@ -35,8 +36,14 @@ class ChapterRecord {
             bookId = json.optLong("bookId", 0)
             title = json.optString("title", "")
             orderIndex = json.optInt("orderIndex", 0)
-            bodyTextPath = json.optString("bodyTextPath", "")
-            bodyTextStorage = json.optString("bodyTextStorage", "db")
+            val path = json.optString("bodyTextPath", "").trim()
+            val rawStorage = if (json.has("bodyTextStorage") && !json.isNull("bodyTextStorage")) {
+                json.optString("bodyTextStorage", "")
+            } else {
+                ""
+            }
+            bodyTextPath = path
+            bodyTextStorage = normalizeChapterStorage(rawStorage, path)
             bodyTextSize = json.optLong("bodyTextSize", 0)
             bodyHtml = ""
             bodyText = ""
