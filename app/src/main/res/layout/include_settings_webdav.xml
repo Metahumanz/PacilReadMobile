@@ -33,6 +33,12 @@
             android:layout_marginTop="8dp"
             android:orientation="vertical">
 
+            <TextView
+                style="@style/AppChromeFieldLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="WebDAV 连接" />
+
             <EditText
                 android:id="@+id/input_webdav_url"
                 style="@style/AppChromeInputText"
@@ -131,7 +137,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="18dp"
-                android:text="同步内容过滤" />
+                android:text="同步内容" />
 
             <GridLayout
                 android:id="@+id/layout_webdav_sync_options"
@@ -218,6 +224,13 @@
                     android:textColor="?attr/themeColorAppButtonOutlineText"
                     android:textSize="13sp" />
             </GridLayout>
+
+            <TextView
+                style="@style/AppChromeFieldLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="高级" />
 
             <CheckBox
                 android:id="@+id/check_webdav_clean_remote_orphans"
