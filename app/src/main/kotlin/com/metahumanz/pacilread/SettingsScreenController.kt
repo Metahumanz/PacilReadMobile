@@ -113,6 +113,7 @@ class SettingsScreenController(
     private val fullRestoreButton: Button = activity.findViewById(R.id.button_full_restore)
     private val liteBackupButton: Button = activity.findViewById(R.id.button_lite_backup)
     private val liteRestoreButton: Button = activity.findViewById(R.id.button_lite_restore)
+    private val syncDiffPreviewButton: Button = activity.findViewById(R.id.button_sync_diff_preview)
     private val webDavSyncBookshelfButton: Button = activity.findViewById(R.id.button_webdav_sync_bookshelf)
     private val webDavSyncFilesButton: Button = activity.findViewById(R.id.button_webdav_sync_files)
     private val webDavSyncUiButton: Button = activity.findViewById(R.id.button_webdav_sync_ui)
@@ -309,6 +310,9 @@ class SettingsScreenController(
         }
         liteRestoreButton.setOnClickListener {
             confirmRestore("将先预览云端增量备份和本地数据的差异。恢复操作不可撤销，请确认云端备份可用。", { previewWebDavRestore(false, it) }, false)
+        }
+        syncDiffPreviewButton.setOnClickListener {
+            runWebDavAction("正在检查同步差异...") { previewWebDavRestore(false, it) }
         }
     }
 
@@ -750,6 +754,7 @@ class SettingsScreenController(
         fullRestoreButton.isEnabled = !busy
         liteBackupButton.isEnabled = !busy
         liteRestoreButton.isEnabled = !busy
+        syncDiffPreviewButton.isEnabled = !busy
         webDavSyncBookshelfButton.isEnabled = !busy
         webDavSyncFilesButton.isEnabled = !busy
         webDavSyncUiButton.isEnabled = !busy
