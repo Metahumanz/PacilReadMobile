@@ -116,11 +116,13 @@ class JsonDatabase private constructor(context: Context) {
             bookmarkCache = loadList(FILE_BOOKMARKS, BookmarkRecord::fromJson)
             readingStatsCache = loadList(FILE_READING_STATS, ReadingTimeEntryRecord::fromJson)
             rebasePathsLocked()
+            val identityChanges = migrateLegacyBookIdentitiesLocked()
             val booksChanged = backfillBookReadingStatsKeysLocked()
             val statsChanged = normalizeReadingStatsCacheLocked()
             rebuildIndexesLocked()
-            if (booksChanged) saveList(FILE_BOOKS, bookCache, BookRecord::toJson)
-            if (statsChanged) saveList(FILE_READING_STATS, readingStatsCache, ReadingTimeEntryRecord::toJson)
+            if (booksChanged || identityChanges.first) saveList(FILE_BOOKS, bookCache, BookRecord::toJson)
+            if (identityChanges.second) saveList(FILE_BOOKMARKS, bookmarkCache, BookmarkRecord::toJson)
+            if (statsChanged || identityChanges.third) saveList(FILE_READING_STATS, readingStatsCache, ReadingTimeEntryRecord::toJson)
         } finally {
             lock.writeLock().unlock()
         }
@@ -820,7 +822,11 @@ class JsonDatabase private constructor(context: Context) {
 
     private fun findBookForReadingStatsLocked(readingStatsKey: String?, title: String?, author: String?): BookRecord? {
         if (!readingStatsKey.isNullOrBlank()) {
-            for (book in bookCache) if (readingStatsKey == book.readingStatsKey) return book
+            for (book in bookCache) {
+                if (readingStatsKey == book.readingStatsKey ||
+                    readingStatsKey == ReadingStatsUtils.buildLegacyAndroidBookIdentity(book.title, book.author)
+                ) return book
+            }
         }
         val targetTitleAuthorKey = titleAuthorKeyOrEmpty(title, author)
         if (targetTitleAuthorKey.isEmpty()) return null
@@ -1497,6 +1503,62 @@ class JsonDatabase private constructor(context: Context) {
         return changed
     }
 
+    private fun migrateLegacyBookIdentitiesLocked(): Triple<Boolean, Boolean, Boolean> {
+        val aliases = HashMap<String, String>()
+        var booksChanged = false
+        var bookmarksChanged = false
+        var statsChanged = false
+        for (book in bookCache) {
+            val oldKey = ReadingStatsUtils.buildLegacyAndroidBookIdentity(book.title, book.author)
+            val newKey = ReadingStatsUtils.buildBookIdentity(book.title, book.author)
+            if (book.readingStatsKey == oldKey && oldKey != newKey) {
+                aliases[oldKey] = newKey
+                booksChanged = true
+            }
+        }
+        for (bookmark in bookmarkCache) {
+            val oldKey = ReadingStatsUtils.buildLegacyAndroidBookIdentity(bookmark.bookTitle, bookmark.bookAuthor)
+            if (bookmark.bookIdentity?.let(aliases::containsKey) == true || bookmark.bookIdentity == oldKey) bookmarksChanged = true
+        }
+        for (row in readingStatsCache) {
+            val oldKey = ReadingStatsUtils.buildLegacyAndroidBookIdentity(row.bookTitle, row.bookAuthor)
+            if (row.bookIdentity?.let(aliases::containsKey) == true || row.bookIdentity == oldKey) statsChanged = true
+        }
+        if (!booksChanged && !bookmarksChanged && !statsChanged) return Triple(false, false, false)
+        backupIdentityMigrationFilesLocked()
+        for (book in bookCache) {
+            val newKey = book.readingStatsKey?.let(aliases::get)
+            if (newKey != null) book.readingStatsKey = newKey
+        }
+        for (bookmark in bookmarkCache) {
+            val oldKey = bookmark.bookIdentity
+            val newKey = oldKey?.let(aliases::get) ?: ReadingStatsUtils.canonicalBookIdentity(oldKey, bookmark.bookTitle, bookmark.bookAuthor)
+            if (newKey != oldKey) bookmark.bookIdentity = newKey
+        }
+        // 统计行在 normalizeReadingStatsCacheLocked 中归组；保留原 key 以识别旧新副本。
+        return Triple(booksChanged, bookmarksChanged, statsChanged)
+    }
+
+    private fun backupIdentityMigrationFilesLocked() {
+        val backupDir = File(dataDir, "identity-migration-${System.currentTimeMillis()}")
+        if (!backupDir.mkdirs()) throw IOException("无法创建书籍身份迁移备份")
+        for (name in arrayOf(FILE_BOOKS, FILE_BOOKMARKS, FILE_READING_STATS)) {
+            val source = File(dataDir, name)
+            if (source.exists()) source.copyTo(File(backupDir, name), overwrite = false)
+        }
+    }
+
+    fun backupBeforeIdentityRestore() {
+        ensureLoaded()
+        flush()
+        lock.writeLock().lock()
+        try {
+            backupIdentityMigrationFilesLocked()
+        } finally {
+            lock.writeLock().unlock()
+        }
+    }
+
     private fun migrateReadingStatsForBookRenameLocked(
         previousKey: String?,
         previousTitle: String?,
@@ -1524,38 +1586,71 @@ class JsonDatabase private constructor(context: Context) {
 
     private fun normalizeReadingStatsCacheLocked(): Boolean {
         if (readingStatsCache.isEmpty()) return false
-        val merged: MutableMap<String, ReadingTimeEntryRecord> = HashMap()
+        val (rows, changed) = normalizeReadingStatsRows(readingStatsCache, skipInvalidDates = false)
+        if (changed) readingStatsCache = rows
+        return changed
+    }
+
+    private fun normalizeIncomingReadingStatsRows(rows: List<ReadingTimeEntryRecord?>): MutableList<ReadingTimeEntryRecord> =
+        normalizeReadingStatsRows(rows, skipInvalidDates = true).first
+
+    private fun normalizeReadingStatsRows(
+        rows: List<ReadingTimeEntryRecord?>,
+        skipInvalidDates: Boolean,
+    ): Pair<MutableList<ReadingTimeEntryRecord>, Boolean> {
+        val buckets = LinkedHashMap<String, MutableMap<String, ReadingTimeEntryRecord>>()
+        val verifiedAliases = HashMap<String, MutableSet<String>>()
         var changed = false
-        for (entry in readingStatsCache) {
-            val normalized = cloneReadingTimeEntry(entry)
+        for (row in rows) {
+            if (row == null || (skipInvalidDates && row.date.isNullOrBlank())) {
+                changed = true
+                continue
+            }
+            val originalIdentity = row.bookIdentity ?: ""
+            val normalized = cloneReadingTimeEntry(row)
             if (normalizeReadingStatsEntry(normalized)) changed = true
             val groupKey = readingStatsBucketGroupKey(normalized)
-            val existing = merged[groupKey]
-            if (existing == null) {
-                merged[groupKey] = normalized
-            } else {
+            val originals = buckets.getOrPut(groupKey) { LinkedHashMap() }
+            val existing = originals[originalIdentity]
+            if (existing == null) originals[originalIdentity] = normalized else {
                 mergeReadingStatsTotals(existing, normalized)
                 changed = true
             }
+            if (originalIdentity == normalized.bookIdentity ||
+                originalIdentity == ReadingStatsUtils.buildLegacyAndroidBookIdentity(row.bookTitle, row.bookAuthor)
+            ) verifiedAliases.getOrPut(groupKey) { HashSet() }.add(originalIdentity)
         }
-        if (changed || merged.size != readingStatsCache.size) {
-            readingStatsCache = ArrayList(merged.values)
-            return true
+        val result = ArrayList<ReadingTimeEntryRecord>()
+        for ((groupKey, originals) in buckets) {
+            // 先按原 key 合并，再对已验证的新旧身份取上界，避免行顺序影响去重结果。
+            val aliases = verifiedAliases[groupKey].orEmpty()
+            var aliasTotal: ReadingTimeEntryRecord? = null
+            var otherTotal: ReadingTimeEntryRecord? = null
+            for ((identity, entry) in originals) {
+                if (identity in aliases) {
+                    val target = aliasTotal
+                    if (target == null) aliasTotal = entry else mergeAliasSnapshot(target, entry)
+                } else {
+                    val target = otherTotal
+                    if (target == null) otherTotal = entry else mergeReadingStatsTotals(target, entry)
+                }
+            }
+            val combined = aliasTotal ?: otherTotal ?: continue
+            if (aliasTotal != null && otherTotal != null) mergeReadingStatsTotals(combined, otherTotal)
+            result.add(combined)
+            if (originals.size > 1) changed = true
         }
-        return false
+        return Pair(result, changed)
     }
-
-    private fun normalizeIncomingReadingStatsRows(rows: List<ReadingTimeEntryRecord?>): MutableList<ReadingTimeEntryRecord> {
-        val merged: MutableMap<String, ReadingTimeEntryRecord> = HashMap()
-        for (row in rows) {
-            if (row == null || row.date.isNullOrBlank()) continue
-            val normalized = cloneReadingTimeEntry(row)
-            normalizeReadingStatsEntry(normalized)
-            val groupKey = readingStatsBucketGroupKey(normalized)
-            val existing = merged[groupKey]
-            if (existing == null) merged[groupKey] = normalized else mergeReadingStatsTotals(existing, normalized)
+    private fun mergeAliasSnapshot(target: ReadingTimeEntryRecord, source: ReadingTimeEntryRecord) {
+        // 两种 key 可能是同一份累计快照；无逐次事件 ID 时取上界，避免直接相加。
+        target.durationSeconds = kotlin.math.max(target.durationSeconds, source.durationSeconds)
+        target.charCount = kotlin.math.max(target.charCount, source.charCount)
+        if (source.updatedAt > target.updatedAt) {
+            target.bookTitle = source.bookTitle
+            target.bookAuthor = source.bookAuthor
         }
-        return ArrayList(merged.values)
+        target.updatedAt = kotlin.math.max(target.updatedAt, source.updatedAt)
     }
 
     private fun mergeReadingStatsTotals(target: ReadingTimeEntryRecord, source: ReadingTimeEntryRecord) {
