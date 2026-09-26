@@ -4,7 +4,6 @@ import com.metahumanz.pacilread.model.ReadingTimeEntryRecord
 import com.metahumanz.pacilread.stats.ReadingStatsUtils
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import sun.misc.Unsafe
 
 class ReadingStatsIdentityMigrationTest {
     private fun row(legacy: Boolean, seconds: Int, device: String = "phone") = ReadingTimeEntryRecord().apply {
@@ -21,8 +20,10 @@ class ReadingStatsIdentityMigrationTest {
 
     // 仅运行不依赖 Android Context 的归组逻辑；不初始化或读写真实数据库。
     private fun database(): JsonDatabase {
-        val field = Unsafe::class.java.getDeclaredField("theUnsafe").apply { isAccessible = true }
-        return (field.get(null) as Unsafe).allocateInstance(JsonDatabase::class.java) as JsonDatabase
+        val allocatorClass = Class.forName("sun.misc.Unsafe")
+        val field = allocatorClass.getDeclaredField("theUnsafe").apply { isAccessible = true }
+        return allocatorClass.getMethod("allocateInstance", Class::class.java)
+            .invoke(field.get(null), JsonDatabase::class.java) as JsonDatabase
     }
 
     @Suppress("UNCHECKED_CAST")
