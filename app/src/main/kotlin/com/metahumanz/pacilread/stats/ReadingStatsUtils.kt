@@ -77,10 +77,18 @@ object ReadingStatsUtils {
     @JvmStatic fun safeBookAuthor(author: String?): String = if (author.isNullOrBlank()) "未知作者" else author.trim()
 
     @JvmStatic
-    fun buildBookIdentity(title: String?, author: String?): String {
-        var normalized = buildTitleAuthorKey(title, author)
-        if (normalized.isBlank()) normalized = "untitled::unknown"
-        return sha256(normalized)
+    fun buildBookIdentity(title: String?, author: String?): String =
+        sha256(normalizeIdentityText(title) + "\n" + normalizeIdentityText(author))
+
+    @JvmStatic
+    fun buildLegacyAndroidBookIdentity(title: String?, author: String?): String =
+        sha256(legacyAndroidNormalize(title) + "::" + legacyAndroidNormalize(author))
+
+    @JvmStatic
+    fun canonicalBookIdentity(identity: String?, title: String?, author: String?): String {
+        val canonical = buildBookIdentity(title, author)
+        return if (identity.isNullOrBlank() || identity == buildLegacyAndroidBookIdentity(title, author)) canonical
+        else identity
     }
 
     @JvmStatic
@@ -88,7 +96,31 @@ object ReadingStatsUtils {
         "${normalizeIdentityText(title)}::${normalizeIdentityText(author)}"
 
     @JvmStatic
-    fun normalizeIdentityText(value: String?): String =
+    fun normalizeIdentityText(value: String?): String {
+        val source = value ?: ""
+        val result = StringBuilder(source.length)
+        var pendingSpace = false
+        var started = false
+        for (character in source) {
+            if (isJavaScriptWhitespace(character)) {
+                if (started) pendingSpace = true
+            } else {
+                if (pendingSpace) result.append(' ')
+                result.append(character)
+                started = true
+                pendingSpace = false
+            }
+        }
+        return result.toString().lowercase(Locale.ROOT)
+    }
+
+    private fun isJavaScriptWhitespace(value: Char): Boolean =
+        value in '\u0009'..'\u000D' || value == ' ' || value == '\u00A0' ||
+            value == '\u1680' || value in '\u2000'..'\u200A' ||
+            value == '\u2028' || value == '\u2029' || value == '\u202F' ||
+            value == '\u205F' || value == '\u3000' || value == '\uFEFF'
+
+    private fun legacyAndroidNormalize(value: String?): String =
         (value?.trim()?.lowercase(Locale.ROOT) ?: "").replace(Regex("\\s+"), " ")
 
     @JvmStatic
@@ -122,13 +154,11 @@ object ReadingStatsUtils {
         return String.format(Locale.SIMPLIFIED_CHINESE, "%d 秒", seconds)
     }
 
-    private fun sha256(value: String): String = try {
+    private fun sha256(value: String): String {
         val bytes = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
         val builder = StringBuilder(bytes.size * 2)
         for (current in bytes) builder.append(String.format(Locale.ROOT, "%02x", current))
-        builder.toString()
-    } catch (_: Exception) {
-        Integer.toHexString(value.hashCode())
+        return builder.toString()
     }
 
     class Range(
