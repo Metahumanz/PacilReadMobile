@@ -10,6 +10,7 @@ import com.metahumanz.pacilread.model.ReadingTimeEntryRecord
 import com.metahumanz.pacilread.model.ReplacementRuleRecord
 import com.metahumanz.pacilread.storage.JsonDatabase
 import com.metahumanz.pacilread.storage.SettingsStore
+import com.metahumanz.pacilread.stats.ReadingStatsUtils
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -124,6 +125,7 @@ open class WebDavBackupManager(
     @Throws(Exception::class)
     private fun applyRemoteEntities(preview: SyncDiffPreview, forceRemote: Boolean, listener: StatusListener) {
         databaseHelper.flush()
+        databaseHelper.backupBeforeIdentityRestore()
         var mergedBooks = false
         var mergedChapters = false
         val restoredBookIdMap: MutableMap<Long, Long> = HashMap()
@@ -266,7 +268,7 @@ open class WebDavBackupManager(
 
     private fun entityKey(entityType: String, json: JSONObject): String {
         if ("books" == entityType) {
-            val key = json.optString("readingStatsKey", "")
+            val key = ReadingStatsUtils.canonicalBookIdentity(json.optString("readingStatsKey", ""), json.optString("title", ""), json.optString("author", ""))
             if (key.isNotBlank()) return key
             return normalizeTitleAuthor(json.optString("title", ""), json.optString("author", ""))
         }
@@ -274,7 +276,7 @@ open class WebDavBackupManager(
         if ("rules" == entityType) return json.optString("pattern", "") + "|" + json.optString("scope", "global") + "|" + json.optLong("bookId", 0L)
         if ("themes" == entityType) return json.optString("name", "")
         if ("bookmarks" == entityType) return json.optString("uuid", "")
-        if ("readingStats" == entityType) return json.optString("sourceDeviceId", "") + "|" + json.optString("date", "") + "|" + json.optString("bookIdentity", "")
+        if ("readingStats" == entityType) return json.optString("sourceDeviceId", "") + "|" + json.optString("date", "") + "|" + ReadingStatsUtils.canonicalBookIdentity(json.optString("bookIdentity", ""), json.optString("bookTitle", ""), json.optString("bookAuthor", ""))
         return json.optString("id", "")
     }
 
@@ -520,6 +522,7 @@ open class WebDavBackupManager(
                 readEntityArray(fileName, content)
             }
 
+            databaseHelper.backupBeforeIdentityRestore()
             for (fileName in SYNC_JSON_FILES) {
                 File(stagingDir, canonicalJsonFileName(fileName)).copyTo(localJsonFile(dataDir, fileName), overwrite = true)
             }
@@ -573,6 +576,7 @@ open class WebDavBackupManager(
             }
 
             databaseHelper.flush()
+            databaseHelper.backupBeforeIdentityRestore()
             listener.onStatus("下载并合并变化的数据...")
 
             var mergedBooks = false
@@ -1532,11 +1536,12 @@ open class WebDavBackupManager(
         for (i in 0 until remoteBooks.length()) {
             val remoteJson = remoteBooks.optJSONObject(i) ?: continue
             val remoteId = remoteJson.optLong("id", 0)
-            val remoteKey = remoteJson.optString("readingStatsKey", "")
+            val remoteKey = ReadingStatsUtils.canonicalBookIdentity(remoteJson.optString("readingStatsKey", ""), remoteJson.optString("title", ""), remoteJson.optString("author", ""))
             val remoteTitle = remoteJson.optString("title", "")
             val remoteAuthor = remoteJson.optString("author", "")
             val remoteUpdatedAt = remoteJson.optLong("updatedAt", 0)
             val remoteBook = BookRecord.fromJson(remoteJson)
+            remoteBook.readingStatsKey = remoteKey
 
             var localMatch: BookRecord? = null
             if (remoteKey.isNotEmpty()) localMatch = localByKey[remoteKey]
@@ -1683,6 +1688,13 @@ open class WebDavBackupManager(
             val remoteBookmark = BookmarkRecord.fromJson(remoteJson)
             if (remoteBookmark.bookId > 0L) {
                 remoteBookmark.bookId = restoredBookIdMap[remoteBookmark.bookId] ?: remoteBookmark.bookId
+            }
+            remoteBookmark.bookIdentity = ReadingStatsUtils.canonicalBookIdentity(
+                remoteBookmark.bookIdentity, remoteBookmark.bookTitle, remoteBookmark.bookAuthor,
+            )
+            val bookmarkBook = databaseHelper.getBooksMutable().firstOrNull { it.id == remoteBookmark.bookId }
+            if (bookmarkBook != null && remoteBookmark.bookIdentity == ReadingStatsUtils.buildLegacyAndroidBookIdentity(bookmarkBook.title, bookmarkBook.author)) {
+                remoteBookmark.bookIdentity = bookmarkBook.readingStatsKey
             }
             val localMatch = localByUuid[remoteBookmark.uuid]
             if (localMatch == null) {

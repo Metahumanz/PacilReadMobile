@@ -73,6 +73,10 @@ open class ReadingStatsSyncManager(
                 mergedRows.add(record)
             }
         }
+        if (mergedRows.any { row ->
+                row.bookIdentity == ReadingStatsUtils.buildLegacyAndroidBookIdentity(row.bookTitle, row.bookAuthor)
+            }
+        ) databaseHelper.backupBeforeIdentityRestore()
         databaseHelper.mergeReadingStatsRows(mergedRows)
     }
 

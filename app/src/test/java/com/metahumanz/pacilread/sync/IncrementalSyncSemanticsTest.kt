@@ -1,6 +1,7 @@
 package com.metahumanz.pacilread.sync
 
 import com.metahumanz.pacilread.model.BookRecord
+import com.metahumanz.pacilread.stats.ReadingStatsUtils
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -19,6 +20,23 @@ class IncrementalSyncSemanticsTest {
             put("title", "示例书")
             put("author", "作者")
             put("readingStatsKey", "stable-key")
+        })
+
+        assertEquals(24L, buildRemoteBookIdMapping(remote, listOf(local))[17L])
+    }
+
+    @Test fun mapsLegacyAndroidKeyToCanonicalBookWithoutChangingLocalId() {
+        val local = BookRecord().apply {
+            id = 24L
+            title = "三体"
+            author = "刘慈欣"
+            readingStatsKey = ReadingStatsUtils.buildBookIdentity(title, author)
+        }
+        val remote = JSONArray().put(JSONObject().apply {
+            put("id", 17L)
+            put("title", "三体")
+            put("author", "刘慈欣")
+            put("readingStatsKey", ReadingStatsUtils.buildLegacyAndroidBookIdentity("三体", "刘慈欣"))
         })
 
         assertEquals(24L, buildRemoteBookIdMapping(remote, listOf(local))[17L])
