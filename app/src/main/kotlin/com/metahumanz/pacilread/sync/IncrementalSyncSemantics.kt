@@ -1,6 +1,7 @@
 package com.metahumanz.pacilread.sync
 
 import com.metahumanz.pacilread.model.BookRecord
+import com.metahumanz.pacilread.stats.ReadingStatsUtils
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
@@ -13,6 +14,8 @@ fun buildRemoteBookIdMapping(
     val byTitleAuthor = HashMap<String, BookRecord>()
     for (book in localBooks) {
         if (!book.readingStatsKey.isNullOrEmpty()) byReadingKey[book.readingStatsKey!!] = book
+        byReadingKey[ReadingStatsUtils.buildBookIdentity(book.title, book.author)] = book
+        byReadingKey[ReadingStatsUtils.buildLegacyAndroidBookIdentity(book.title, book.author)] = book
         byTitleAuthor[bookIdentity(book.title, book.author)] = book
     }
 
